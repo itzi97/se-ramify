@@ -101,16 +101,25 @@ function usecasePuml(g: GraphData): string {
 }
 
 export function useCaseSpecsMarkdown(doc: DiagramOf<'usecase'>): string {
-  const ucs = doc.data.nodes.filter((n) => n.type === 'usecase');
+  const filled = (n: GNode) => !!n.spec && Object.entries(n.spec).some(([k, v]) => k !== 'code' && typeof v === 'string' && v.trim());
+  const all = doc.data.nodes.filter((n) => n.type === 'usecase');
+  const codeNum = (n: GNode) => Number(/^CU-?(\d+)/i.exec(n.spec?.code ?? '')?.[1] ?? Infinity);
+  // Only use cases with something written get a table, in code order; the rest are listed at the end.
+  const ucs = all.filter(filled).sort((a, b) => codeNum(a) - codeNum(b) || a.label.localeCompare(b.label, 'es'));
+  const pending = all.filter((n) => !filled(n));
+  // Use cases without a code get the next free number after the ones typed in.
+  const used = all.map((n) => /^CU-?(\d+)/i.exec(n.spec?.code ?? '')?.[1]).filter(Boolean).map(Number);
+  let next = used.length ? Math.max(...used) : 0;
   const out = [`# ${doc.title} — especificaciones de casos de uso`, ''];
   ucs.forEach((n, i) => {
     const s = { ...blankSpec(), ...(n.spec ?? {}) };
-    const code = s.code || `CU-${String(i + 1).padStart(2, '0')}`;
+    const code = s.code || `CU-${String(++next).padStart(2, '0')}`;
+    void i;
     const steps = (t: string) =>
       t
         .split('\n')
         .filter((l) => l.trim())
-        .map((l, k) => (/^\s*\d+[a-z]?\./.test(l) ? l.trim() : `${k + 1}. ${l.trim()}`))
+        .map((l, k) => cell(/^\s*\d+[a-z]?\./.test(l) ? l.trim() : `${k + 1}. ${l.trim()}`))
         .join('<br>');
     out.push(`## ${code} ${n.label}`, '', '| Campo | Contenido |', '|---|---|');
     const rows: [string, string][] = [
@@ -122,7 +131,7 @@ export function useCaseSpecsMarkdown(doc: DiagramOf<'usecase'>): string {
       ['Disparador', s.trigger],
       ['Precondiciones', s.preconditions],
       ['Flujo principal', steps(s.mainFlow)],
-      ['Flujos alternativos', s.alternativeFlows.split('\n').filter((l) => l.trim()).join('<br>')],
+      ['Flujos alternativos', s.alternativeFlows.split('\n').filter((l) => l.trim()).map(cell).join('<br>')],
       ['Postcondiciones', s.postconditions],
       ['Prioridad', s.priority],
       ['Frecuencia', s.frequency]
@@ -130,7 +139,8 @@ export function useCaseSpecsMarkdown(doc: DiagramOf<'usecase'>): string {
     for (const [k, v] of rows) out.push(`| ${k} | ${k === 'Flujo principal' || k === 'Flujos alternativos' ? v : cell(v)} |`);
     out.push('');
   });
-  if (!ucs.length) out.push('_No hay casos de uso._');
+  if (pending.length) out.push(`**Sin especificar todavía:** ${pending.map((n) => n.label).join(', ')}.`, '');
+  if (!all.length) out.push('_No hay casos de uso._');
   return out.join('\n');
 }
 
@@ -216,11 +226,11 @@ function flowMermaid(kind: GraphKind, g: GraphData): string {
     const t = one(n.label) || ' ';
     switch (nodeTypeInfo(kind, n.type).shape) {
       case 'initial':
-        return '(( ))';
+        return '(("●"))';
       case 'final':
         return '(((" ")))';
       case 'flowFinal':
-        return '((x))';
+        return '(("⊗"))';
       case 'diamond':
         return `{"${t}"}`;
       case 'terminator':
@@ -233,7 +243,7 @@ function flowMermaid(kind: GraphKind, g: GraphData): string {
       case 'cylinder':
         return `[("${t}")]`;
       case 'bar':
-        return '[" "]';
+        return '["━━"]';
       default:
         return `["${t}"]`;
     }
@@ -366,16 +376,16 @@ function erMarkdown(doc: DiagramOf<'er'>): string {
   const out = [`# ${doc.title} — modelo E/R`, '', '## Entidades', ''];
   for (const n of g.nodes.filter((x) => x.type === 'entity' || x.type === 'weakEntity')) {
     const attrs = neighbours(n.id)
-      .filter(({ other }) => ['attribute', 'key', 'multivalued'].includes(other.type))
-      .map(({ other }) => (other.type === 'key' ? `**${other.label}** (clave)` : other.type === 'multivalued' ? `${other.label} (multivaluado)` : other.label));
+      .filter(({ other }) => ['attribute', 'key', 'multivalued', 'derived'].includes(other.type))
+      .map(({ other }) => (other.type === 'key' ? `**${other.label}** (clave)` : other.type === 'multivalued' ? `${other.label} (multivaluado)` : other.type === 'derived' ? `${other.label} (derivado)` : other.label));
     out.push(`- **${n.label}**${n.type === 'weakEntity' ? ' (débil)' : ''}: ${attrs.join(', ') || '—'}`);
   }
   out.push('', '## Relaciones', '');
-  for (const r of g.nodes.filter((x) => x.type === 'relationship')) {
+  for (const r of g.nodes.filter((x) => x.type === 'relationship' || x.type === 'identifying')) {
     const ends = neighbours(r.id).filter(({ other }) => other.type === 'entity' || other.type === 'weakEntity');
     const card = ends.map(({ e, other }) => `${other.label} (${(e.from === r.id ? e.toLabel : e.fromLabel) || '?'}${e.type === 'total' ? ', total' : ''})`);
     const attrs = neighbours(r.id).filter(({ other }) => ['attribute', 'key', 'multivalued'].includes(other.type)).map(({ other }) => other.label);
-    out.push(`- **${r.label}**: ${card.join(' — ')}${attrs.length ? `; atributos: ${attrs.join(', ')}` : ''}`);
+    out.push(`- **${r.label}**${r.type === 'identifying' ? ' (identificativa)' : ''}: ${card.join(' — ')}${attrs.length ? `; atributos: ${attrs.join(', ')}` : ''}`);
   }
   return out.join('\n');
 }
@@ -415,7 +425,15 @@ function screensMarkdown(doc: DiagramOf<'screenflow'>): string {
   const out = [`# ${doc.title} — pantallas`, ''];
   for (const n of g.nodes.filter((x) => x.type !== 'note')) {
     const [title, ...rest] = n.label.split('\n');
-    out.push(`## ${title}${n.type === 'dialog' ? ' (aviso)' : ''}`, '', ...rest.map((l) => `- ${l}`), '');
+    const lines = rest.map((l) => {
+      const t = l.trim();
+      const b = /^\[(.+)\]$/.exec(t);
+      if (b) return `- Botón «${b[1]}»`;
+      if (/_{3,}/.test(t)) return `- Campo: ${t.replace(/_{3,}/, '').replace(/:\s*$/, '').trim()}`;
+      if (t.startsWith('# ')) return `- **${t.slice(2)}**`;
+      return `- ${t}`;
+    });
+    out.push(`## ${title}${n.type === 'dialog' ? ' (aviso)' : ''}`, '', ...lines, '');
     const outs = g.edges.filter((e) => e.from === n.id);
     if (outs.length) out.push('Navegación:', ...outs.map((e) => `- ${e.label || '→'}: ${nodes.get(e.to)?.label.split('\n')[0]}${e.type === 'error' ? ' (error)' : ''}`), '');
   }
@@ -430,7 +448,11 @@ export function traceRows(g: GraphData): string[][] {
   const next = (id: string, type: string) => g.edges.filter((e) => e.type === 'trace' && e.from === id).map((e) => nodes.get(e.to)!).filter((n) => n?.type === type);
   const rows: string[][] = [];
   for (const r of g.nodes.filter((n) => n.type === 'req')) {
-    const crit = g.edges.filter((e) => e.type === 'refines' && e.from === r.id).map((e) => nodes.get(e.to)?.label ?? '').join(', ');
+    // Criteria hang from their requirement by any line, in either direction.
+    const crit = g.edges
+      .filter((e) => (e.from === r.id && nodes.get(e.to)?.type === 'criterion') || (e.to === r.id && nodes.get(e.from)?.type === 'criterion'))
+      .map((e) => nodes.get(e.from === r.id ? e.to : e.from)?.label ?? '')
+      .join(', ');
     const designs = next(r.id, 'design');
     if (!designs.length) rows.push([r.label, crit, '', '', '']);
     for (const d of designs) {

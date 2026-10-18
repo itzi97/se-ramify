@@ -51,12 +51,15 @@
     const s = await storage();
     const file = await s.importText({ name: imp.label, extensions: imp.extensions, mime: 'text/plain' });
     if (!file) return;
+    if (!(await s.confirm(`Replace "${app.doc.title}" with ${file.name}? Undo (Ctrl+Z) brings the current version back.`, 'Import'))) return;
     try {
       const data = (imp.parse as (t: string, c: unknown) => unknown)(file.text, $state.snapshot(app.doc.data));
       app.change((d) => {
         (d as { data: unknown }).data = data;
       });
-      app.notify(`Imported ${file.name}.`);
+      const warn = imp.warnings?.(file.text) ?? [];
+      if (warn.length) app.notify(`Imported ${file.name}; ${warn.length} line${warn.length === 1 ? '' : 's'} skipped or changed — ${warn.slice(0, 3).join('; ')}${warn.length > 3 ? '…' : ''}. The Text tab lists them all.`, 'error');
+      else app.notify(`Imported ${file.name}.`);
     } catch (err) {
       app.notify(`Couldn't import: ${err instanceof Error ? err.message : err}`, 'error');
     }
@@ -77,6 +80,11 @@
     if (mod && e.key.toLowerCase() === 'n' && app.dir) {
       e.preventDefault();
       newOpen = true;
+      return;
+    }
+    if (mod && e.shiftKey && e.key.toLowerCase() === 'c' && app.doc) {
+      e.preventDefault();
+      void app.copyImage();
       return;
     }
     if (typing(e)) return;
@@ -109,6 +117,10 @@
         aria-label="Title"
         value={app.doc.title}
         oninput={(e) => app.change((d) => (d.title = e.currentTarget.value), 'title')}
+        onblur={(e) => {
+          if (!e.currentTarget.value.trim()) app.change((d) => (d.title = 'Sin título'));
+        }}
+        lang="es"
       />
       <input
         class="ghost-input project"
@@ -131,6 +143,7 @@
           <div class="menu float arrive" role="menu">
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportImage('png'); }}><Icon name="Image" size={16} /> PNG image</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportImage('svg'); }}><Icon name="FileImage" size={16} /> SVG image</button>
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.copyImage(); }}><Icon name="ClipboardCopy" size={16} /> Copy as image <kbd class="quiet">Ctrl+Shift+C</kbd></button>
             <label class="check small muted pad"><input type="checkbox" checked={app.lightExports} onchange={(e) => app.setLightExports(e.currentTarget.checked)} /> White background</label>
             {#if textExports.length}
               <div class="sect pad">As text</div>
@@ -154,7 +167,7 @@
               <button class="menu-row" role="menuitem" onclick={importText}><Icon name="FileInput" size={16} /> {mod.importText.label}…</button>
             {/if}
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.duplicate(); }}><Icon name="Copy" size={16} /> Duplicate</button>
-            <button class="menu-row" role="menuitem" onclick={() => { menu = null; app.change((d) => (d.archived = !d.archived)); }}><Icon name="Archive" size={16} /> {app.doc.archived ? 'Unarchive' : 'Archive'}</button>
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.toggleArchive(); }}><Icon name="Archive" size={16} /> {app.doc.archived ? 'Unarchive' : 'Archive'}</button>
             <button class="menu-row" role="menuitem" onclick={openVersions}><Icon name="History" size={16} /> Previous versions…</button>
             <button class="menu-row danger" role="menuitem" onclick={() => { menu = null; void app.remove(); }}><Icon name="Trash2" size={16} /> Delete…</button>
             <div class="sect pad">Theme</div>
@@ -186,7 +199,7 @@
     </main>
   {:else if app.ready}
     {#if app.listOpen}<DiagramList onNew={() => (newOpen = true)} />{/if}
-    <main class="editor-area">
+    <main class="editor-area" lang="es">
       {#if app.doc && Editor}
         {#key app.doc.id}
           <Editor />
@@ -205,7 +218,8 @@
   {#if side === 'notes' && app.doc}
     <Panel title="Notes" onClose={() => (side = null)}>
       <p class="tiny muted">About the whole diagram: decisions, sources, what's left to do. Saved with it, never drawn.</p>
-      <textarea rows="16" value={app.doc.notes} oninput={(e) => app.change((d) => (d.notes = e.currentTarget.value), 'notes')}></textarea>
+      <!-- svelte-ignore a11y_autofocus -->
+      <textarea rows="16" autofocus value={app.doc.notes} oninput={(e) => app.change((d) => (d.notes = e.currentTarget.value), 'notes')}></textarea>
     </Panel>
   {:else if side === 'versions'}
     <Panel title="Previous versions" onClose={() => (side = null)}>
@@ -228,7 +242,7 @@
           <li>Click a shape in the toolbar to drop it in the middle, or drag it onto the canvas.</li>
           <li>Drag from the small dot on a hovered shape to another shape to connect them; the toolbar's relation menu picks the kind of line.</li>
           <li>Double-click a shape or a line to edit its text; the panel on the right edits everything else.</li>
-          <li><kbd>Del</kbd> deletes, <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates, arrows nudge, <kbd>Ctrl</kbd>+<kbd>A</kbd> selects all, Shift+drag selects an area.</li>
+          <li><kbd>Del</kbd> deletes, <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> copy, cut and paste shapes (also between diagrams of the same kind), <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates, arrows nudge, <kbd>Ctrl</kbd>+<kbd>A</kbd> selects all, Shift+drag selects an area.</li>
           <li>Tidy lays the diagram out for you; containers (system, swimlanes, packages, nodes, zones) carry whatever is inside them.</li>
         </ul>
         <div class="sect">Mind maps</div>
@@ -236,6 +250,7 @@
           <li><kbd>Tab</kbd> adds an idea under the selected one, <kbd>Enter</kbd> one beside it, <kbd>F2</kbd> renames.</li>
         </ul>
         <div class="sect">Exports</div>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into a document. The box icon next to a project in the list exports the whole project: every diagram as a PNG plus a Markdown memoria with the specifications and stories.</p>
         <p>PNG and SVG for every diagram (on white by default). UML diagrams also export PlantUML; the Gantt exports Mermaid; specifications, stories and maps export Markdown; stories export Gherkin <code>.feature</code> files.</p>
         <p class="tiny muted">se-ramify {__APP_VERSION__}</p>
       </div>

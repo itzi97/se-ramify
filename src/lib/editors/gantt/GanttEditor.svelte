@@ -26,15 +26,31 @@
     shortDate,
     span,
     timelineRange,
+    planRange,
     todayLocal,
     visibleRows,
-    wouldCycle
+    wouldCycle,
+    enforceDeps,
+    placeNew,
+    esDate
   } from './time';
+  import DateField from './DateField.svelte';
+  import { onMount, flushSync } from 'svelte';
 
   const ROW = 32;
   const HEAD = 48;
-  const COLS = { name: 224, start: 108, end: 108, days: 46, pct: 54, owner: 76 };
-  const TABLE_W = Object.values(COLS).reduce((a, b) => a + b, 0);
+  const FULL = { name: 224, start: 96, end: 96, days: 50, pct: 58, owner: 92 };
+  /** Narrow windows: name, dates and % only, so the timeline gets the room. */
+  const COMPACT = { name: 180, start: 88, end: 88, days: 0, pct: 56, owner: 0 };
+  let viewW = $state(1600);
+  /**
+   * While an image is captured the sheet is laid out tight: only the plan's
+   * own dates (not today, not the screen width), only its rows, every column.
+   */
+  let exporting = $state(false);
+  const compact = $derived(!exporting && viewW < 1500);
+  const COLS = $derived(compact ? COMPACT : FULL);
+  const TABLE_W = $derived(Object.values(COLS).reduce((a, b) => a + b, 0));
 
   const doc = $derived(app.docOf('gantt'));
   const data = $derived(doc.data);
@@ -43,6 +59,26 @@
   let details = $state(false);
   let collapsed = $state<Set<string>>(new Set());
   let scroller: HTMLDivElement | undefined = $state();
+  let sheet: HTMLDivElement | undefined = $state();
+
+  onMount(() => {
+    // The shell asks for the image source right after it marks <html> as exporting:
+    // switch to the tight layout synchronously, measure, and switch back when it's done.
+    const root = document.documentElement;
+    const watch = new MutationObserver(() => {
+      if (exporting && !root.classList.contains('exporting')) exporting = false;
+    });
+    watch.observe(root, { attributes: true, attributeFilter: ['class'] });
+    app.setImageSource(() => {
+      flushSync(() => (exporting = true));
+      const el = sheet!;
+      return { el, width: el.scrollWidth, height: el.scrollHeight };
+    });
+    return () => {
+      watch.disconnect();
+      app.setImageSource(null);
+    };
+  });
 
   /** A bar being dragged: preview only, committed on release. */
   let drag = $state<{ id: string; mode: 'move' | 'start' | 'end'; days: number } | null>(null);
@@ -56,19 +92,26 @@
     const copy: GanttData = { ...data, tasks: live.map((t) => ({ ...t, deps: [...t.deps] })) };
     if (drag.mode === 'move') moveTask(copy, drag.id, drag.days);
     else resizeTask(copy, drag.id, drag.mode, drag.days);
+    enforceDeps(copy);
     return copy.tasks;
   });
 
   const rows = $derived(visibleRows(tasks, collapsed));
   const px = $derived(PX_PER_DAY[data.scale]);
-  const range = $derived(timelineRange(data.tasks, data.scale, today));
+  const range = $derived(exporting ? planRange(data.tasks, data.scale, today) : timelineRange(data.tasks, data.scale, today));
   const ticks = $derived(headerTicks(range, data.scale));
-  const timelineW = $derived(range.days * px);
+  /** In an exported image, room after the last date for a milestone's or bar's label. */
+  const timelineW = $derived(range.days * px + (exporting ? 170 : 0));
   const rowIndex = $derived(new Map(rows.map((r, i) => [r.task.id, i])));
   const sel = $derived(selected ? data.tasks.find((t) => t.id === selected) ?? null : null);
 
+  /** Every change keeps finish-to-start dependencies: dependents are pushed later, never drawn before their prerequisites. */
   function edit(fn: (g: GanttData) => void, key?: string) {
-    app.change((d) => fn((d as typeof doc).data), key);
+    app.change((d) => {
+      const g = (d as typeof doc).data;
+      fn(g);
+      enforceDeps(g);
+    }, key);
   }
   function editTask(id: string, fn: (t: GanttTask) => void, key?: string) {
     edit((g) => {
@@ -98,31 +141,20 @@
   function add(kind: 'task' | 'milestone' | 'group') {
     const id = uid();
     edit((g) => {
-      const anchor = selected ? g.tasks.find((t) => t.id === selected) : undefined;
-      // Into a selected group; beside anything else.
-      const parent = anchor ? (anchor.group ? anchor.id : anchor.parent) : undefined;
-      const base = anchor ? addDays(span(g.tasks, anchor).end, 1) : mondayOf(today);
+      const at = placeNew(g, kind, selected, today);
       const t: GanttTask = {
         id,
         name: kind === 'group' ? 'Nueva fase' : kind === 'milestone' ? 'Hito' : 'Nueva tarea',
-        start: base,
-        end: kind === 'milestone' || kind === 'group' ? base : addDays(base, 4),
+        start: at.start,
+        end: kind === 'milestone' || kind === 'group' ? at.start : addDays(at.start, 4),
         progress: 0,
         milestone: kind === 'milestone',
         group: kind === 'group',
-        parent,
+        parent: at.parent,
         deps: [],
         owner: ''
       };
-      // After the anchor's subtree (or at the end).
-      let at = g.tasks.length;
-      if (anchor) {
-        const block = new Set([anchor.id, ...descendants(g.tasks, anchor.id)]);
-        g.tasks.forEach((x, i) => {
-          if (block.has(x.id)) at = i + 1;
-        });
-      }
-      g.tasks.splice(at, 0, t);
+      g.tasks.splice(at.index, 0, t);
     });
     selected = id;
     if (selected) collapsed.delete(selected);
@@ -146,6 +178,14 @@
     if (next.has(id)) next.delete(id);
     else next.add(id);
     collapsed = next;
+  }
+
+  /** Pick the finest scale at which the whole plan fits beside the table. */
+  function fitScale() {
+    const room = viewW - TABLE_W - 8;
+    const pick = (['day', 'week', 'month'] as const).find((sc) => timelineRange(data.tasks, sc, today).days * PX_PER_DAY[sc] <= room) ?? 'month';
+    if (pick !== data.scale) edit((g) => (g.scale = pick));
+    scroller?.scrollTo({ left: 0 });
   }
 
   function scrollToToday() {
@@ -275,21 +315,22 @@
         <button class:active={data.scale === v} role="radio" aria-checked={data.scale === v} onclick={() => edit((g) => (g.scale = v as GanttData['scale']))}>{l}</button>
       {/each}
     </div>
+    <button class="small" onclick={fitScale} title="Choose the scale that shows the whole plan"><Icon name="Maximize" size={14} /> Fit</button>
     <label class="check small"><input type="checkbox" checked={data.showWeekends} onchange={(e) => edit((g) => (g.showWeekends = e.currentTarget.checked))} /> Weekends</label>
     <button class="small" onclick={scrollToToday}><Icon name="CalendarCheck" size={15} /> Today</button>
   </div>
 
-  <div class="scroller" bind:this={scroller}>
-    <div class="sheet" data-export-root style:width="{TABLE_W + timelineW}px">
+  <div class="scroller" bind:this={scroller} bind:clientWidth={viewW}>
+    <div class="sheet" class:tight={exporting} bind:this={sheet} data-export-root style:width="{TABLE_W + timelineW}px">
       <!-- Header -->
       <div class="head" style:height="{HEAD}px">
         <div class="th table-part" style:width="{TABLE_W}px">
-          <span style:width="{COLS.name}px" class="c-name">Task</span>
-          <span style:width="{COLS.start}px">Start</span>
-          <span style:width="{COLS.end}px">End</span>
-          <span style:width="{COLS.days}px" class="num">Days</span>
+          <span style:width="{COLS.name}px" class="c-name">Tarea</span>
+          <span style:width="{COLS.start}px">Inicio</span>
+          <span style:width="{COLS.end}px">Fin</span>
+          {#if COLS.days}<span style:width="{COLS.days}px" class="num">Días</span>{/if}
           <span style:width="{COLS.pct}px" class="num">%</span>
-          <span style:width="{COLS.owner}px">Owner</span>
+          {#if COLS.owner}<span style:width="{COLS.owner}px">Responsable</span>{/if}
         </div>
         <div class="th-time" style:width="{timelineW}px">
           <div class="band">
@@ -306,7 +347,7 @@
       </div>
 
       <!-- Body -->
-      <div class="body" style:min-height="{Math.max(rows.length, 1) * ROW + ROW}px">
+      <div class="body" style:min-height="{exporting ? rows.length * ROW : Math.max(rows.length, 1) * ROW + ROW}px">
         <div class="table-part rows" style:width="{TABLE_W}px">
           {#each rows as r (r.task.id)}
             {@const t = r.task}
@@ -332,33 +373,37 @@
                 />
               </span>
               {#if t.group}
-                <span class="ro" style:width="{COLS.start}px">{shortDate(sp.start)}</span>
-                <span class="ro" style:width="{COLS.end}px">{shortDate(sp.end)}</span>
-                <span class="ro num" style:width="{COLS.days}px">{durationDays({ ...sp, milestone: false })}</span>
+                <span class="ro" style:width="{COLS.start}px">{esDate(sp.start)}</span>
+                <span class="ro" style:width="{COLS.end}px">{esDate(sp.end)}</span>
+                {#if COLS.days}<span class="ro num" style:width="{COLS.days}px">{durationDays({ ...sp, milestone: false })}</span>{/if}
                 <span class="ro num" style:width="{COLS.pct}px">{groupProgress(tasks, t)}</span>
               {:else}
                 <span style:width="{COLS.start}px">
-                  <input class="ghost-input cell-in date" type="date" value={t.start} aria-label="Start" onchange={(e) => editTask(t.id, (x) => (x.milestone ? setEnd(x, e.currentTarget.value) : setStart(x, e.currentTarget.value)))} />
+                  {#key t.start}<DateField cls="ghost-input cell-in" label="Start" value={t.start} onCommit={(v) => editTask(t.id, (x) => (x.milestone ? setEnd(x, v) : setStart(x, v)))} />{/key}
                 </span>
                 <span style:width="{COLS.end}px">
                   {#if t.milestone}<span class="ro">—</span>{:else}
-                    <input class="ghost-input cell-in date" type="date" value={t.end} min={t.start} aria-label="End" onchange={(e) => editTask(t.id, (x) => setEnd(x, e.currentTarget.value))} />
+                    {#key t.end}<DateField cls="ghost-input cell-in" label="End" value={t.end} onCommit={(v) => editTask(t.id, (x) => setEnd(x, v))} />{/key}
                   {/if}
                 </span>
-                <span class="num" style:width="{COLS.days}px">
-                  {#if t.milestone}<span class="ro">0</span>{:else}
-                    <input class="ghost-input cell-in num" type="number" min="1" value={durationDays(t)} aria-label="Duration in days" onchange={(e) => editTask(t.id, (x) => setDuration(x, +e.currentTarget.value || 1))} />
-                  {/if}
-                </span>
+                {#if COLS.days}
+                  <span class="num" style:width="{COLS.days}px">
+                    {#if t.milestone}<span class="ro">0</span>{:else}
+                      <input class="ghost-input cell-in num" type="number" min="1" value={durationDays(t)} aria-label="Duration in days" onchange={(e) => editTask(t.id, (x) => setDuration(x, +e.currentTarget.value || 1))} />
+                    {/if}
+                  </span>
+                {/if}
                 <span class="num" style:width="{COLS.pct}px">
                   {#if t.milestone}<span class="ro">—</span>{:else}
                     <input class="ghost-input cell-in num" type="number" min="0" max="100" step="10" value={t.progress} aria-label="Progress" onchange={(e) => editTask(t.id, (x) => (x.progress = Math.max(0, Math.min(100, +e.currentTarget.value || 0))))} />
                   {/if}
                 </span>
               {/if}
-              <span style:width="{COLS.owner}px">
-                <input class="ghost-input cell-in" type="text" value={t.owner} aria-label="Owner" oninput={(e) => editTask(t.id, (x) => (x.owner = e.currentTarget.value), 'owner')} />
-              </span>
+              {#if COLS.owner}
+                <span style:width="{COLS.owner}px">
+                  <input class="ghost-input cell-in" type="text" value={t.owner} aria-label="Owner" oninput={(e) => editTask(t.id, (x) => (x.owner = e.currentTarget.value), 'owner')} />
+                </span>
+              {/if}
             </div>
           {/each}
           {#if !rows.length}
@@ -473,9 +518,9 @@
           <p class="small muted">{shortDate(sp.start)} – {shortDate(sp.end)} · spans what's inside it · {groupProgress(data.tasks, sel)}% done</p>
         {:else}
           <div class="two">
-            <label class="field">{sel.milestone ? 'Date' : 'Start'} <input type="date" value={sel.start} onchange={(e) => editTask(sel.id, (x) => (x.milestone ? setEnd(x, e.currentTarget.value) : setStart(x, e.currentTarget.value)))} /></label>
+            <label class="field">{sel.milestone ? 'Date' : 'Start'} {#key sel.start}<DateField label={sel.milestone ? 'Date' : 'Start'} value={sel.start} onCommit={(v) => editTask(sel.id, (x) => (x.milestone ? setEnd(x, v) : setStart(x, v)))} />{/key}</label>
             {#if !sel.milestone}
-              <label class="field">End <input type="date" value={sel.end} min={sel.start} onchange={(e) => editTask(sel.id, (x) => setEnd(x, e.currentTarget.value))} /></label>
+              <label class="field">End {#key sel.end}<DateField label="End" value={sel.end} onCommit={(v) => editTask(sel.id, (x) => setEnd(x, v))} />{/key}</label>
             {/if}
           </div>
           {#if !sel.milestone}
@@ -544,6 +589,18 @@
     display: flex;
     flex-direction: column;
     min-height: 100%;
+  }
+  /* Exported image: as tall as the rows, nothing stretched to the window. */
+  .sheet.tight,
+  .sheet.tight .rows,
+  .sheet.tight .timeline {
+    min-height: 0;
+  }
+  .sheet.tight .body {
+    flex: none;
+  }
+  :global(html.exporting) .chev {
+    visibility: hidden;
   }
   .head {
     position: sticky;
@@ -660,17 +717,48 @@
     font-size: var(--fs-sm) !important;
     font-weight: inherit;
   }
-  .cell-in.date {
+  /* Atkinson Hyperlegible slashes its zero ("2026" reads "2Ø26"): figures use the system face. */
+  .gantt :global(.date-field),
+  .ro,
+  .cell-in.num,
+  .tick,
+  .th .num {
+    font-family: system-ui, sans-serif;
+  }
+  .cell-in:global(.date-field) {
     padding: 2px 4px !important;
   }
-  .cell-in.date::-webkit-calendar-picker-indicator {
-    opacity: 0;
+  /* While an image is captured: no selection, hover or "today" marks in the picture. */
+  :global(html.exporting) .tr.sel,
+  :global(html.no-motion) .tr.sel {
+    background: transparent;
   }
-  .tr:hover .cell-in.date::-webkit-calendar-picker-indicator,
-  .cell-in.date:focus::-webkit-calendar-picker-indicator {
-    opacity: 0.6;
+  :global(html.exporting) .row-hi,
+  :global(html.no-motion) .row-hi,
+  :global(html.exporting) .today,
+  :global(html.no-motion) .today {
+    display: none;
+  }
+  :global(html.exporting) .sel,
+  :global(html.no-motion) .sel {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  :global(html.exporting) .deps path.hot,
+  :global(html.no-motion) .deps path.hot {
+    stroke: var(--faint);
+  }
+  :global(html.exporting) .deps polygon.hot,
+  :global(html.no-motion) .deps polygon.hot {
+    fill: var(--faint);
+  }
+  :global(html.exporting) .ghost-input,
+  :global(html.no-motion) .ghost-input {
+    border-color: transparent !important;
+    background: transparent !important;
   }
   .cell-in.num {
+    padding: 2px 3px !important;
     text-align: right;
     appearance: textfield;
     -moz-appearance: textfield;

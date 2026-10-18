@@ -17,6 +17,7 @@
     coreLines,
     gridLabels,
     gridValueAt,
+    freeGridSpot,
     normStakeholder,
     onionCellAt,
     onionLayout,
@@ -54,8 +55,9 @@
 
   function add() {
     const id = uid();
+    const spot = freeGridSpot(people);
     app.change((d) => {
-      sd(d).stakeholders.push({ id, name: 'Nuevo stakeholder', role: '', power: 0.5, interest: 0.5, ring: 2, sector: 'clientes', attitude: 'neutral', notes: '' });
+      sd(d).stakeholders.push({ id, name: 'Nuevo stakeholder', role: '', power: spot.power, interest: spot.interest, ring: 2, sector: 'clientes', attitude: 'neutral', notes: '' });
     });
     selected = id;
     focusName = true;
@@ -87,10 +89,26 @@
   function onDotDown(e: PointerEvent, id: string) {
     if (e.button !== 0) return;
     e.stopPropagation();
+    e.preventDefault();
     selected = id;
-    (e.currentTarget as Element).setPointerCapture(e.pointerId);
     const p = svgPoint(e);
     drag = { id, pointerId: e.pointerId, x: p.x, y: p.y, moved: false };
+    // Follow the pointer on the window, not with pointer capture: the dots
+    // re-render while they move, and a moved element loses its capture.
+    window.addEventListener('pointermove', onDotMove);
+    window.addEventListener('pointerup', onDotUp);
+    window.addEventListener('pointercancel', onDotCancel);
+  }
+
+  function stopListening() {
+    window.removeEventListener('pointermove', onDotMove);
+    window.removeEventListener('pointerup', onDotUp);
+    window.removeEventListener('pointercancel', onDotCancel);
+  }
+
+  function onDotCancel() {
+    drag = null;
+    stopListening();
   }
 
   function onDotMove(e: PointerEvent) {
@@ -106,6 +124,7 @@
     if (!drag || e.pointerId !== drag.pointerId) return;
     if (data.view === 'onion' && drag.moved) update(drag.id, onionCellAt(drag.x, drag.y));
     drag = null;
+    stopListening();
   }
 
   function onDotKey(e: KeyboardEvent, s: Stakeholder) {
@@ -189,8 +208,8 @@
             {/if}
             <text x={l.lx} y={l.ly} text-anchor={l.anchor} class="name">{s.name}</text>
           {/each}
-          {#each labels as l (l.id)}
-            {@const s = people.find((p) => p.id === l.id)!}
+          {#each people as s (s.id)}
+            {@const l = labels.find((x) => x.id === s.id)!}
             <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
             <circle
               cx={l.x}
@@ -203,9 +222,6 @@
               role="button"
               aria-label="{s.name}: poder {pct(s.power)}, interés {pct(s.interest)}"
               onpointerdown={(e) => onDotDown(e, s.id)}
-              onpointermove={onDotMove}
-              onpointerup={onDotUp}
-              onpointercancel={() => (drag = null)}
               onkeydown={(e) => onDotKey(e, s)}
               onfocus={() => (selected = s.id)}
             />
@@ -252,9 +268,6 @@
               role="button"
               aria-label="{s.name}: {RINGS[s.ring].label}, {s.sector}"
               onpointerdown={(e) => onDotDown(e, s.id)}
-              onpointermove={onDotMove}
-              onpointerup={onDotUp}
-              onpointercancel={() => (drag = null)}
               onfocus={() => (selected = s.id)}
             />
           {/each}
@@ -440,6 +453,12 @@
   .dot:focus-visible {
     stroke: var(--accent);
     stroke-width: 3;
+  }
+  /* The selection ring is for the screen, not for the exported image. */
+  :global(.exporting) .dot.on,
+  :global(.exporting) .dot:focus-visible {
+    stroke: var(--panel);
+    stroke-width: 2;
   }
   .ring {
     stroke: var(--panel);

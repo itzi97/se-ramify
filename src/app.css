@@ -13,6 +13,20 @@
               (shapes, lines, text); exports switch to light paper.
      chrome   --top-h is the top strip; --list-w the diagram list drawer. */
 
+/* Atkinson Hyperlegible draws zero with a slash ("2Ø26"), which reads as Ø in
+   hand-ins. Digits come from a plain system face instead; everything else stays Atkinson. */
+@font-face {
+  font-family: 'Plain Digits';
+  src: local('Noto Sans'), local('NotoSans-Regular'), local('Cantarell'), local('DejaVu Sans'), local('Liberation Sans'), local('Arial'), local('Segoe UI');
+  unicode-range: U+0030-0039;
+}
+@font-face {
+  font-family: 'Plain Digits';
+  font-weight: 700;
+  src: local('Noto Sans Bold'), local('NotoSans-Bold'), local('Cantarell Bold'), local('DejaVu Sans Bold'), local('Liberation Sans Bold'), local('Arial Bold'), local('Segoe UI Bold');
+  unicode-range: U+0030-0039;
+}
+
 :root {
   --paper: #e9ecef;
   --panel: #ffffff;
@@ -81,7 +95,7 @@
   --controls-w: 44px;
   --edge: 12px;
 
-  --font: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --font: 'Plain Digits', 'Atkinson Hyperlegible', system-ui, sans-serif;
   --mono: ui-monospace, Menlo, Consolas, monospace;
   /* The desktop's accent colour when it has one (set from JS); ink otherwise. */
   --accent: var(--ink);
@@ -831,4 +845,22 @@ input[type='range'] {
 .no-motion *::after {
   transition: none !important;
   animation: none !important;
+}
+/* Nothing about the selection ends up in an exported image. */
+.exporting .svelte-flow__node .gnode,
+.exporting .svelte-flow__node .gnode * {
+  outline: none !important;
+  filter: none !important;
+}
+.exporting .svelte-flow__resize-control,
+.exporting .svelte-flow__handle,
+.exporting .edit-hint {
+  display: none !important;
+}
+.exporting .svelte-flow__edge.selected .ln,
+.exporting .svelte-flow__edge.selected .mark {
+  stroke: var(--edge-ink) !important;
+}
+.exporting .svelte-flow__edge.selected .mark.filled {
+  fill: var(--edge-ink) !important;
 }

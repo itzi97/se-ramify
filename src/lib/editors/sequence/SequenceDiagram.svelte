@@ -116,11 +116,24 @@
     {@const c = selected === n.itemId ? p.accent : p.ink}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <g class="pickable" onclick={(e) => pick(e, n.itemId)} ondblclick={(e) => edit(e, n.itemId)}>
-      <path d="M {n.x} {n.y} H {n.x + n.w - 10} L {n.x + n.w} {n.y + 10} V {n.y + n.h} H {n.x} Z" fill={p.note} stroke={c} stroke-width={selected === n.itemId ? 2 : 1.1} />
-      <path d="M {n.x + n.w - 10} {n.y} V {n.y + 10} H {n.x + n.w}" fill="none" stroke={c} stroke-width="1.1" />
-      {#each n.lines as l, i (i)}
-        <text x={n.x + 10} y={n.y + 20 + i * 16} font-size="12" fill={p.ink}>{l}</text>
-      {/each}
+      {#if n.kind === 'divider'}
+        {@const mid = n.y + n.h / 2}
+        {@const lw = n.lines.length ? n.lines[0].length * 7 + 24 : 0}
+        <rect x={n.x} y={mid - 3} width={n.w} height="6" fill={p.soft} stroke={c} stroke-width={selected === n.itemId ? 2 : 1} />
+        {#if lw}
+          <rect x={n.x + n.w / 2 - lw / 2} y={n.y} width={lw} height={n.h} fill={p.soft} stroke={c} stroke-width={selected === n.itemId ? 2 : 1.1} />
+          <text x={n.x + n.w / 2} y={mid + 4} font-size="12" font-weight="700" text-anchor="middle" fill={p.ink}>{n.lines[0]}</text>
+        {/if}
+      {:else if n.kind === 'delay'}
+        <rect x={n.x} y={n.y} width={n.w} height={n.h} fill={p.fill} opacity="0.85" stroke={selected === n.itemId ? c : 'none'} stroke-dasharray="3 3" />
+        <text x={n.x + n.w / 2} y={n.y + n.h / 2 + 4} font-size="12" font-style="italic" text-anchor="middle" fill={p.ink}>{n.lines[0] ?? '⋯'}</text>
+      {:else}
+        <path d="M {n.x} {n.y} H {n.x + n.w - 10} L {n.x + n.w} {n.y + 10} V {n.y + n.h} H {n.x} Z" fill={p.note} stroke={c} stroke-width={selected === n.itemId ? 2 : 1.1} />
+        <path d="M {n.x + n.w - 10} {n.y} V {n.y + 10} H {n.x + n.w}" fill="none" stroke={c} stroke-width="1.1" />
+        {#each n.lines as l, i (i)}
+          <text x={n.x + 10} y={n.y + 20 + i * 16} font-size="12" fill={p.ink}>{l}</text>
+        {/each}
+      {/if}
     </g>
   {/each}
 

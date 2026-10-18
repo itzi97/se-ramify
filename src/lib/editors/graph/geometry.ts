@@ -303,3 +303,120 @@ export function descendantsOf(id: string, parents: Map<string, string | null>): 
   walk(id);
   return out;
 }
+
+/* -------------------------------------------------- routing round shapes */
+
+/** Does segment p–q pass through rect r (shrunk by a small margin)? */
+export function segmentHits(p: Pt, q: Pt, r: Rect, margin = 4): boolean {
+  const x0 = r.x + margin;
+  const y0 = r.y + margin;
+  const x1 = r.x + r.w - margin;
+  const y1 = r.y + r.h - margin;
+  if (x1 <= x0 || y1 <= y0) return false;
+  // Liang–Barsky clip of the segment against the rectangle.
+  let t0 = 0;
+  let t1 = 1;
+  const dx = q.x - p.x;
+  const dy = q.y - p.y;
+  const edges: [number, number][] = [
+    [-dx, p.x - x0],
+    [dx, x1 - p.x],
+    [-dy, p.y - y0],
+    [dy, y1 - p.y]
+  ];
+  for (const [pp, qq] of edges) {
+    if (pp === 0) {
+      if (qq < 0) return false;
+      continue;
+    }
+    const t = qq / pp;
+    if (pp < 0) {
+      if (t > t1) return false;
+      if (t > t0) t0 = t;
+    } else {
+      if (t < t0) return false;
+      if (t < t1) t1 = t;
+    }
+  }
+  return t1 - t0 > 1e-6;
+}
+
+export function routeHits(points: Pt[], obstacles: Rect[]): number {
+  let n = 0;
+  for (const r of obstacles) {
+    for (let i = 1; i < points.length; i++) {
+      if (segmentHits(points[i - 1], points[i], r)) {
+        n++;
+        break;
+      }
+    }
+  }
+  return n;
+}
+
+const routeLength = (pts: Pt[]) => pts.slice(1).reduce((s, p, i) => s + Math.abs(p.x - pts[i].x) + Math.abs(p.y - pts[i].y), 0);
+
+/**
+ * Right-angle route that avoids the other shapes when it can: tries the
+ * default route, both L-shapes, both Z-shapes with the middle leg moved
+ * through the gaps, and loops round either side; keeps the one crossing the
+ * fewest shapes, then the shortest.
+ */
+export function orthogonalAvoiding(a: Rect, b: Rect, obstacles: Rect[], loopBack = false): Route {
+  const first = orthogonalRoute(a, b, loopBack);
+  if (!obstacles.length || routeHits(first.points, obstacles) === 0) return first;
+  const ca = center(a);
+  const cb = center(b);
+  const cands: Route[] = [first];
+  const side = (r: Rect, s: 'l' | 'r' | 't' | 'b'): Pt => (s === 'l' ? { x: r.x, y: r.y + r.h / 2 } : s === 'r' ? { x: r.x + r.w, y: r.y + r.h / 2 } : s === 't' ? { x: r.x + r.w / 2, y: r.y } : { x: r.x + r.w / 2, y: r.y + r.h });
+  const mk = (pts: Pt[]): Route => {
+    const i = Math.floor((pts.length - 1) / 2);
+    return { points: pts, mid: { x: (pts[i].x + pts[i + 1].x) / 2, y: (pts[i].y + pts[i + 1].y) / 2 } };
+  };
+  const right = cb.x >= ca.x;
+  const down = cb.y >= ca.y;
+  // L-shapes: horizontal then vertical, vertical then horizontal.
+  {
+    const p1 = side(a, right ? 'r' : 'l');
+    const p2 = side(b, down ? 't' : 'b');
+    if ((right ? p2.x > p1.x : p2.x < p1.x) && (down ? p2.y > p1.y : p2.y < p1.y)) cands.push(mk([p1, { x: p2.x, y: p1.y }, p2]));
+    const q1 = side(a, down ? 'b' : 't');
+    const q2 = side(b, right ? 'l' : 'r');
+    if ((right ? q2.x > q1.x : q2.x < q1.x) && (down ? q2.y > q1.y : q2.y < q1.y)) cands.push(mk([q1, { x: q1.x, y: q2.y }, q2]));
+  }
+  // Z-shapes with the middle leg at several positions, including just past every obstacle edge.
+  const xs = new Set<number>([(ca.x + cb.x) / 2]);
+  const ys = new Set<number>([(ca.y + cb.y) / 2]);
+  for (const r of obstacles) {
+    xs.add(r.x - 16);
+    xs.add(r.x + r.w + 16);
+    ys.add(r.y - 16);
+    ys.add(r.y + r.h + 16);
+  }
+  const p1h = side(a, right ? 'r' : 'l');
+  const p4h = side(b, right ? 'l' : 'r');
+  for (const x of xs) if ((x - p1h.x) * (p4h.x - x) >= 0) cands.push(mk([p1h, { x, y: p1h.y }, { x, y: p4h.y }, p4h]));
+  const p1v = side(a, down ? 'b' : 't');
+  const p4v = side(b, down ? 't' : 'b');
+  for (const y of ys) if ((y - p1v.y) * (p4v.y - y) >= 0) cands.push(mk([p1v, { x: p1v.x, y }, { x: p4v.x, y }, p4v]));
+  // U-shapes round the outside.
+  const top = Math.min(a.y, b.y, ...obstacles.map((r) => r.y)) - 24;
+  const bottom = Math.max(a.y + a.h, b.y + b.h) + 24;
+  const leftX = Math.min(a.x, b.x) - 24;
+  const rightX = Math.max(a.x + a.w, b.x + b.w) + 24;
+  cands.push(mk([side(a, 't'), { x: ca.x, y: Math.min(a.y, b.y) - 24 }, { x: cb.x, y: Math.min(a.y, b.y) - 24 }, side(b, 't')]));
+  cands.push(mk([side(a, 'b'), { x: ca.x, y: bottom }, { x: cb.x, y: bottom }, side(b, 'b')]));
+  cands.push(mk([side(a, 'l'), { x: leftX, y: ca.y }, { x: leftX, y: cb.y }, side(b, 'l')]));
+  cands.push(mk([side(a, 'r'), { x: rightX, y: ca.y }, { x: rightX, y: cb.y }, side(b, 'r')]));
+  void top;
+  let best = first;
+  let bestScore = Infinity;
+  for (const c of cands) {
+    const score = routeHits(c.points, obstacles) * 100000 + routeLength(c.points) + (c.points.length - 2) * 30;
+    if (score < bestScore) {
+      best = c;
+      bestScore = score;
+    }
+  }
+  return best;
+}

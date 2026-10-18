@@ -24,7 +24,7 @@
     <form class="form float stack" onsubmit={(e) => e.preventDefault()} aria-label="Elevator pitch">
       <div>
         <div class="sect">Elevator pitch</div>
-        <p class="small muted">Geoffrey Moore's template for the product vision. Fill each blank; the card on the right reads it back as one sentence.</p>
+        <p class="small muted">Geoffrey Moore's template for the product vision. Fill each blank; the card reads it back as one sentence.</p>
       </div>
       {#each VISION_FIELDS as f (f.key)}
         <label class="field">
@@ -46,7 +46,7 @@
           <tbody>
             {#each VISION_FIELDS as f (f.key)}
               <tr>
-                <th scope="row">{f.lead.replace(/^./, (c) => c.toUpperCase())}</th>
+                <th scope="row">{(f.lead || 'Producto').replace(/^./, (c) => c.toUpperCase())}</th>
                 <td class:missing={!data[f.key]?.trim()}>{data[f.key]?.trim() || '—'}</td>
               </tr>
             {/each}
@@ -58,6 +58,9 @@
 </div>
 
 <style>
+  .scroll-canvas {
+    container-type: inline-size;
+  }
   .wrap {
     display: flex;
     align-items: flex-start;
@@ -142,10 +145,14 @@
   td.missing {
     color: var(--faint);
   }
-  @media (max-width: 1180px) {
+  /* Form above the card when the editor (not the window) is narrow, e.g. 1280 px with the list open. */
+  @container (max-width: 1130px) {
     .wrap {
       flex-direction: column;
       min-width: 0;
+    }
+    .card {
+      width: min(660px, 100%);
     }
   }
 </style>

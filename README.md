@@ -16,7 +16,11 @@ Every kind can start blank or from a small worked example (a library loans syste
 
 ## Exports
 
-PNG and SVG for every diagram, on white by default (untick *White background* in the Export menu to keep your theme). Text exports, also copyable from the same menu:
+**For a document:** `Ctrl+Shift+C` (or Export → *Copy as image*) puts the diagram on the clipboard as a PNG, ready to paste into Google Docs, Word or Slides.
+
+**For a hand-in:** the box icon next to a project name in the list exports the whole project into a folder you pick: every diagram as a numbered PNG, the PlantUML and Gherkin files, and one `…-memoria.md` that shows the diagrams in order with their notes, use case specifications, stories, tables and matrices.
+
+PNG and SVG for every diagram, on white by default (untick *White background* in the Export menu to keep your theme). The SVG holds a sharp 3× image, so it opens the same in Typst, LaTeX, Inkscape, Word and browsers. Text exports, also copyable from the same menu:
 
 * PlantUML: use case, class, state, deployment, mind map
 * Mermaid: class, state, activity, flowchart, sequence, Gantt
@@ -29,7 +33,7 @@ The sequence diagram also *imports* PlantUML (⋯ → Import), and has a text ta
 
 First run: pick a folder for your diagrams. *New diagram* (Ctrl+N) shows every kind with where it appears in the course; give it a project name ("Proyecto final", "Ejercicios T3") and the list on the left groups by it.
 
-**Canvas diagrams** (UML, maps, DFD, E/R, screens, traceability, infrastructure): click a shape in the toolbar to drop it in the middle, or drag it onto the canvas; double-click empty canvas for the kind's main shape. Hover a shape and drag from its dot to another shape to connect them — the toolbar's relation menu picks the kind of line (association, «include», composition, data flow…), and the panel on the right changes it afterwards. Double-click a shape to rename it in place (class compartments too), a line to edit its label. Containers (system boundary, swimlanes, packages, deployment nodes, zones) carry whatever is inside them when dragged and resize from their corners. Straight or right-angle lines are a toggle; *Tidy* lays the whole diagram out (undo brings yours back). `Del` deletes, `Ctrl+D` duplicates, arrows nudge (Shift: 1 px), `Ctrl+A` selects all, Shift+drag selects an area; select several to align or distribute them.
+**Canvas diagrams** (UML, maps, DFD, E/R, screens, traceability, infrastructure): click a shape in the toolbar to drop it in the middle, or drag it onto the canvas; double-click empty canvas for the kind's main shape. Hover a shape and drag from its dot to another shape to connect them — the toolbar's relation menu picks the kind of line (association, «include», composition, data flow…), and the panel on the right changes it afterwards. Double-click a shape to rename it in place (class compartments too), a line to edit its label. Containers (system boundary, swimlanes, packages, deployment nodes, zones) carry whatever is inside them when dragged and resize from their corners. Straight or right-angle lines are a toggle; *Tidy* lays the whole diagram out (undo brings yours back). `Del` deletes, `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste shapes (also into another diagram of the same kind), `Ctrl+D` duplicates, arrows nudge (Shift: 1 px), `Ctrl+A` selects all, Shift+drag selects an area; select several to align or distribute them.
 
 **Use case specifications** live on each use case: select it and fill in the panel (code, actors — *Fill actors from the lines in the diagram* reads them off the drawing — description, trigger, pre / postconditions, main and alternative flows, priority, frequency). *Export → Use case specifications* gives one table per use case.
 
@@ -37,7 +41,9 @@ First run: pick a folder for your diagrams. *New diagram* (Ctrl+N) shows every k
 
 **Everything else** (sequence, Gantt, story map, Kanban, stakeholders, journey, boards) has its own editor; cards and sticky notes drag with the pointer directly, so it behaves the same on Wayland, X11 and Windows.
 
-Every change saves itself within half a second. `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo across all editors. ⋯ keeps *Notes* about the diagram, *Duplicate*, *Archive*, *Previous versions* (a dated copy every five minutes while you edit, and before a delete or restore) and *Delete*.
+Every change saves itself within half a second. `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo across all editors, and each diagram keeps its own history while the app is open, so switching away and back doesn't lose it. ⋯ keeps *Notes* about the diagram, *Duplicate*, *Archive*, *Previous versions* (a dated copy when you start editing a diagram and every five minutes after, and before a delete or restore) and *Delete*; a deleted diagram can be brought back from *Recently deleted* at the bottom of the list.
+
+Editing text on a shape: `Enter` finishes a one-line name; on notes and screens `Enter` starts a new line and `Ctrl+Enter` (or `Esc`, or clicking away) finishes. `Esc` always keeps what you typed — `Ctrl+Z` takes it back.
 
 ## Linux: Wayland and themes
 

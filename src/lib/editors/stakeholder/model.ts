@@ -382,3 +382,23 @@ export function stakeholderCsv(data: StakeholderData): string {
   const esc = (t: string) => (/[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t);
   return [HEAD, ...rows(data)].map((r) => r.map(esc).join(',')).join('\n') + '\n';
 }
+
+/**
+ * Where a new stakeholder goes on the power / interest grid: the candidate
+ * spot farthest from everyone already there (so new dots never pile up on
+ * one point). Candidates sit on a 7×7 lattice inside the plot, centre first.
+ */
+export function freeGridSpot(list: Pick<Stakeholder, 'power' | 'interest'>[]): { power: number; interest: number } {
+  const steps = [0.5, 0.35, 0.65, 0.2, 0.8, 0.1, 0.9];
+  let best = { power: 0.5, interest: 0.5 };
+  let bestD = -1;
+  for (const p of steps)
+    for (const i of steps) {
+      const d = list.length ? Math.min(...list.map((s) => Math.hypot(s.power - p, s.interest - i))) : 1;
+      if (d > bestD + 1e-9) {
+        bestD = d;
+        best = { power: p, interest: i };
+      }
+    }
+  return best;
+}

@@ -20,7 +20,7 @@ export function stakeholderExample(): StakeholderData {
     product: 'App de préstamos',
     stakeholders: [
       s('Dirección de la biblioteca', 'Cliente: encarga y paga el proyecto', 0.9, 0.85, 0, 'decisores', 'supporter', 'Aprueba el alcance y el presupuesto.'),
-      s('Vicerrectorado', 'Financia la biblioteca', 0.95, 0.35, 1, 'decisores', 'neutral', 'Solo interviene si cambia el presupuesto.'),
+      s('Vicerrectorado', 'Financia la biblioteca', 0.82, 0.3, 1, 'decisores', 'neutral', 'Solo interviene si cambia el presupuesto.'),
       s('Bibliotecarios', 'Usuarios internos diarios', 0.45, 0.9, 0, 'clientes', 'critic', 'Temen más trabajo durante la migración.'),
       s('Estudiantes', 'Usuarios finales', 0.3, 0.8, 1, 'clientes', 'supporter'),
       s('Profesores', 'Recomiendan bibliografía', 0.35, 0.55, 2, 'clientes', 'neutral'),

@@ -88,3 +88,12 @@ test('exports: Markdown table and CSV', () => {
   assert.equal(lines.length, data.stakeholders.length + 1);
   assert.ok(lines[1].includes('"Dice ""sí"", pero, bueno"'));
 });
+
+test('new stakeholders are spread over the grid, not stacked', async () => {
+  const { freeGridSpot } = await import('../src/lib/editors/stakeholder/model');
+  const list: { power: number; interest: number }[] = [];
+  for (let i = 0; i < 6; i++) list.push(freeGridSpot(list));
+  const keys = new Set(list.map((s) => `${s.power}:${s.interest}`));
+  assert.equal(keys.size, 6);
+  assert.deepEqual(list[0], { power: 0.5, interest: 0.5 });
+});

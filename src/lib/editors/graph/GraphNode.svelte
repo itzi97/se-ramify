@@ -81,13 +81,14 @@
   });
 
   /** Single-line labels commit on Enter; multi-line ones (notes, screens, attrs) need Ctrl+Enter. */
-  const multiline = $derived(data.editing !== 'label' || ['note', 'screen', 'container', 'swimlane', 'zone'].includes(shape));
+  const multiline = $derived(data.editing !== 'label' || ['note', 'screen'].includes(shape));
 
   function onKey(e: KeyboardEvent) {
     e.stopPropagation();
     if (e.key === 'Escape') {
+      // Esc finishes editing and keeps what was typed (Ctrl+Z undoes it).
       e.preventDefault();
-      ctx.cancelEdit();
+      ctx.commitEdit(id, data.editing!, draft);
     } else if (e.key === 'Enter' && !multiline && e.shiftKey) {
       e.preventDefault();
       ctx.commitEdit(id, data.editing!, draft);
@@ -126,6 +127,7 @@
       onblur={commit}
       aria-label="Text"
     ></textarea>
+    {#if multiline}<span class="edit-hint nodrag" data-no-export>Ctrl+Enter or Esc to finish</span>{/if}
   {:else}
     <span class="label {cls}" class:placeholder={empty}>{n.label}</span>
   {/if}
@@ -148,7 +150,7 @@
 {/if}
 
 <div
-  class="gnode s-{shape}"
+  class="gnode s-{shape} t-{n.type}"
   class:selected
   class:lit={data.lit}
   class:fill-size={resizable}
@@ -343,6 +345,19 @@
     field-sizing: content;
     outline: none;
   }
+  .edit-hint {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 11px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 5;
+  }
   .list-edit {
     text-align: left;
     font-size: 12px;
@@ -412,6 +427,12 @@
   }
   .s-attribute:has(.underline) {
     font-weight: 700;
+  }
+  .s-attribute.t-multivalued {
+    box-shadow: inset 0 0 0 3px var(--d-fill), inset 0 0 0 4.5px var(--d-ink);
+  }
+  .s-attribute.t-derived {
+    border-style: dashed;
   }
 
   /* containers: boundary, composite state, swimlane, zone */
@@ -612,7 +633,7 @@
     padding: 0;
     align-items: stretch;
     border-radius: 12px;
-    overflow: hidden;
+    /* no overflow: hidden — it would clip the connection dot */
   }
   .st-name {
     padding: 8px 16px;
@@ -810,7 +831,7 @@
     border: 1.5px solid var(--d-ink);
     border-radius: 10px;
     background: var(--d-fill);
-    overflow: hidden;
+    /* no overflow: hidden — it would clip the connection dot */
   }
   .s-process > .label,
   .s-process > .inline-edit {
@@ -861,11 +882,12 @@
     border: 1.5px solid var(--d-ink);
     border-radius: 6px;
     background: var(--d-fill);
-    overflow: hidden;
+    /* no overflow: hidden — it would clip the connection dot */
     text-align: left;
     font-size: 12px;
   }
   .win-bar {
+    border-radius: 5px 5px 0 0;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -885,9 +907,7 @@
     border: 1px solid var(--d-line);
   }
   .win-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
   .win-body {
     flex: 1;

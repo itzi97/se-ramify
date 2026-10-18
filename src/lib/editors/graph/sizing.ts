@@ -43,22 +43,29 @@ export function estimateSize(_kind: GraphKind, n: GNode, info: NodeTypeInfo): Si
     case 'final':
     case 'flowFinal':
       return { w: 26, h: 26 };
+    case 'class': {
+      const members = [...(n.attrs ?? []), ...(n.ops ?? [])];
+      const w = Math.max(150, textWidth(n.label, 13, true) + 28, ...members.map((m) => textWidth(m, 12) + 20));
+      const rows = (n.attrs?.length ?? 0) + (n.ops?.length ?? 0);
+      return { w, h: 34 + (n.stereotype || info.stereotype ? 14 : 0) + rows * 16 + 2 * 10 };
+    }
     case 'ellipse': {
       const t = block(n.label, 13);
       return { w: Math.max(120, t.w + 52 + 3), h: Math.max(54, t.h + 28 + 3) };
     }
     default: {
-      const t = block(n.label, 13, info.shape === 'class' || info.shape === 'entity');
+      const t = block(n.label, 13, info.shape === 'entity');
       return { w: Math.max(100, t.w + 32), h: Math.max(40, t.h + 18) };
     }
   }
 }
 
-/** Traceability: where a new shape of this column goes — under the last one in its column. */
+/** Traceability: where a new shape goes — at the bottom of its column (criteria indented). */
 export function traceColumnX(nodes: GNode[], t: NodeTypeInfo, infoOf: (n: GNode) => NodeTypeInfo, size: Size): { x: number; y: number } {
   const col = t.column ?? 0;
-  const inCol = nodes.filter((n) => infoOf(n).column === col && (col !== 0 || n.type === t.type || t.type === 'req'));
-  const x = col * 230 + (t.type === 'criterion' ? 28 : 0);
-  const y = inCol.length ? Math.max(...inCol.map((n) => n.y)) + 50 : 0;
-  return { x: x, y: y + (size.h ? 0 : 0) };
+  const inCol = nodes.filter((n) => infoOf(n).column === col);
+  const xs = inCol.filter((n) => n.type !== 'criterion').map((n) => n.x);
+  const base = xs.length ? Math.min(...xs) : col * 260;
+  const y = inCol.length ? Math.max(...inCol.map((n) => n.y)) + 44 : 0;
+  return { x: base + (t.type === 'criterion' ? 28 : 0), y: y + 0 * size.h };
 }

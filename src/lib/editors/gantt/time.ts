@@ -71,6 +71,30 @@ export function monthShort(iso: string): string {
   return MONTHS_ES[new Date(parseDay(iso)).getUTCMonth()];
 }
 
+/** "19/10/2026" — how dates are written in Spain. */
+export function esDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+/** "19/10/2026", "19-10-26", "2026-10-19" → "2026-10-19"; anything else → null. */
+export function parseEsDate(text: string): string | null {
+  const s = text.trim();
+  const ymd = (y: number, mo: number, d: number): string | null => {
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  };
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) return ymd(+m[1], +m[2], +m[3]);
+  m = /^(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{2}|\d{4}))?$/.exec(s);
+  if (m) {
+    const y = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : new Date().getFullYear();
+    return ymd(y, +m[2], +m[1]);
+  }
+  return null;
+}
+
 /** "19 oct" */
 export function shortDate(iso: string): string {
   const d = new Date(parseDay(iso));
@@ -193,6 +217,38 @@ export function timelineRange(tasks: GanttTask[], scale: Scale, today: string): 
   // At least a comfortable width even for a one-task chart.
   const minDays = scale === 'day' ? 28 : scale === 'week' ? 70 : 180;
   if (diffDays(start, end) < minDays) end = addDays(start, minDays);
+  return { start, end, days: diffDays(start, end) };
+}
+
+/**
+ * The plan's own range, for exported images: from the first task to the
+ * last plus about one scale unit either side (whole months at month scale),
+ * with no padding to fill a screen and no "today".
+ */
+export function planRange(tasks: GanttTask[], scale: Scale, today: string): Range {
+  const dates: string[] = [];
+  for (const t of tasks) {
+    if (!Number.isNaN(parseDay(t.start))) dates.push(t.start);
+    if (!Number.isNaN(parseDay(t.end))) dates.push(t.end);
+  }
+  if (!dates.length) dates.push(today);
+  dates.sort();
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  let start: string;
+  let end: string;
+  if (scale === 'day') {
+    start = addDays(first, -1);
+    end = addDays(last, 2);
+  } else if (scale === 'week') {
+    start = addDays(mondayOf(first), -7);
+    end = addDays(mondayOf(last), 14);
+  } else {
+    const s = new Date(parseDay(first));
+    start = fmtDay(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), 1));
+    const e = new Date(parseDay(last));
+    end = fmtDay(Date.UTC(e.getUTCFullYear(), e.getUTCMonth() + 1, 1));
+  }
   return { start, end, days: diffDays(start, end) };
 }
 
@@ -364,6 +420,89 @@ export function removeTask(data: GanttData, id: string): void {
   for (const t of data.tasks) t.deps = t.deps.filter((d) => !gone.has(d));
 }
 
+/**
+ * Finish-to-start rule: no task starts before its prerequisites are done.
+ * Anything that would is pushed later (keeping its length; a group takes
+ * its subtree along), and the push cascades down the chain. Returns the ids
+ * that moved.
+ */
+export function enforceDeps(data: GanttData): string[] {
+  const moved = new Set<string>();
+  for (let pass = 0; pass < data.tasks.length + 2; pass++) {
+    let changed = false;
+    for (const t of data.tasks) {
+      if (!t.deps.length) continue;
+      const need = t.deps
+        .map((d) => data.tasks.find((x) => x.id === d))
+        .filter((d): d is GanttTask => !!d && !descendants(data.tasks, d.id).includes(t.id) && !descendants(data.tasks, t.id).includes(d.id))
+        .map((d) => earliestAfter(data.tasks, d))
+        .sort()
+        .at(-1);
+      if (!need) continue;
+      const start = t.group ? span(data.tasks, t).start : t.start;
+      const lag = diffDays(start, need);
+      if (lag > 0) {
+        moveTask(data, t.id, lag);
+        moved.add(t.id);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return [...moved];
+}
+
+/** Skip a Saturday / Sunday start: the next Monday. */
+export function nextWorkday(iso: string): string {
+  const d = new Date(parseDay(iso)).getUTCDay();
+  return d === 6 ? addDays(iso, 2) : d === 0 ? addDays(iso, 1) : iso;
+}
+
+/**
+ * Where a new row goes and when it starts.
+ *  - a group (phase) is always top level, right after the selected row's top-level group;
+ *  - a task / milestone goes into the selected group, or beside the selected row,
+ *    starting the day after the previous sibling ends (or at its group's start).
+ */
+export function placeNew(data: GanttData, kind: 'task' | 'milestone' | 'group', selectedId: string | null, today: string): { parent: string | undefined; index: number; start: string } {
+  const sel = selectedId ? data.tasks.find((t) => t.id === selectedId) : undefined;
+  const after = (anchorId: string) => {
+    const block = new Set([anchorId, ...descendants(data.tasks, anchorId)]);
+    let at = data.tasks.length;
+    data.tasks.forEach((x, i) => {
+      if (block.has(x.id)) at = i + 1;
+    });
+    return at;
+  };
+  const weekly = data.scale !== 'day';
+  const fix = (iso: string) => (weekly ? nextWorkday(iso) : iso);
+  if (kind === 'group') {
+    let top = sel;
+    const seen = new Set<string>();
+    while (top?.parent && !seen.has(top.id)) {
+      seen.add(top.id);
+      top = data.tasks.find((x) => x.id === top!.parent);
+    }
+    const index = top ? after(top.id) : data.tasks.length;
+    const lastTop = top ?? childrenOf(data.tasks, undefined).at(-1);
+    const start = lastTop ? fix(addDays(span(data.tasks, lastTop).end, 1)) : mondayOf(today);
+    return { parent: undefined, index, start };
+  }
+  const parent = sel ? (sel.group ? sel.id : sel.parent) : undefined;
+  let start: string;
+  if (sel && !sel.group) start = fix(addDays(sel.end, 1));
+  else if (sel?.group) {
+    const kids = childrenOf(data.tasks, sel.id);
+    const last = kids.at(-1);
+    start = last ? fix(addDays(span(data.tasks, last).end, 1)) : sel.start;
+  } else {
+    const last = childrenOf(data.tasks, undefined).at(-1);
+    start = last ? fix(addDays(span(data.tasks, last).end, 1)) : mondayOf(today);
+  }
+  const index = sel ? after(sel.id) : data.tasks.length;
+  return { parent, index, start };
+}
+
 /** Would `from` → `to` (to depends on from) create a cycle? */
 export function wouldCycle(tasks: GanttTask[], from: string, to: string): boolean {
   if (from === to) return true;
@@ -387,20 +526,33 @@ function mermaidText(s: string): string {
   return s.replace(/[:;#]/g, (c) => (c === ':' ? ' -' : c === ';' ? ',' : '')).replace(/\s+/g, ' ').trim() || 'Tarea';
 }
 
-/** Mermaid `gantt` source: groups become sections (nested ones joined with " / "), explicit dates and durations. */
+/** Where a dependent may start at the earliest, given one prerequisite (finish-to-start). */
+function earliestAfter(tasks: GanttTask[], dep: GanttTask): string {
+  const end = dep.group ? span(tasks, dep).end : dep.end;
+  return dep.milestone ? end : addDays(end, 1);
+}
+
+/**
+ * Mermaid `gantt` source. Groups become sections (nested ones joined with
+ * " / "); every task has an explicit start and an exclusive end date, so the
+ * chart matches the editor exactly whether or not weekends are excluded.
+ * A task that starts right after all its prerequisites is written as
+ * `after tX tY`, which is how Mermaid draws finish-to-start dependencies.
+ */
 export function toMermaid(title: string, data: GanttData): string {
   const out = ['gantt', `  title ${mermaidText(title)}`, '  dateFormat YYYY-MM-DD', '  axisFormat %d %b'];
   if (!data.showWeekends) out.push('  excludes weekends');
   const ids = new Map<string, string>();
   data.tasks.forEach((t, i) => ids.set(t.id, `t${i + 1}`));
+  const byId = new Map(data.tasks.map((t) => [t.id, t]));
   const pathOf = (t: GanttTask): string[] => {
     const p: string[] = [];
-    let cur = data.tasks.find((x) => x.id === t.parent);
+    let cur = byId.get(t.parent ?? '');
     const seen = new Set<string>();
     while (cur && !seen.has(cur.id)) {
       seen.add(cur.id);
       p.unshift(mermaidText(cur.name));
-      cur = data.tasks.find((x) => x.id === cur!.parent);
+      cur = byId.get(cur.parent ?? '');
     }
     return p;
   };
@@ -419,8 +571,12 @@ export function toMermaid(title: string, data: GanttData): string {
     else if (t.progress >= 100) tags.push('done');
     else if (t.progress > 0) tags.push('active');
     tags.push(ids.get(t.id)!);
-    tags.push(t.start);
-    tags.push(`${durationDays(t)}d`);
+    // `after` only for prerequisites Mermaid knows (tasks, not sections) and only when it lands on the real start.
+    const deps = t.deps.map((d) => byId.get(d)).filter((d): d is GanttTask => !!d && !d.group);
+    const latest = deps.length ? deps.map((d) => earliestAfter(data.tasks, d)).sort().at(-1)! : null;
+    const useAfter = deps.length > 0 && deps.length === t.deps.length && latest === t.start;
+    tags.push(useAfter ? `after ${deps.map((d) => ids.get(d.id)).join(' ')}` : t.start);
+    tags.push(t.milestone ? '0d' : addDays(t.end, 1));
     out.push(`  ${mermaidText(t.name)} :${tags.join(', ')}`);
   }
   return out.join('\n') + '\n';
@@ -428,12 +584,13 @@ export function toMermaid(title: string, data: GanttData): string {
 
 function csvCell(v: string | number): string {
   const s = String(v);
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+/** CSV for a spreadsheet in Spanish: `;` between fields and a UTF-8 BOM, as Excel in es-ES expects. */
 export function toCsv(data: GanttData): string {
   const name = (id?: string) => data.tasks.find((t) => t.id === id)?.name ?? '';
-  const lines = [['Nombre', 'Tipo', 'Inicio', 'Fin', 'Duración (días)', 'Progreso (%)', 'Responsable', 'Grupo', 'Depende de'].join(',')];
+  const lines = [['Nombre', 'Tipo', 'Inicio', 'Fin', 'Duración (días)', 'Progreso (%)', 'Responsable', 'Grupo', 'Depende de'].join(';')];
   for (const r of visibleRows(data.tasks)) {
     const t = r.task;
     const sp = span(data.tasks, t);
@@ -441,17 +598,17 @@ export function toCsv(data: GanttData): string {
       [
         t.name,
         t.group ? 'Grupo' : t.milestone ? 'Hito' : 'Tarea',
-        sp.start,
-        sp.end,
+        esDate(sp.start),
+        esDate(sp.end),
         t.group ? durationDays({ ...sp, milestone: false }) : durationDays(t),
         t.group ? groupProgress(data.tasks, t) : t.progress,
         t.owner,
         name(t.parent),
-        t.deps.map(name).join('; ')
+        t.deps.map(name).join(', ')
       ]
         .map(csvCell)
-        .join(',')
+        .join(';')
     );
   }
-  return lines.join('\n') + '\n';
+  return '\uFEFF' + lines.join('\r\n') + '\r\n';
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  const storyCount = (n: number) => `${n} ${n === 1 ? 'historia' : 'historias'}`;
   import { app } from '../../stores/app.svelte';
   import { uid } from '../../model/diagram';
   import { BRANCH_COLORS, inkOn } from '../../model/colors';
@@ -174,7 +175,7 @@
 
     <div class="grid">
       <!-- Backbone: activities -->
-      <div class="lane-head corner sect">Activities</div>
+      <div class="lane-head corner sect">Actividades</div>
       {#each data.activities as a, ai (a.id)}
         {@const c = colorOf(ai)}
         <div class="activity" style:grid-column="span {Math.max(1, a.steps.length)}" style:--c={c} style:--on={inkOn(c)}>
@@ -202,7 +203,7 @@
       </div>
 
       <!-- Backbone: steps -->
-      <div class="lane-head corner sect">Steps</div>
+      <div class="lane-head corner sect">Pasos</div>
       {#each cols as col (col.step?.id ?? `empty-${col.a.id}`)}
         {#if col.step}
           {@const st = col.step}
@@ -249,7 +250,7 @@
               if (x) x.name = e.currentTarget.value;
             }, `rel:${r.id}`)}
           />
-          <span class="tiny muted pts">{data.stories.filter((s) => s.releaseId === r.id).length} stories{pts ? ` · ${pts} pts` : ''}</span>
+          <span class="tiny muted pts">{storyCount(data.stories.filter((s) => s.releaseId === r.id).length)}{pts ? ` · ${pts} pts` : ''}</span>
           <span class="tools" data-no-export>
             <button class="icon small" title="Move up" aria-label="Move up" disabled={ri === 0} onclick={() => edit((m) => void shift(m.releases, r.id, -1))}><Icon name="ChevronUp" size={13} /></button>
             <button class="icon small" title="Move down" aria-label="Move down" disabled={ri === data.releases.length - 1} onclick={() => edit((m) => void shift(m.releases, r.id, 1))}><Icon name="ChevronDown" size={13} /></button>
@@ -369,7 +370,19 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
-    padding: 4px 6px 4px 0;
+    padding: 4px 6px 4px 12px;
+    margin-left: -12px;
+    /* Sprint names stay in view while the map scrolls sideways. */
+    position: sticky;
+    left: 0;
+    z-index: 3;
+    background: var(--paper);
+    box-shadow: 8px 0 8px -8px color-mix(in srgb, var(--ink) 25%, transparent);
+  }
+  :global(html.no-motion) .lane-head,
+  :global(html.exporting) .lane-head {
+    background: transparent;
+    box-shadow: none;
   }
   .lane-head.corner {
     justify-content: center;
@@ -389,6 +402,11 @@
   }
   .pts {
     padding-left: 6px;
+  }
+  /* Atkinson Hyperlegible slashes its zero ("0" reads like "Ø"): numbers use the system face. */
+  .pts,
+  .pts-badge {
+    font-family: system-ui, sans-serif;
   }
   .lane-line {
     height: 0;

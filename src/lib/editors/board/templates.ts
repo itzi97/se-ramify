@@ -58,7 +58,7 @@ export const TEMPLATES: Record<BoardKind, BoardTemplate> = {
     columns: 'repeat(6, minmax(0, 1fr))',
     areas: ['think think think think think think', 'see see center center hear hear', 'say say say say say say', 'pain pain pain gain gain gain'],
     rowMin: [150, 190, 150, 150],
-    minWidth: 980,
+    minWidth: 880,
     sections: [
       { id: 'think', title: 'Piensa y siente', hint: '¿Qué le importa de verdad? ¿Qué le preocupa, a qué aspira?', area: 'think', icon: 'Brain' },
       { id: 'see', title: 'Ve', hint: '¿Qué ve en su entorno, sus amigos, el mercado?', area: 'see', icon: 'Eye' },
@@ -78,7 +78,7 @@ export const TEMPLATES: Record<BoardKind, BoardTemplate> = {
     columns: 'repeat(10, minmax(0, 1fr))',
     areas: ['kp kp ka ka vp vp cr cr cs cs', 'kp kp kr kr vp vp ch ch cs cs', 'cost cost cost cost cost rev rev rev rev rev'],
     rowMin: [210, 210, 170],
-    minWidth: 1100,
+    minWidth: 880,
     sections: [
       { id: 'partners', title: 'Socios clave', hint: '¿Quiénes son nuestros socios y proveedores clave?', area: 'kp', icon: 'Handshake' },
       { id: 'activities', title: 'Actividades clave', hint: '¿Qué actividades requiere nuestra propuesta de valor?', area: 'ka', icon: 'Activity' },
@@ -101,7 +101,7 @@ export const TEMPLATES: Record<BoardKind, BoardTemplate> = {
     columns: 'repeat(4, minmax(0, 1fr))',
     areas: ['trends center center tech', 'politics center center economy', 'stakeholders competition uncertainty strengths'],
     rowMin: [160, 160, 230],
-    minWidth: 1000,
+    minWidth: 880,
     sections: [
       { id: 'trends', title: 'Tendencias', hint: '¿Qué está cambiando en el entorno del reto?', area: 'trends', icon: 'TrendingUp' },
       { id: 'tech', title: 'Factores tecnológicos', hint: '¿Qué tecnología lo hace posible o lo condiciona?', area: 'tech', icon: 'Cpu' },
@@ -123,7 +123,7 @@ export const TEMPLATES: Record<BoardKind, BoardTemplate> = {
     columns: 'repeat(3, minmax(0, 1fr))',
     areas: ['head quote quote', 'profile goals frustrations', 'profile motivations channels', 'day day day'],
     rowMin: [130, 170, 170, 140],
-    minWidth: 960,
+    minWidth: 880,
     sections: [
       { id: 'quote', title: 'Cita', hint: 'Una frase suya que lo resuma todo.', area: 'quote', icon: 'Quote' },
       { id: 'profile', title: 'Perfil', hint: 'Edad, estudios, trabajo, dónde vive, con quién.', area: 'profile', icon: 'IdCard' },
@@ -144,7 +144,7 @@ export const TEMPLATES: Record<BoardKind, BoardTemplate> = {
     columns: 'minmax(0, 1.3fr) 30px minmax(0, 1fr) minmax(0, 1fr)',
     areas: ['ideas ay strategic priority', 'ideas ay discard complementary', 'ideas . ax ax'],
     rowMin: [230, 230, 34],
-    minWidth: 1080,
+    minWidth: 880,
     sections: [
       { id: 'ideas', title: 'Ideas', hint: 'Diverge: cantidad, sin juzgar, construye sobre las de los demás.', area: 'ideas', icon: 'Lightbulb' },
       { id: 'strategic', title: 'Estratégicas', hint: 'Mucho impacto, poco viables: proyectos a medio plazo.', area: 'strategic', tint: '#4a7fc1' },
@@ -166,7 +166,7 @@ export const TEMPLATES: Record<BoardKind, BoardTemplate> = {
     columns: 'repeat(4, minmax(0, 1fr))',
     areas: ['p1 p2 p3 p4', 'p5 p6 p7 p8'],
     rowMin: [260, 260],
-    minWidth: 980,
+    minWidth: 880,
     sections: Array.from({ length: 8 }, (_, i) => ({
       id: `p${i + 1}`,
       title: `Idea ${i + 1}`,
@@ -185,7 +185,7 @@ export const TEMPLATES: Record<BoardKind, BoardTemplate> = {
     columns: 'repeat(6, minmax(0, 1fr))',
     areas: ['green yellow black white red blue'],
     rowMin: [480],
-    minWidth: 1140,
+    minWidth: 880,
     sections: [
       { id: 'green', title: 'Creatividad', hint: 'Sombrero verde: ¿qué alternativas nuevas hay? ¿Y si…?', area: 'green', hat: HAT.green, tint: HAT.green },
       { id: 'yellow', title: 'Positivismo', hint: 'Sombrero amarillo: ¿qué beneficios tiene? ¿Por qué funcionará?', area: 'yellow', hat: HAT.yellow, tint: HAT.yellow },

@@ -1,3 +1,9 @@
+<script lang="ts" module>
+  import type { GEdge as ClipEdge, GNode as ClipNode } from '../../model/types';
+  /** Shapes copied with Ctrl+C / Ctrl+X: shared between diagrams of the same kind. */
+  let shapeClipboard: { kind: string; nodes: ClipNode[]; edges: ClipEdge[]; pastes: number } | null = null;
+</script>
+
 <script lang="ts">
   import { onDestroy, onMount, setContext, untrack } from 'svelte';
   import {
@@ -20,11 +26,13 @@
   import GraphEdge, { type GraphEdgeData } from './GraphEdge.svelte';
   import Inspector from './Inspector.svelte';
   import Toolbar from './Toolbar.svelte';
-  import { mindmapLayout, mindmapRoot, childrenMap, tidy, type Size } from './layout';
+  import { mindmapLayout, mindmapRoot, childrenMap, tidy, laneLayout, traceLayout, type Size } from './layout';
   import { descendantsOf, parentsOf, type Rect } from './geometry';
   import { estimateSize, traceColumnX } from './sizing';
 
   const flow = useSvelteFlow();
+  /** Fit leaves room for the toolbar (top) and the properties panel (right), and never blows a small diagram up. */
+  const fitOptions = { padding: { top: '80px' as const, right: '40px' as const, bottom: '40px' as const, left: '40px' as const }, maxZoom: 1.1, minZoom: 0.15 };
   const kind = app.doc!.kind as GraphKind;
   const palette = PALETTES[kind];
   const auto = !!palette.autoLayout;
@@ -87,6 +95,19 @@
     const pairSeen = new Map<string, number>();
     const pairKey = (e: GEdge) => [e.from, e.to].sort().join('|');
     for (const e of d.edges) pairCount.set(pairKey(e), (pairCount.get(pairKey(e)) ?? 0) + 1);
+    // Lines leaving the same shape, in order of where they go: each gets its own track.
+    const bySource = new Map<string, GEdge[]>();
+    for (const e of d.edges) {
+      if (!bySource.has(e.from)) bySource.set(e.from, []);
+      bySource.get(e.from)!.push(e);
+    }
+    const posOf = new Map(d.nodes.map((n) => [n.id, n.x + n.y * 0.001]));
+    const spreadOf = new Map<string, number>();
+    for (const list of bySource.values()) {
+      if (list.length < 2) continue;
+      list.sort((a, b) => (posOf.get(a.to) ?? 0) - (posOf.get(b.to) ?? 0));
+      list.forEach((e, k) => spreadOf.set(e.id, (k - (list.length - 1) / 2) * 10));
+    }
     const out: Edge<GraphEdgeData>[] = d.edges.map((e) => {
       const k = pairKey(e);
       const count = pairCount.get(k)!;
@@ -112,9 +133,10 @@
           fromShape: shapeOf.get(e.from) ?? 'rect',
           toShape: shapeOf.get(e.to) ?? 'rect',
           offset,
-          style: kind === 'traceability' && e.type === 'refines' && fromType === 'req' && toType === 'criterion' ? 'tree' : undefined,
+          style: kind === 'traceability' && fromType === 'req' && toType === 'criterion' ? 'tree' : undefined,
           double: e.type === 'total',
-          loopBack: kind === 'activity' || kind === 'flowchart'
+          loopBack: kind === 'activity' || kind === 'flowchart',
+          spread: spreadOf.get(e.id)
         }
       };
     });
@@ -189,14 +211,21 @@
   }
 
   /** Nudge a new shape so it doesn't land exactly on another one. */
-  function freeSpot(x: number, y: number): { x: number; y: number } {
-    const taken = (px: number, py: number) => data.nodes.some((n) => Math.abs(n.x - px) < 12 && Math.abs(n.y - py) < 12);
-    let i = 0;
-    while (taken(x, y) && i++ < 40) {
-      x += 24;
-      y += 24;
+  /** The nearest spot to (x, y) where a w×h shape overlaps no other (non-container) shape. */
+  function freeSpot(x: number, y: number, w = 120, h = 50): { x: number; y: number } {
+    const r = rects();
+    const solid = data.nodes.filter((n) => !isContainer(n)).map((n) => r.get(n.id) ?? { x: n.x, y: n.y, w: 120, h: 50 });
+    const free = (px: number, py: number) => !solid.some((o) => px < o.x + o.w + 16 && o.x < px + w + 16 && py < o.y + o.h + 16 && o.y < py + h + 16);
+    const snap = (v: number) => Math.round(v / 10) * 10;
+    if (free(x, y)) return { x: snap(x), y: snap(y) };
+    // Spiral outwards: right, down, left, up, in growing rings.
+    for (let ring = 1; ring < 30; ring++) {
+      const d = ring * 40;
+      for (const [dx, dy] of [[d, 0], [0, d], [d, d], [-d, 0], [0, -d], [-d, d], [d, -d], [-d, -d]]) {
+        if (free(x + dx, y + dy)) return { x: snap(x + dx), y: snap(y + dy) };
+      }
     }
-    return { x: Math.round(x / 10) * 10, y: Math.round(y / 10) * 10 };
+    return { x: snap(x), y: snap(y) };
   }
 
   /** Pan (keeping the zoom) so a shape is on screen and clear of the inspector. */
@@ -234,7 +263,15 @@
       return { x: c.x - size.w / 2, y: c.y - size.h / 2 };
     })();
     if (kind === 'traceability' && t.column !== undefined) pos = traceColumnX(data.nodes, t, (n) => nodeTypeInfo(kind, n.type), size);
-    const spot = freeSpot(pos.x, pos.y);
+    let spot = t.container ? { x: Math.round(pos.x / 10) * 10, y: Math.round(pos.y / 10) * 10 } : kind === 'traceability' ? pos : freeSpot(pos.x, pos.y, size.w, size.h);
+    if (t.container) {
+      // A second swimlane / zone goes next to the last one instead of exactly on top of it.
+      const same = data.nodes.filter((n) => isContainer(n) && n.type === t.type);
+      if (same.some((n) => Math.abs(n.x - spot.x) < 20 && Math.abs(n.y - spot.y) < 20)) {
+        const last = same.reduce((a, b) => (b.x + (b.w ?? 0) > a.x + (a.w ?? 0) ? b : a));
+        spot = { x: last.x + (last.w ?? 200) + (t.type === 'partition' || t.type === 'lane' ? 0 : 40), y: last.y };
+      }
+    }
     const node: GNode = { id, type: t.type, x: spot.x, y: spot.y, label: t.defaultLabel };
     if (t.container || t.resizable) Object.assign(node, { w: t.size?.w ?? 200, h: t.size?.h ?? 120 });
     if (t.presetIcon) node.icon = t.presetIcon;
@@ -256,8 +293,9 @@
     });
     queueMicrotask(() => {
       select([id]);
-      ensureVisible(id);
-      if (!t.container && t.shape !== 'initial' && t.shape !== 'final' && t.shape !== 'flowFinal' && t.shape !== 'bar') editing = { id, field: 'label' };
+      // Name it straight away (containers too); the toolbar button lets go of the keyboard.
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      if (t.shape !== 'initial' && t.shape !== 'final' && t.shape !== 'flowFinal' && t.shape !== 'bar' && t.shape !== 'lollipop') editing = { id, field: 'label' };
     });
   }
 
@@ -299,6 +337,16 @@
 
   function connect(from: string, to: string) {
     if (auto && relation === 'crosslink' && from === to) return;
+    const fromNode = data.nodes.find((n) => n.id === from);
+    const toNode = data.nodes.find((n) => n.id === to);
+    if ((kind === 'state' || kind === 'activity') && (fromNode?.type === 'final' || fromNode?.type === 'flowFinal')) {
+      app.notify('Nothing can leave a final node in UML — draw the line the other way.');
+      return;
+    }
+    if ((kind === 'state' || kind === 'activity') && toNode?.type === 'initial') {
+      app.notify('Nothing can arrive at an initial node in UML — draw the line the other way.');
+      return;
+    }
     const id = uid();
     const t = edgeTypeInfo(kind, relation);
     const e: GEdge = { id, type: t.type, from, to };
@@ -345,6 +393,35 @@
     queueMicrotask(() => select([...map.values()]));
   }
 
+  function copySelection(cut: boolean) {
+    if (auto || !selNodes.length) return;
+    const ids = new Set(selNodes);
+    const ns = data.nodes.filter((n) => ids.has(n.id)).map((n) => $state.snapshot(n) as GNode);
+    const es = data.edges.filter((e) => ids.has(e.from) && ids.has(e.to)).map((e) => $state.snapshot(e) as GEdge);
+    shapeClipboard = { kind, nodes: ns, edges: es, pastes: 0 };
+    if (cut) removeIds(selNodes, []);
+    app.notify(`${cut ? 'Cut' : 'Copied'} ${ns.length} shape${ns.length === 1 ? '' : 's'}.`);
+  }
+
+  function paste() {
+    if (auto || !shapeClipboard || shapeClipboard.kind !== kind) return;
+    const clip = shapeClipboard;
+    clip.pastes++;
+    const off = 30 * clip.pastes;
+    const map = new Map<string, string>();
+    for (const n of clip.nodes) map.set(n.id, uid());
+    const ns = clip.nodes.map((n) => ({ ...structuredClone(n), id: map.get(n.id)!, x: n.x + off, y: n.y + off }));
+    const es = clip.edges.map((e) => ({ ...structuredClone(e), id: uid(), from: map.get(e.from)!, to: map.get(e.to)! }));
+    app.change((d) => {
+      const g = d.data as GraphData;
+      // Containers go first so they stay behind what they hold.
+      g.nodes.unshift(...ns.filter((n) => isContainer(n)));
+      g.nodes.push(...ns.filter((n) => !isContainer(n)));
+      g.edges.push(...es);
+    });
+    queueMicrotask(() => select([...map.values()]));
+  }
+
   function nudge(dx: number, dy: number) {
     if (auto || !selNodes.length) return;
     const parents = parentsOf(rects(), containerIds());
@@ -373,7 +450,7 @@
           app.change((d) => {
             const m = (d.data as GraphData).nodes.find((x) => x.id === id);
             if (!m) return;
-            if (field === 'label') m.label = value;
+            if (field === 'label') m.label = value.replace(/\s+$/, '');
             else m[field] = value.split('\n').map((l) => l.trimEnd()).filter((l) => l.trim());
           });
         }
@@ -492,6 +569,14 @@
     } else if (mod && e.key.toLowerCase() === 'd') {
       e.preventDefault();
       duplicateSelection();
+    } else if (mod && !e.shiftKey && (e.key.toLowerCase() === 'c' || e.key.toLowerCase() === 'x')) {
+      if (!selNodes.length) return;
+      e.preventDefault();
+      copySelection(e.key.toLowerCase() === 'x');
+    } else if (mod && e.key.toLowerCase() === 'v') {
+      if (!shapeClipboard || shapeClipboard.kind !== kind) return;
+      e.preventDefault();
+      paste();
     } else if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault();
       select(nodes.map((n) => n.id), edges.filter((x) => !x.id.startsWith('tree:')).map((x) => x.id));
@@ -510,20 +595,38 @@
 
   async function runTidy() {
     if (auto) {
-      void flow.fitView({ padding: 0.15, duration: 300 });
+      void flow.fitView({ ...fitOptions, duration: 300 });
       return;
     }
     const r = rects();
+    const box = (n: GNode) => {
+      const rr = r.get(n.id)!;
+      return { id: n.id, type: n.type, x: n.x, y: n.y, w: rr.w || 120, h: rr.h || 50 };
+    };
     const parents = parentsOf(r, containerIds());
-    const laid = await tidy(
-      kind,
-      data.nodes.map((n) => {
-        const info = nodeTypeInfo(kind, n.type, n.icon);
-        const rr = r.get(n.id)!;
-        return { id: n.id, w: rr.w || 120, h: rr.h || 50, container: !!info.container, parent: parents.get(n.id) ?? null, column: info.column };
-      }),
-      data.edges.filter((e) => !(kind === 'traceability' && e.type === 'refines'))
-    );
+    let laid: Map<string, { x: number; y: number; w?: number; h?: number }>;
+    const lanes = data.nodes.filter((n) => isContainer(n) && (n.type === 'partition' || n.type === 'lane'));
+    if (kind === 'traceability') {
+      laid = traceLayout(data.nodes.filter((n) => n.type !== 'note').map(box), (t) => nodeTypeInfo(kind, t).column, data.edges);
+    } else if (lanes.length) {
+      // Keep the swimlanes as columns: rows come from a flat top-down layout, columns from the lanes.
+      const shapes = data.nodes.filter((n) => !isContainer(n));
+      const flat = await tidy(kind, shapes.map((n) => ({ ...box(n), container: false, parent: null })), data.edges);
+      const laneIds = new Set(lanes.map((l) => l.id));
+      const laneOf = new Map<string, string | null>();
+      for (const n of shapes) {
+        let p = parents.get(n.id) ?? null;
+        while (p && !laneIds.has(p)) p = parents.get(p) ?? null;
+        laneOf.set(n.id, p);
+      }
+      laid = laneLayout(lanes.map(box), shapes.map(box), laneOf, flat);
+    } else {
+      laid = await tidy(
+        kind,
+        data.nodes.map((n) => ({ ...box(n), container: !!nodeTypeInfo(kind, n.type, n.icon).container, parent: parents.get(n.id) ?? null })),
+        data.edges
+      );
+    }
     app.change((d) => {
       for (const n of (d.data as GraphData).nodes) {
         const p = laid.get(n.id);
@@ -535,36 +638,8 @@
           n.h = Math.round(p.h);
         }
       }
-      if (kind === 'traceability') {
-        // Acceptance criteria sit right under their requirement, indented.
-        const g = d.data as GraphData;
-        for (const e of g.edges.filter((x) => x.type === 'refines')) {
-          const req = g.nodes.find((n) => n.id === e.from && n.type === 'req');
-          const crit = g.nodes.find((n) => n.id === e.to && n.type === 'criterion');
-          if (!req || !crit) continue;
-          const siblings = g.edges.filter((x) => x.type === 'refines' && x.from === req.id).map((x) => x.to);
-          const i = siblings.indexOf(crit.id);
-          crit.x = req.x + 28;
-          crit.y = req.y + 44 + i * 38;
-        }
-        // Push requirements apart so their criteria fit.
-        const reqs = g.nodes.filter((n) => n.type === 'req').sort((a, b) => a.y - b.y);
-        let floor = -Infinity;
-        for (const rq of reqs) {
-          const crits = g.edges.filter((x) => x.type === 'refines' && x.from === rq.id).length;
-          if (rq.y < floor) {
-            const dy = floor - rq.y;
-            rq.y += dy;
-            for (const e of g.edges.filter((x) => x.type === 'refines' && x.from === rq.id)) {
-              const c = g.nodes.find((n) => n.id === e.to);
-              if (c) c.y += dy;
-            }
-          }
-          floor = rq.y + 44 + crits * 38 + 16;
-        }
-      }
     });
-    setTimeout(() => void flow.fitView({ padding: 0.12, duration: 300 }), 60);
+    setTimeout(() => void flow.fitView({ ...fitOptions, duration: 300 }), 60);
   }
 
   /* ----------------------------------------------------- palette drag */
@@ -636,8 +711,8 @@
     bind:edges
     {nodeTypes}
     {edgeTypes}
-    fitView
-    fitViewOptions={{ padding: 0.2, maxZoom: 1.2 }}
+    fitView={data.nodes.length > 0}
+    fitViewOptions={fitOptions}
     minZoom={0.15}
     maxZoom={3}
     snapGrid={[10, 10]}
@@ -668,7 +743,7 @@
     {/if}
   </SvelteFlow>
 
-  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onTidy={runTidy} onFit={() => flow.fitView({ padding: 0.15, duration: 300 })} routing={data.routing} />
+  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onTidy={runTidy} onFit={() => flow.fitView({ ...fitOptions, duration: 300 })} routing={data.routing} />
 
   {#if empty}
     <div class="empty-hint"><div class="stack">

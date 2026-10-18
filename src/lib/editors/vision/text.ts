@@ -15,8 +15,8 @@ export interface VisionField {
 export const VISION_FIELDS: VisionField[] = [
   { key: 'forWho', lead: 'Para', label: 'Para (cliente objetivo)', hint: 'los socios de bibliotecas municipales' },
   { key: 'who', lead: 'que', label: 'Que (necesidad u oportunidad)', hint: 'quieren saber si un libro está disponible sin desplazarse' },
-  { key: 'product', lead: 'el', label: 'El (nombre del producto)', hint: 'BiblioYa' },
-  { key: 'isA', lead: 'es un', label: 'Es un (categoría de producto)', hint: 'servicio web y móvil de préstamos' },
+  { key: 'product', lead: '', label: 'Producto (nombre)', hint: 'BiblioYa' },
+  { key: 'isA', lead: 'es', label: 'Es (categoría, con su artículo)', hint: 'un servicio web y móvil de préstamos' },
   { key: 'that', lead: 'que', label: 'Que (beneficio clave, razón para comprarlo)', hint: 'permite reservar y renovar en dos clics' },
   { key: 'unlike', lead: 'A diferencia de', label: 'A diferencia de (alternativa / competidor)', hint: 'el catálogo OPAC actual' },
   { key: 'ourProduct', lead: 'nuestro producto', label: 'Nuestro producto (diferenciador)', hint: 'avisa cuando el libro vuelve y gestiona la cola de reservas' }
@@ -27,7 +27,8 @@ export function visionPieces(v: VisionData): ({ t: 'lead'; text: string } | { t:
   const out: ReturnType<typeof visionPieces> = [];
   const val = (k: keyof VisionData) => (v[k] ?? '').trim().replace(/[.\s]+$/, '');
   VISION_FIELDS.forEach((f, i) => {
-    let lead = i === 1 ? ' que' : i === 2 ? ', el' : i === 5 ? '. A diferencia de' : i === 6 ? ', nuestro producto' : i === 0 ? 'Para' : ` ${f.lead}`;
+    // The product name goes without an article ("…, BiblioYa es una aplicación…"); the category brings its own.
+    let lead = i === 1 ? ' que' : i === 2 ? ',' : i === 5 ? '. A diferencia de' : i === 6 ? ', nuestro producto' : i === 0 ? 'Para' : ` ${f.lead}`;
     let text = val(f.key);
     // "de el catálogo" → "del catálogo"
     if (i === 5 && /^el\s/i.test(text)) {
@@ -41,7 +42,7 @@ export function visionPieces(v: VisionData): ({ t: 'lead'; text: string } | { t:
   return out;
 }
 
-/** "Para X que Y, el Z es un W que V. A diferencia de U, nuestro producto T." */
+/** "Para X que Y, Z es W que V. A diferencia de U, nuestro producto T." */
 export function visionSentence(v: VisionData): string {
   return visionPieces(v)
     .map((p) => (p.t === 'blank' ? (p.empty ? `[${p.text}]` : p.text) : p.text))

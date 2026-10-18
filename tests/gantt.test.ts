@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  planRange,
   addDays,
   diffDays,
   durationDays,
@@ -20,7 +21,11 @@ import {
   toCsv,
   toMermaid,
   visibleRows,
-  wouldCycle
+  wouldCycle,
+  enforceDeps,
+  placeNew,
+  esDate,
+  parseEsDate
 } from '../src/lib/editors/gantt/time.ts';
 import { ganttExample } from '../src/lib/editors/gantt/example.ts';
 import type { GanttData, GanttTask } from '../src/lib/model/types.ts';
@@ -121,24 +126,96 @@ test('timeline range covers tasks and today, snapped to weeks', () => {
   assert.equal(ticks.top.reduce((n, x) => n + x.span, 0), r.days, 'month bands cover the whole range');
 });
 
-test('mermaid export has sections, ids, durations and milestones', () => {
+test('mermaid export has sections, ids, exclusive end dates and milestones', () => {
   const data = ganttExample();
   const m = toMermaid('Plan PUD: biblioteca', data);
   assert.match(m, /^gantt\n/);
   assert.match(m, /title Plan PUD - biblioteca/);
   assert.match(m, /section Inicio/);
   assert.match(m, /section Transición/);
-  assert.match(m, /Hito - objetivos del ciclo de vida :milestone, t\d+, \d{4}-\d{2}-\d{2}, 0d/);
-  assert.match(m, /I1 · Visión y alcance :done, t\d+, \d{4}-\d{2}-\d{2}, 5d/);
+  assert.match(m, /Hito - objetivos del ciclo de vida :milestone, t\d+, (after t\d+( t\d+)*|\d{4}-\d{2}-\d{2}), 0d/);
+  // Visión: 5 days from the plan's Monday → exclusive end 5 days later.
+  const v = data.tasks.find((x) => x.name.startsWith('I1 · Visión'))!;
+  assert.ok(m.includes(`I1 · Visión y alcance :done, t2, ${v.start}, ${addDays(v.end, 1)}`));
   assert.doesNotMatch(m, /section .*\n\s*section/);
+  // Every task line follows Mermaid's gantt grammar: name :[tags,] id, start|after ids, end|duration
+  for (const line of m.split('\n').filter((l) => l.includes(' :'))) {
+    assert.match(line, /^ {2}[^:]+ :((done|active|crit|milestone), )*t\d+, (\d{4}-\d{2}-\d{2}|after( t\d+)+), (\d{4}-\d{2}-\d{2}|0d)$/, line);
+  }
 });
 
-test('csv export quotes and lists dependencies by name', () => {
-  const data: GanttData = { scale: 'week', showWeekends: true, tasks: [t('a', '2026-10-19', '2026-10-20', { name: 'Diseño, fase 1' }), t('b', '2026-10-21', '2026-10-22', { deps: ['a'] })] };
-  const csv = toCsv(data).trim().split('\n');
+test('mermaid: dependencies become `after`, and dates stay exact when weekends are excluded', () => {
+  const data: GanttData = {
+    scale: 'week',
+    showWeekends: false,
+    tasks: [t('a', '2026-10-19', '2026-10-30'), t('b', '2026-10-31', '2026-11-06', { deps: ['a'] }), t('c', '2026-11-09', '2026-11-10', { deps: ['b'] })]
+  };
+  const m = toMermaid('P', data);
+  assert.match(m, /excludes weekends/);
+  assert.match(m, /A :t1, 2026-10-19, 2026-10-31/, 'two calendar weeks, end date not a duration');
+  assert.match(m, /B :t2, after t1, 2026-11-07/);
+  // C starts later than right after B (a gap over the weekend): explicit start keeps it exact.
+  assert.match(m, /C :t3, 2026-11-09, 2026-11-11/);
+});
+
+test('dependencies push dependents later, in a cascade, keeping their length', () => {
+  const data: GanttData = {
+    scale: 'week',
+    showWeekends: true,
+    tasks: [t('a', '2026-10-19', '2026-10-23'), t('b', '2026-10-26', '2026-10-28', { deps: ['a'] }), t('c', '2026-10-29', '2026-10-30', { deps: ['b'] }), t('m', '2026-10-31', '2026-10-31', { milestone: true, deps: ['c'] })]
+  };
+  moveTask(data, 'a', 7);
+  const moved = enforceDeps(data);
+  assert.deepEqual(moved.sort(), ['b', 'c', 'm']);
+  const b = data.tasks[1];
+  const c = data.tasks[2];
+  assert.equal(b.start, '2026-10-31');
+  assert.equal(durationDays(b), 3);
+  assert.equal(c.start, addDays(b.end, 1));
+  assert.equal(data.tasks[3].start, addDays(c.end, 1));
+  // A dependent dragged before its prerequisite snaps back after it.
+  moveTask(data, 'b', -20);
+  enforceDeps(data);
+  assert.equal(data.tasks[1].start, addDays(data.tasks[0].end, 1));
+  // Nothing to do when everything is already in order.
+  assert.deepEqual(enforceDeps(data), []);
+});
+
+test('a new phase is top level after the current one; a new task starts after the previous one', () => {
+  const g1 = t('g1', '2026-10-19', '2026-10-19', { group: true });
+  const a = t('a', '2026-10-19', '2026-10-23', { parent: 'g1' });
+  const data: GanttData = { scale: 'week', showWeekends: true, tasks: [g1, a] };
+  const phase = placeNew(data, 'group', 'a', '2026-10-18');
+  assert.equal(phase.parent, undefined);
+  assert.equal(phase.index, 2);
+  assert.equal(phase.start, '2026-10-26', 'after Fri 23 the next workday is Mon 26');
+  const task = placeNew(data, 'task', 'g1', '2026-10-18');
+  assert.equal(task.parent, 'g1');
+  assert.equal(task.start, '2026-10-26');
+  const first = placeNew({ scale: 'week', showWeekends: true, tasks: [g1] }, 'task', 'g1', '2026-10-18');
+  assert.equal(first.start, g1.start, "an empty phase's first task starts with the phase");
+  const none = placeNew({ scale: 'week', showWeekends: true, tasks: [] }, 'task', null, '2026-10-21');
+  assert.equal(none.start, '2026-10-19', 'a blank plan starts on Monday');
+});
+
+test('csv is for Spanish Excel: BOM, semicolons, dd/mm/aaaa, quoted when needed', () => {
+  const data: GanttData = { scale: 'week', showWeekends: true, tasks: [t('a', '2026-10-19', '2026-10-20', { name: 'Diseño; fase 1' }), t('b', '2026-10-21', '2026-10-22', { deps: ['a'] })] };
+  const raw = toCsv(data);
+  assert.equal(raw.charCodeAt(0), 0xfeff);
+  const csv = raw.slice(1).trim().split('\r\n');
   assert.equal(csv.length, 3);
-  assert.match(csv[1], /^"Diseño, fase 1",Tarea,2026-10-19,2026-10-20,2,0,,,$/);
-  assert.match(csv[2], /"Diseño, fase 1"$/);
+  assert.match(csv[0], /^Nombre;Tipo;Inicio;Fin;/);
+  assert.match(csv[1], /^"Diseño; fase 1";Tarea;19\/10\/2026;20\/10\/2026;2;0;;;$/);
+  assert.match(csv[2], /"Diseño; fase 1"$/);
+});
+
+test('Spanish dates in and out', () => {
+  assert.equal(esDate('2026-10-05'), '05/10/2026');
+  assert.equal(parseEsDate('5/10/2026'), '2026-10-05');
+  assert.equal(parseEsDate('05-10-26'), '2026-10-05');
+  assert.equal(parseEsDate('2026-10-05'), '2026-10-05');
+  assert.equal(parseEsDate('31/02/2026'), null);
+  assert.equal(parseEsDate('mañana'), null);
 });
 
 test('the example is a sane PUD plan', () => {
@@ -153,4 +230,21 @@ test('the example is a sane PUD plan', () => {
     }
   }
   assert.equal(new Date(Date.parse(d.tasks[1].start)).getUTCDay(), 1, 'starts on a Monday');
+});
+
+test('planRange: only the plan, about one unit of margin, no today', () => {
+  const tasks = [
+    { id: 'a', name: 'A', start: '2026-10-31', end: '2026-11-04', progress: 0, milestone: false, group: false, deps: [], owner: '' },
+    { id: 'b', name: 'B', start: '2026-11-22', end: '2026-11-26', progress: 0, milestone: false, group: false, deps: [], owner: '' }
+  ];
+  const m = planRange(tasks, 'month', '2026-01-15');
+  assert.equal(m.start, '2026-10-01');
+  assert.equal(m.end, '2026-12-01');
+  const w = planRange(tasks, 'week', '2026-01-15');
+  assert.equal(w.start, '2026-10-19');
+  assert.equal(w.end, '2026-12-07');
+  const d = planRange(tasks, 'day', '2027-06-01');
+  assert.equal(d.start, '2026-10-30');
+  assert.equal(d.end, '2026-11-28');
+  assert.equal(planRange([], 'day', '2026-10-18').start, '2026-10-17');
 });

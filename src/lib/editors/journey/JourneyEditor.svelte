@@ -383,6 +383,17 @@
     font-weight: 700;
     font-size: var(--fs-sm);
   }
+  /* Row labels stay in view while the stages scroll sideways. */
+  .corner,
+  .row-head {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+  }
+  /* An empty persona / scenario field leaves no trace in the exported image. */
+  :global(.exporting) .head label:has(input:placeholder-shown) {
+    visibility: hidden;
+  }
   .cell {
     padding: 6px var(--sp-2);
     background: var(--panel);

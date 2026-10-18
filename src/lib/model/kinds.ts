@@ -284,7 +284,7 @@ export const PALETTES: Record<GraphKind, Palette> = {
       { type: 'device', label: 'Cloud service', es: 'Servicio en la nube', shape: 'device', defaultLabel: 'Servicio cloud', icon: 'Cloud', presetIcon: 'Cloud' },
       { type: 'device', label: 'Internet', es: 'Internet', shape: 'device', defaultLabel: 'Internet', icon: 'Globe', presetIcon: 'Globe' },
       { type: 'device', label: 'Users', es: 'Usuarios', shape: 'device', defaultLabel: 'Usuarios', icon: 'Users', presetIcon: 'Users' },
-      { type: 'zone', label: 'Zone', es: 'Zona / red', shape: 'zone', defaultLabel: 'Bodega', icon: 'SquareDashed', container: true, size: { w: 420, h: 280 } },
+      { type: 'zone', label: 'Zone', es: 'Zona / red', shape: 'zone', defaultLabel: 'Zona', icon: 'SquareDashed', container: true, size: { w: 420, h: 280 } },
       note
     ],
     edges: [
@@ -316,8 +316,10 @@ export const PALETTES: Record<GraphKind, Palette> = {
       { type: 'weakEntity', label: 'Weak entity', es: 'Entidad débil', shape: 'weakEntity', defaultLabel: 'Entidad débil', icon: 'SquareSquare' },
       { type: 'attribute', label: 'Attribute', es: 'Atributo', shape: 'attribute', defaultLabel: 'atributo', icon: 'Circle' },
       { type: 'key', label: 'Key attribute', es: 'Atributo clave', shape: 'attribute', defaultLabel: 'id', icon: 'KeyRound' },
-      { type: 'multivalued', label: 'Multivalued attribute', es: 'Atributo multivaluado', shape: 'attribute', defaultLabel: 'telefonos', icon: 'CircleDashed' },
+      { type: 'multivalued', label: 'Multivalued attribute', es: 'Atributo multivaluado', shape: 'attribute', defaultLabel: 'telefonos', icon: 'CircleDot' },
+      { type: 'derived', label: 'Derived attribute', es: 'Atributo derivado', shape: 'attribute', defaultLabel: 'edad', icon: 'CircleDashed' },
       { type: 'relationship', label: 'Relationship', es: 'Relación', shape: 'relationship', defaultLabel: 'relación', icon: 'Diamond' },
+      { type: 'identifying', label: 'Identifying relationship', es: 'Relación identificativa (débil)', shape: 'relationship', defaultLabel: 'tiene', icon: 'Gem' },
       note
     ],
     edges: [

@@ -14,10 +14,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-store = "2"
+# Copy a diagram as an image, or exported text, to the clipboard.
+tauri-plugin-clipboard-manager = "2"
 # Keeps the folder picked in the file dialog allowed across restarts.
 tauri-plugin-persisted-scope = "2"
 # Remembers window size (and position where the compositor allows it).

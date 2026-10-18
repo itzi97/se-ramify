@@ -44,7 +44,9 @@
     const id = uid();
     app.change((d) => {
       const secs = board(d).sections;
-      const arr = (secs[sec] ??= []);
+      // Assign first, then read back: `x ??= []` evaluates to the raw array, not the stored (reactive) one.
+      if (!secs[sec]) secs[sec] = [];
+      const arr = secs[sec]!;
       arr.splice(index ?? arr.length, 0, { id, text: '' });
     });
     lastSection = sec;
@@ -89,7 +91,8 @@
     app.change((d) => {
       const secs = board(d).sections;
       const [s] = secs[at.sec]!.splice(at.index, 1);
-      const arr = (secs[toSec] ??= []);
+      if (!secs[toSec]) secs[toSec] = [];
+      const arr = secs[toSec]!;
       arr.splice(Math.min(toIndex, arr.length), 0, s);
     });
     lastSection = toSec;

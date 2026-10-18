@@ -35,7 +35,13 @@ export interface EditorModule<K extends DiagramKind> {
   /** Text exports for this diagram. */
   exports: (doc: DiagramOf<K>) => TextExport[];
   /** Optional text import (e.g. PlantUML-like sequence text) — returns new data or throws a readable error. */
-  importText?: { label: string; extensions: string[]; parse: (text: string, current: DataByKind[K]) => DataByKind[K] };
+  importText?: {
+    label: string;
+    extensions: string[];
+    parse: (text: string, current: DataByKind[K]) => DataByKind[K];
+    /** Lines the import skipped or changed, to tell the person ("line 7: …"). */
+    warnings?: (text: string) => string[];
+  };
 }
 
 export interface ImageSource {

@@ -38,6 +38,34 @@
   const einfo = $derived(edge ? edgeTypeInfo(kind, edge.type) : null);
 
   let labelField = $state<HTMLTextAreaElement | null>(null);
+
+  /**
+   * The panel shows a moment after something is first selected, so the second
+   * click of a double-click still lands on the shape (not on the panel that
+   * would otherwise open over it). Moving between selections is instant.
+   */
+  let shown = $state(false);
+  const wanted = $derived(!!(node || edge || many));
+  $effect(() => {
+    if (!wanted) {
+      shown = false;
+      return;
+    }
+    if (shown) return;
+    const t = setTimeout(() => (shown = true), focusEdgeLabel ? 0 : 320);
+    return () => clearTimeout(t);
+  });
+  $effect(() => {
+    if (focusEdgeLabel && edge) shown = true;
+  });
+
+  /** One-line fields: Enter finishes (no stray line breaks in labels). */
+  function enterBlurs(e: KeyboardEvent) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement).blur();
+    }
+  }
   let iconQuery = $state('');
   let specOpen = $state(true);
 
@@ -164,7 +192,7 @@
   const typeChoices = $derived(node ? palette.nodes.filter((t) => !t.hidden && t.shape !== 'central' && !!t.container === !!ninfo!.container) : []);
 </script>
 
-{#if node || edge || many}
+{#if shown && (node || edge || many)}
   <aside class="inspector float arrive" aria-label="Properties" data-no-export>
     <header class="inspector-head">
       {#if node && ninfo}
@@ -196,7 +224,7 @@
           </label>
         {/if}
         <label class="field">{ninfo.shape === 'class' ? 'Name' : 'Text'}
-          <textarea rows={ninfo.shape === 'screen' || ninfo.shape === 'note' ? 6 : 2} value={node.label} oninput={(e) => setNode({ label: e.currentTarget.value }, 'label')}></textarea>
+          <textarea rows={ninfo.shape === 'screen' || ninfo.shape === 'note' ? 6 : 2} value={node.label} onkeydown={ninfo.shape === 'screen' || ninfo.shape === 'note' ? undefined : enterBlurs} oninput={(e) => setNode({ label: e.currentTarget.value.replace(/\n+$/, '') }, 'label')}></textarea>
         </label>
         {#if ninfo.shape === 'screen'}
           <p class="tiny muted">First line is the window title. Then: <code>[Entrar]</code> a button, <code>Nombre: ___</code> a field, <code># Título</code> a heading, anything else plain text.</p>
@@ -289,7 +317,8 @@
           </select>
         </label>
         <label class="field">{kind === 'state' ? 'Transition — evento [guarda] / acción' : kind === 'activity' || kind === 'flowchart' ? 'Guard / label — e.g. [disponible]' : kind === 'conceptmap' ? 'Linking phrase' : kind === 'dfd' ? 'Data that flows' : 'Label'}
-          <textarea bind:this={labelField} rows="2" value={edge.label ?? ''} oninput={(e) => setEdge({ label: e.currentTarget.value || undefined }, 'label')}></textarea>
+          <textarea bind:this={labelField} rows="2" value={edge.label ?? ''} onkeydown={enterBlurs} oninput={(e) => setEdge({ label: e.currentTarget.value.replace(/\n+$/, '') || undefined }, 'label')}></textarea>
+          <span class="tiny muted">Enter finishes; Shift+Enter starts a second line.</span>
         </label>
         {#if einfo.ends}
           <div class="row">

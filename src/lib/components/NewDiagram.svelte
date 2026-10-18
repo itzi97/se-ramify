@@ -18,10 +18,39 @@
   }
 
   const projects = $derived([...new Set(app.list.map((m) => m.project).filter(Boolean))].sort());
-  const matches = (k: KindInfo) => {
-    const q = query.trim().toLowerCase();
-    return !q || `${k.label} ${k.es} ${k.blurb} ${k.course}`.toLowerCase().includes(q);
+  /** Lower case, no accents: "comunicacion" finds "comunicación". */
+  const fold = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  /** Other names people search by. */
+  const ALSO: Partial<Record<string, string>> = {
+    usecase: 'sistema actores casos uso use case',
+    storymap: 'mapa de historias de usuario story map sprints backlog',
+    kanban: 'tablero tareas',
+    gantt: 'planificacion cronograma calendario pud',
+    stakeholder: 'interesados poder interes cebolla',
+    architecture: 'tco equipos red infraestructura nube servidores',
+    deployment: 'despliegue componentes nodos',
+    flowchart: 'flujo modelo de desarrollo ciclo de vida cascada espiral',
+    er: 'entidad relacion base de datos chen',
+    dfd: 'flujo de datos contexto',
+    screenflow: 'pantallas wireframe prototipo mockup',
+    traceability: 'trazabilidad matriz requisitos pruebas',
+    vision: 'elevator pitch vision producto',
+    canvas: 'canvas modelo de negocio lienzo',
+    brainstorm: 'lluvia de ideas',
+    sixhats: 'seis sombreros de bono',
+    journey: 'viaje del cliente experiencia'
   };
+  const matches = (k: KindInfo) => {
+    const q = fold(query.trim());
+    return !q || q.split(/\s+/).every((w) => fold(`${k.label} ${k.es} ${k.blurb} ${k.course} ${ALSO[k.kind] ?? ''}`).includes(w));
+  };
+  const anyMatch = $derived(KINDS.some(matches));
+  // The selection follows the search: the first match is picked when the current one drops out.
+  $effect(() => {
+    query;
+    const shown = GROUP_ORDER.flatMap((g) => KINDS.filter((k) => k.group === g && matches(k)));
+    if (shown.length && !shown.some((k) => k.kind === kind)) kind = shown[0].kind;
+  });
   const info = $derived(KINDS.find((k) => k.kind === kind)!);
 
   async function create() {
@@ -33,6 +62,10 @@
 
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') onClose();
+    else if (e.key === 'Enter' && anyMatch && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      void create();
+    }
   }
 </script>
 
@@ -42,11 +75,13 @@
 <div class="dialog float arrive" role="dialog" aria-modal="true" aria-label="New diagram">
   <header class="row between">
     <strong>New diagram</strong>
-    <input type="search" class="q" placeholder="Search kinds (e.g. secuencia, gantt)" bind:value={query} aria-label="Search diagram kinds" />
+    <!-- svelte-ignore a11y_autofocus -->
+    <input type="search" class="q" placeholder="Search kinds (e.g. secuencia, gantt)" bind:value={query} aria-label="Search diagram kinds" autofocus />
     <button class="icon" aria-label="Close" onclick={onClose}><Icon name="X" /></button>
   </header>
   <div class="body">
     <div class="kinds">
+      {#if !anyMatch}<p class="muted small none">No kind matches "{query}".</p>{/if}
       {#each GROUP_ORDER as g (g)}
         {@const items = KINDS.filter((k) => k.group === g && matches(k))}
         {#if items.length}
@@ -81,9 +116,9 @@
         <button class:active={start === 'blank'} role="radio" aria-checked={start === 'blank'} onclick={() => (start = 'blank')}>Blank</button>
         <button class:active={start === 'example'} role="radio" aria-checked={start === 'example'} onclick={() => (start = 'example')}>Example</button>
       </div>
-      <p class="tiny muted">{start === 'example' ? 'Starts with a small worked example (a library loans system) to edit or learn from.' : 'Starts empty.'}</p>
+      <p class="tiny muted">{start === 'example' ? 'Starts with a small worked example (a library loans system) to edit or learn from.' : 'Starts empty.'} <kbd class="quiet">Enter</kbd> creates.</p>
       <div class="spacer"></div>
-      <button class="primary go" onclick={create}><Icon name="Plus" size={16} /> Create</button>
+      <button class="primary go" onclick={create} disabled={!anyMatch}><Icon name="Plus" size={16} /> Create</button>
     </aside>
   </div>
 </div>
@@ -124,6 +159,9 @@
   }
   .sect {
     margin: var(--sp-4) 0 var(--sp-2);
+  }
+  .none {
+    margin-top: var(--sp-4);
   }
   .grid {
     display: grid;

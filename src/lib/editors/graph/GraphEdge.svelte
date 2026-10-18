@@ -18,13 +18,15 @@
     double?: boolean;
     /** Flows going back up loop round the side (activity, flowchart). */
     loopBack?: boolean;
+    /** Right-angle lines that leave the same shape: this one's sideways shift, so tracks don't merge. */
+    spread?: number;
   }
 </script>
 
 <script lang="ts">
   import { getContext } from 'svelte';
   import { useStore, type EdgeProps } from '@xyflow/svelte';
-  import { alongFrom, inset, markAt, markInset, midDirection, orthogonalRoute, outlineOf, pathOf, selfLoop, straightRoute, type Pt, type Rect, type Route } from './geometry';
+  import { alongFrom, inset, markAt, markInset, midDirection, orthogonalAvoiding, outlineOf, pathOf, selfLoop, straightRoute, type Pt, type Rect, type Route } from './geometry';
 
   let { id, source, target, data, selected }: EdgeProps & { data: GraphEdgeData } = $props();
 
@@ -52,9 +54,36 @@
     return { x: n.internals.positionAbsolute.x, y: n.internals.positionAbsolute.y, w, h };
   }
 
+  /** Glyph-with-caption shapes: lines end at the glyph (stick figure, device icon), not the caption's box. */
+  /** Glyph-with-caption shapes: lines meet the glyph (stick figure, device tile), not the caption's box. */
+  function glyph(r: Rect | null, shape: string): Rect | null {
+    if (!r) return r;
+    const box = shape === 'actor' ? { w: 34, h: 58 } : shape === 'device' ? { w: 54, h: 54 } : shape === 'lollipop' ? { w: 20, h: 20 } : null;
+    if (!box) return r;
+    return { x: r.x + (r.w - box.w) / 2, y: r.y + 1, w: box.w, h: box.h };
+  }
+
+  /** A line leaving a glyph straight down starts under its caption instead of crossing it. */
+  function underCaption(points: Pt[], full: Rect | null, g: Rect | null, atStart: boolean): Pt[] {
+    if (!full || !g || g === full || points.length < 2) return points;
+    const i = atStart ? 0 : points.length - 1;
+    const j = atStart ? 1 : points.length - 2;
+    const p = points[i];
+    const q = points[j];
+    const bottom = g.y + g.h;
+    if (Math.abs(p.y - bottom) < 1.5 && Math.abs(p.x - q.x) < 0.5 && q.y > p.y) {
+      const out = points.slice();
+      out[i] = { x: p.x, y: full.y + full.h };
+      return out;
+    }
+    return points;
+  }
+
   const route = $derived.by((): Route | null => {
-    const ra = rectOf(a.current);
-    const rb = rectOf(b.current);
+    const fa = rectOf(a.current);
+    const fb = rectOf(b.current);
+    const ra = glyph(fa, data.fromShape);
+    const rb = glyph(fb, data.toShape);
     if (!ra || !rb) return null;
     if (source === target) return selfLoop(ra);
     if (data.style === 'tree') {
@@ -69,7 +98,34 @@
       const p2 = { x: right ? rb.x : rb.x + rb.w, y: rb.y + rb.h / 2 };
       return { points: [p1, p2], mid: { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 } };
     }
-    if (data.routing === 'orthogonal' && !data.offset) return orthogonalRoute(ra, rb, data.loopBack);
+    if (data.routing === 'orthogonal' && !data.offset) {
+      // Other shapes (not containers, not the two ends) are obstacles to route round.
+      const obstacles: Rect[] = [];
+      for (const n of store.nodeLookup.values()) {
+        if (n.id === source || n.id === target || n.zIndex === 0 || (n.internals.userNode.zIndex ?? 2) === 0) continue;
+        const r = rectOf(n);
+        if (r) obstacles.push(r);
+      }
+      const rt = orthogonalAvoiding(ra, rb, obstacles, data.loopBack);
+      let pts = underCaption(underCaption(rt.points, fa, ra, true), fb, rb, false);
+      let mid = rt.mid;
+      if (data.spread && pts.length >= 3) {
+        // Several lines leaving one shape each get their own track (a few px apart), so they don't merge.
+        pts = pts.map((p) => ({ ...p }));
+        for (let i = 0; i < pts.length - 2; i++) {
+          const horizontal = Math.abs(pts[i].y - pts[i + 1].y) < 0.5;
+          if (horizontal) {
+            pts[i].y += data.spread;
+            pts[i + 1].y += data.spread;
+          } else {
+            pts[i].x += data.spread;
+            pts[i + 1].x += data.spread;
+          }
+        }
+        mid = { x: (pts[Math.floor((pts.length - 1) / 2)].x + pts[Math.floor((pts.length - 1) / 2) + 1].x) / 2, y: (pts[Math.floor((pts.length - 1) / 2)].y + pts[Math.floor((pts.length - 1) / 2) + 1].y) / 2 };
+      }
+      return { points: pts, mid };
+    }
     return straightRoute(ra, outlineOf(data.fromShape), rb, outlineOf(data.toShape), data.offset);
   });
 
@@ -92,8 +148,15 @@
   const labelLines = $derived(text ? text.split('\n') : []);
 
   /** End labels (multiplicity / role) sit beside the line, near each end. */
-  const fromAt = $derived(route && data.edge.fromLabel ? alongFrom(route.points, false, 20, -12) : null);
-  const toAt = $derived(route && data.edge.toLabel ? alongFrom(route.points, true, 20, 12) : null);
+  /** How far along the line an end label sits: 20px, but never past a third of a short end segment. */
+  const endDist = (fromEnd: boolean) => {
+    const pts = route!.points;
+    const a = fromEnd ? pts[pts.length - 1] : pts[0];
+    const b = fromEnd ? pts[pts.length - 2] : pts[1];
+    return Math.max(8, Math.min(20, Math.hypot(b.x - a.x, b.y - a.y) / 3));
+  };
+  const fromAt = $derived(route && data.edge.fromLabel ? alongFrom(route.points, false, endDist(false), -12) : null);
+  const toAt = $derived(route && data.edge.toLabel ? alongFrom(route.points, true, endDist(true), 12) : null);
 
   /** Communication diagrams: messages grouped by direction, each group with its own arrow. */
   const msgGroups = $derived.by(() => {
@@ -101,11 +164,14 @@
     if (!route || !ms.length) return [];
     const dir = midDirection(route.points);
     const n = { x: -dir.y, y: dir.x };
-    const groups: { arrow: Pt[]; at: Pt; lines: string[] }[] = [];
+    const groups: { arrow: Pt[]; at: Pt; lines: string[]; anchor: 'start' | 'end' | 'middle'; steep: boolean; above: boolean }[] = [];
     (['forward', 'back'] as const).forEach((which, gi) => {
       const lines = ms.filter((m) => m.dir === which).map((m) => `${m.seq}${m.seq ? ': ' : ''}${m.text}`);
       if (!lines.length) return;
-      const side = gi === 0 ? -1 : 1;
+      // The first group goes above the line (or left of a steep one), whichever way the link was drawn.
+      const first = n.y > 0.01 || (Math.abs(n.y) <= 0.01 && n.x > 0) ? -1 : 1;
+      const side = gi === 0 ? first : -first;
+      const above = n.y * side < 0;
       const c = { x: route.mid.x + n.x * 16 * side, y: route.mid.y + n.y * 16 * side };
       const u = which === 'forward' ? dir : { x: -dir.x, y: -dir.y };
       const tail = { x: c.x - u.x * 14, y: c.y - u.y * 14 };
@@ -115,9 +181,11 @@
         tip,
         { x: tip.x - u.x * 7 - n.x * 4, y: tip.y - u.y * 7 - n.y * 4 }
       ];
-      // Text block beyond the arrow, away from the line.
-      const at = { x: c.x + n.x * 10 * side, y: c.y + n.y * 10 * side };
-      groups.push({ arrow: [tail, tip, ...head], at, lines });
+      // Text block beyond the arrow, away from the line; on steep lines it hangs to one side.
+      const steep = Math.abs(dir.y) > 0.6;
+      const at = steep ? { x: c.x + n.x * 12 * side, y: c.y - ((lines.length - 1) * 14) / 2 } : { x: c.x + n.x * 10 * side, y: c.y + n.y * 10 * side };
+      const anchor = steep ? (n.x * side > 0 ? 'start' : 'end') : 'middle';
+      groups.push({ arrow: [tail, tip, ...head], at, lines, anchor, steep, above });
     });
     return groups;
   });
@@ -151,7 +219,7 @@
     {#each msgGroups as g, gi (gi)}
       <polyline class="msg-arrow" points={g.arrow.slice(0, 2).map((p) => `${p.x},${p.y}`).join(' ')} />
       <polyline class="msg-arrow" points={g.arrow.slice(2).map((p) => `${p.x},${p.y}`).join(' ')} />
-      <text class="elabel msg" x={g.at.x} y={g.at.y + (gi === 0 ? -(g.lines.length - 1) * 14 - 4 : 12)}>
+      <text class="elabel msg" style="text-anchor: {g.anchor}" x={g.at.x} y={g.steep ? g.at.y : g.at.y + (g.above ? -(g.lines.length - 1) * 14 - 4 : 12)}>
         {#each g.lines as l, i (i)}<tspan x={g.at.x} dy={i ? 14 : 0}>{l}</tspan>{/each}
       </text>
     {/each}

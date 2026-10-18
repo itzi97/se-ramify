@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { layoutSequence, textWidth } from '../src/lib/editors/sequence/layout';
-import { parsePlantUml, toMermaid, toPlantUml, SeqParseError } from '../src/lib/editors/sequence/text';
+import { parsePlantUml, parsePlantUmlLenient, refOver, toMermaid, toPlantUml } from '../src/lib/editors/sequence/text';
+import { layoutSequence } from '../src/lib/editors/sequence/layout';
 import { sequenceExample } from '../src/lib/editors/sequence/example';
 import type { SequenceData } from '../src/lib/model/types';
 
@@ -113,13 +114,87 @@ ref over Socio, P: Iniciar sesión
   assert.deepEqual(d.items.slice(-2).map((i) => i.t), ['open', 'close']);
 });
 
-test('parse errors carry line numbers and never return half a diagram', () => {
-  assert.throws(
-    () => parsePlantUml('actor A\nA -> : x\nalt y\n'),
-    (e: unknown) => e instanceof SeqParseError && e.problems.map((p) => p.line).join(',') === '2,3'
-  );
-  assert.throws(() => parsePlantUml('end'), SeqParseError);
-  assert.throws(() => parsePlantUml('A -> B: x\ndestroy C'), SeqParseError);
+test('problems become warnings with line numbers; the rest of the file still comes through', () => {
+  const r = parsePlantUmlLenient('actor A\nA -> : x\nalt y\nA -> B: hola\n');
+  assert.deepEqual(r.warnings.map((w) => w.line), [2, 3]);
+  assert.equal(r.data.items.filter((i) => i.t === 'msg').length, 1);
+  assert.deepEqual(r.data.items.map((i) => i.t), ['open', 'msg', 'close'], 'the open alt is closed at the end');
+  assert.equal(parsePlantUmlLenient('end').warnings.length, 1);
+  assert.equal(parsePlantUmlLenient('A -> B: x\ndestroy C').warnings.length, 1);
+});
+
+const TEACHER = `@startuml
+/' diagrama del profe
+   con comentario de bloque '/
+title Reservar clase
+skinparam monochrome true
+hide footbox
+autoactivate on
+actor Socio
+participant "Pantalla Reservas" as UI #lightblue
+control Ctl
+Socio -> UI: reservar()
+activate UI
+UI -[#red]> Ctl: comprobar()
+Ctl --> UI: ok
+== Cancelación ==
+... 5 minutos después ...
+UI -> Ctl: cancelar()
+return cancelada
+Ctl -> R ** : new()
+Ctl -> R !! : borrar()
+Socio <- UI: confirmación
+UI ->x Ctl: perdido
+note left of Socio: a la izquierda
+note right of UI
+  dos líneas
+  aquí
+end note
+ref over UI, Ctl : Iniciar sesión
+deactivate UI
+@enduml
+`;
+
+test('typical teacher files import: dividers, delays, return, create **, ref over, colours, quoted aliases', () => {
+  const { data: d, warnings } = parsePlantUmlLenient(TEACHER);
+  assert.deepEqual(warnings, []);
+  const name = (id: string) => d.participants.find((p) => p.id === id)!.name;
+  assert.deepEqual(d.participants.map((p) => p.name), ['Socio', 'Pantalla Reservas', 'Ctl', 'R']);
+  const msgs = d.items.filter((i) => i.t === 'msg') as Extract<(typeof d.items)[number], { t: 'msg' }>[];
+  const show = msgs.map((m) => `${name(m.from)}>${name(m.to)}:${m.style}:${m.text}`);
+  assert.deepEqual(show, [
+    'Socio>Pantalla Reservas:sync:reservar()',
+    'Pantalla Reservas>Ctl:sync:comprobar()',
+    'Ctl>Pantalla Reservas:reply:ok',
+    'Pantalla Reservas>Ctl:sync:cancelar()',
+    'Ctl>Pantalla Reservas:reply:cancelada',
+    'Ctl>R:create:new()',
+    'Ctl>R:destroy:borrar()',
+    'Pantalla Reservas>Socio:sync:confirmación',
+    'Pantalla Reservas>Ctl:async:perdido'
+  ]);
+  const notes = d.items.filter((i) => i.t === 'note') as { text: string; over: string[] }[];
+  assert.deepEqual(notes.map((n) => n.text), ['== Cancelación ==', '... 5 minutos después ...', 'a la izquierda', 'dos líneas\naquí']);
+  const ref = d.items.find((i) => i.t === 'open')!;
+  assert.deepEqual(refOver(ref)!.map(name), ['Pantalla Reservas', 'Ctl']);
+});
+
+test('dividers, delays and partial refs survive a round trip and lay out', () => {
+  const d = parsePlantUml(TEACHER);
+  const text = toPlantUml(d);
+  assert.match(text, /^== Cancelación ==$/m);
+  assert.match(text, /^\.\.\. 5 minutos después \.\.\.$/m);
+  assert.match(text, /^ref over P1, Ctl: Iniciar sesión$/m);
+  const back = parsePlantUmlLenient(text, d);
+  assert.deepEqual(back.warnings, []);
+  assert.equal(toPlantUml(back.data), text);
+  const l = layoutSequence(d);
+  assert.deepEqual(l.notes.filter((n) => n.kind).map((n) => n.kind), ['divider', 'delay']);
+  const frag = l.fragments.find((f) => f.op === 'ref')!;
+  const ui = l.heads.find((h) => h.name === 'Pantalla Reservas')!;
+  const socio = l.heads.find((h) => h.name === 'Socio')!;
+  assert.ok(frag.x1 > socio.x + 10, 'the ref box leaves Socio out');
+  assert.ok(frag.x1 < ui.x);
 });
 
 test('Mermaid export balances activations and fragments', () => {

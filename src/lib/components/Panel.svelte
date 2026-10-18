@@ -55,6 +55,8 @@
 <style>
   .shell-panel {
     position: absolute;
+    /* Above any editor's own panels and toolbars. */
+    z-index: 60;
     top: var(--chrome-top);
     width: var(--panel-w);
     /* Clears the top strip and the bottom bars. */

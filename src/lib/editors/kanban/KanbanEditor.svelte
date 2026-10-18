@@ -88,6 +88,11 @@
   }
 
   function onKey(e: KeyboardEvent) {
+    // Esc closes the column menu even from its WIP field.
+    if (e.key === 'Escape' && colMenu) {
+      colMenu = null;
+      return;
+    }
     const t = e.target as HTMLElement;
     if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
     if (e.key === 'Escape') {
@@ -222,7 +227,8 @@
 <style>
   .board {
     display: inline-flex;
-    align-items: flex-start;
+    /* Columns run the full height, so an empty one takes a drop anywhere. */
+    align-items: stretch;
     gap: var(--sp-3);
     min-width: 100%;
     min-height: 100%;
@@ -289,6 +295,7 @@
     margin-bottom: var(--sp-2);
   }
   .cards {
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 6px;

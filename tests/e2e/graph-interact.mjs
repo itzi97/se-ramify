@@ -64,7 +64,7 @@ await page.waitForTimeout(800);
 
 // 5. PNG export
 const dl = page.waitForEvent('download', { timeout: 8000 }).catch(() => null);
-await page.getByRole('button', { name: /Export/ }).click();
+await page.getByRole('button', { name: 'Export', exact: true }).click();
 await page.getByRole('menuitem', { name: /PNG/ }).click();
 const file = await dl;
 if (!file) fail('no png download');

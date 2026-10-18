@@ -31,10 +31,27 @@ export interface Storage {
   /** Read a file the person picks (import). Null if cancelled. */
   importText(kind: FileKind): Promise<{ name: string; text: string } | null>;
   confirm(message: string, title?: string): Promise<boolean>;
+  /** Clipboard: a PNG image, or text. */
+  copyImage(png: Uint8Array): Promise<void>;
+  copyText(text: string): Promise<void>;
+  /** Ask for a folder to export into (null if cancelled); then write files into it by name. */
+  pickExportDir(title: string): Promise<string | null>;
+  writeInto(dir: string, name: string, content: string | Uint8Array): Promise<void>;
   /** Keep a dated copy outside the diagrams folder; old copies past `keep` are dropped. */
   backup(d: Diagram, keep?: number): Promise<void>;
   listBackups(id: string): Promise<BackupMeta[]>;
+  /** The newest backup of every diagram that has backups (the shell filters out the ones still in the list). */
+  listBackedUp(): Promise<DeletedMeta[]>;
   loadBackup(path: string): Promise<Diagram>;
+}
+
+export interface DeletedMeta {
+  id: string;
+  title: string;
+  kind: string;
+  when: string;
+  /** The newest backup. */
+  path: string;
 }
 
 export interface BackupMeta {
@@ -144,6 +161,25 @@ async function tauriStorage(): Promise<Storage> {
     async confirm(message, title = 'se-ramify') {
       return ask(message, { title, kind: 'warning', okLabel: 'Yes', cancelLabel: 'No' });
     },
+    async copyImage(png) {
+      const { writeImage } = await import('@tauri-apps/plugin-clipboard-manager');
+      await writeImage(png);
+    },
+    async copyText(text) {
+      const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
+      await writeText(text);
+    },
+    async pickExportDir(title) {
+      const dir = await open({ directory: true, multiple: false, title, defaultPath: (await settings.get<string>('exportDir')) ?? undefined });
+      if (typeof dir !== 'string') return null;
+      await settings.set('exportDir', dir);
+      return dir;
+    },
+    async writeInto(dir, name, content) {
+      if (!(await fs.exists(dir))) await fs.mkdir(dir, { recursive: true });
+      if (typeof content === 'string') await fs.writeTextFile(join(dir, name), content);
+      else await fs.writeFile(join(dir, name), content);
+    },
     async backup(d, keep = 30) {
       const dir = join(join(await appDataDir(), 'backups'), d.id);
       if (!(await fs.exists(dir))) await fs.mkdir(dir, { recursive: true });
@@ -168,6 +204,25 @@ async function tauriStorage(): Promise<Storage> {
     },
     async loadBackup(path) {
       return parse(await fs.readTextFile(path), path);
+    },
+    async listBackedUp() {
+      const root = join(await appDataDir(), 'backups');
+      if (!(await fs.exists(root))) return [];
+      const out: DeletedMeta[] = [];
+      for (const e of await fs.readDir(root)) {
+        if (!e.isDirectory) continue;
+        const dir = join(root, e.name);
+        const names = (await fs.readDir(dir)).filter((f) => f.isFile && f.name.endsWith('.json')).map((f) => f.name).sort();
+        const newest = names[names.length - 1];
+        if (!newest) continue;
+        try {
+          const d = JSON.parse(await fs.readTextFile(join(dir, newest))) as Diagram;
+          out.push({ id: d.id, title: d.title, kind: d.kind, when: stampToIso(newest), path: join(dir, newest) });
+        } catch {
+          /* skip */
+        }
+      }
+      return out.sort((a, b) => b.when.localeCompare(a.when));
     }
   };
 }
@@ -245,6 +300,25 @@ function browserStorage(): Storage {
     async confirm(message) {
       return window.confirm(message);
     },
+    async copyImage(png) {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([png as BlobPart], { type: 'image/png' }) })]);
+    },
+    async copyText(text) {
+      await navigator.clipboard.writeText(text);
+    },
+    async pickExportDir() {
+      // No folders in a browser: files download one by one.
+      return 'downloads';
+    },
+    async writeInto(_dir, name, content) {
+      const blob = new Blob([content as BlobPart]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
     async backup(d, keep = 10) {
       localStorage.setItem(`${BACKUP}${d.id}:${stamp()}`, JSON.stringify(d));
       const mine = Object.keys(localStorage).filter((k) => k.startsWith(`${BACKUP}${d.id}:`)).sort();
@@ -267,6 +341,24 @@ function browserStorage(): Storage {
       const text = localStorage.getItem(path);
       if (!text) throw new Error(`missing ${path}`);
       return parse(text, path);
+    },
+    async listBackedUp() {
+      const newest = new Map<string, string>();
+      for (const k of Object.keys(localStorage)) {
+        if (!k.startsWith(BACKUP)) continue;
+        const id = k.slice(BACKUP.length).split(':')[0];
+        if (!newest.has(id) || newest.get(id)! < k) newest.set(id, k);
+      }
+      const out: DeletedMeta[] = [];
+      for (const [id, k] of newest) {
+        try {
+          const d = JSON.parse(localStorage.getItem(k)!) as Diagram;
+          out.push({ id, title: d.title, kind: d.kind, when: stampToIso(k.slice(BACKUP.length + id.length + 1)), path: k });
+        } catch {
+          /* skip */
+        }
+      }
+      return out.sort((a, b) => b.when.localeCompare(a.when));
     }
   };
 }

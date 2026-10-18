@@ -6,6 +6,7 @@
  * the messages when `activations` is on: a synchronous call opens a bar on
  * the callee, a reply closes the replier's innermost bar.
  */
+import { noteKind, refOver } from './text';
 import type { MessageStyle, ParticipantKind, SeqItem, SequenceData } from '../../model/types';
 
 export const FONT = 13;
@@ -92,6 +93,8 @@ export interface NoteBox {
   w: number;
   h: number;
   lines: string[];
+  /** A PlantUML divider (== x ==) or delay (... x ...) drawn across every lifeline. */
+  kind?: 'divider' | 'delay';
 }
 
 export interface Layout {
@@ -269,6 +272,9 @@ export function layoutSequence(data: SequenceData): Layout {
         if (fragStack.length) fragStack[fragStack.length - 1].children.push(f);
         fragStack.push(f);
         fragments.push(f);
+        // `ref over A, B` spans just those lifelines.
+        const span = (refOver(it) ?? []).filter((id) => index.has(id)).map((id) => index.get(id)!);
+        if (span.length) touch(Math.min(...span), Math.max(...span));
         y += it.op === 'ref' ? 44 : 34;
         break;
       }
@@ -307,6 +313,17 @@ export function layoutSequence(data: SequenceData): Layout {
         break;
       }
       case 'note': {
+        const nk = noteKind(it.text);
+        if (nk !== 'note' && it.over.length === 0) {
+          // Dividers and delays run across all lifelines.
+          const label = nk === 'divider' ? it.text.replace(/^==\s*|\s*==$/g, '') : it.text.replace(/^\.\.\.\s*|\s*\.\.\.$/g, '');
+          const tw = textWidth(label || ' ', SMALL) + 24;
+          const left = (xs[0] ?? 0) - 50;
+          const right = Math.max((xs[xs.length - 1] ?? 0) + 50, left + tw + 40);
+          notes.push({ itemId: it.id, x: left, y: y - 6, w: right - left, h: 24, lines: label ? [label] : [], kind: nk });
+          y += 24 + 14;
+          break;
+        }
         const over = it.over.filter((p) => index.has(p)).map((p) => index.get(p)!);
         const lines = (it.text || ' ').split('\n');
         const tw = Math.max(...lines.map((l) => textWidth(l, SMALL))) + 22;

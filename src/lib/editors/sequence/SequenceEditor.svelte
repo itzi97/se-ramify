@@ -6,7 +6,7 @@
   import Icon from '../../components/Icon.svelte';
   import SequenceDiagram from './SequenceDiagram.svelte';
   import { layoutSequence } from './layout';
-  import { parsePlantUml, SeqParseError, toPlantUml } from './text';
+  import { parsePlantUmlLenient, toPlantUml, type SeqWarning } from './text';
 
   const doc = $derived(app.docOf('sequence'));
   const data = $derived(doc.data);
@@ -204,7 +204,8 @@
   /* ----------------------------------------------------------------- text */
 
   let text = $state('');
-  let textErrors = $state<{ line: number; message: string }[]>([]);
+  /** Lines the parser skipped or patched; the diagram still follows the rest. */
+  let textErrors = $state<SeqWarning[]>([]);
   let textFocused = $state(false);
   $effect(() => {
     // Follow the diagram (undo, list edits) while the text box isn't being typed in.
@@ -217,18 +218,14 @@
 
   function onText(value: string) {
     text = value;
-    try {
-      const parsed = parsePlantUml(value, $state.snapshot(data) as SequenceData);
-      textErrors = [];
-      edit((s) => {
-        s.participants = parsed.participants;
-        s.items = parsed.items;
-        s.activations = parsed.activations;
-        s.autonumber = parsed.autonumber;
-      }, 'seq-text');
-    } catch (err) {
-      textErrors = err instanceof SeqParseError ? err.problems : [{ line: 0, message: String(err) }];
-    }
+    const { data: parsed, warnings } = parsePlantUmlLenient(value, $state.snapshot(data) as SequenceData);
+    textErrors = warnings;
+    edit((s) => {
+      s.participants = parsed.participants;
+      s.items = parsed.items;
+      s.activations = parsed.activations;
+      s.autonumber = parsed.autonumber;
+    }, 'seq-text');
   }
 
   /* ----------------------------------------------------------------- keys */
@@ -275,10 +272,10 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="scroll-canvas">
-  <div class="page" class:panel={panelOpen}>
+<div class="scroll-canvas" class:panel-open={panelOpen}>
+  <div class="page">
     {#if data.participants.length === 0 && data.items.length === 0}
-      <div class="empty-hint" style:padding-right={panelOpen ? 'calc(var(--panel-w) + 2 * var(--edge))' : undefined}>
+      <div class="empty-hint">
         <div class="stack">
           <p>An empty sequence diagram.</p>
           <p class="small">Add participants and messages in the panel, or type them in its <strong>Text</strong> tab:</p>
@@ -297,9 +294,9 @@ S --> Socio: ok</pre>
 </div>
 
 {#if !panelOpen}
-  <button class="secondary reopen" onclick={() => (panelOpen = true)}><Icon name="PanelRight" size={16} /> Edit</button>
+  <button class="secondary reopen" onclick={() => (panelOpen = true)} title="Show the Items / Text panel"><Icon name="PanelRightOpen" size={16} /> Edit</button>
 {:else}
-  <aside class="inspector float" aria-label="Sequence editor">
+  <aside class="inspector float seq-panel" aria-label="Sequence editor">
     <div class="inspector-head">
       <div class="seg" role="tablist" aria-label="Edit as">
         <button role="tab" aria-selected={tab === 'items'} class:active={tab === 'items'} onclick={() => (tab = 'items')}><Icon name="ListOrdered" size={14} /> Items</button>
@@ -421,7 +418,7 @@ S --> Socio: ok</pre>
       </div>
     {:else}
       <div class="inspector-body">
-        <p class="tiny muted">PlantUML syntax. Changes apply as you type; the diagram only changes while the text reads correctly.</p>
+        <p class="tiny muted">PlantUML syntax. Changes apply as you type; lines it can't read are skipped and listed below (and kept in the box until you fix them).</p>
         <textarea
           class="code"
           spellcheck="false"
@@ -463,7 +460,10 @@ loop cada ejemplar … end
 opt … end · par … and … end
 ref over P, C: Iniciar sesión
 note over P, C: texto
-destroy L   ' tras un mensaje a L</pre>
+C --> P: ok   ' o: return ok
+== Cancelación ==
+... 5 minutos después ...
+destroy L   ' tras un mensaje a L (o: C -> L !!)</pre>
         </details>
       </div>
     {/if}
@@ -484,8 +484,18 @@ destroy L   ' tras un mensaje a L</pre>
     min-width: max-content;
     min-height: 100%;
   }
-  .page.panel {
-    padding-right: calc(var(--panel-w) + var(--edge) * 2 + var(--sp-3));
+  /* With the panel open the scroll area stops at its left edge, so nothing scrolls under it. */
+  .scroll-canvas.panel-open {
+    right: calc(var(--seq-panel-w) + var(--edge) * 2);
+  }
+  .scroll-canvas,
+  .seq-panel {
+    --seq-panel-w: 300px;
+  }
+  .seq-panel {
+    width: var(--seq-panel-w);
+    /* Under the shell's own panels (Notes, Help, versions: z-index 50). */
+    z-index: 20;
   }
   .export {
     background: var(--d-fill);
@@ -493,8 +503,9 @@ destroy L   ' tras un mensaje a L</pre>
     box-shadow: var(--shadow);
   }
   .reopen {
+    /* Bottom-right, clear of the shell panels' close buttons at the top. */
     position: absolute;
-    top: var(--edge);
+    bottom: var(--edge);
     right: var(--edge);
     z-index: 20;
   }

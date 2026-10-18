@@ -3,6 +3,7 @@
   import { kindInfo } from '../model/kinds';
   import type { DiagramMeta } from '../model/types';
   import Icon from './Icon.svelte';
+  import { exportProject } from '../export/project';
 
   let { onNew }: { onNew: () => void } = $props();
   let query = $state('');
@@ -29,12 +30,20 @@
   </div>
   <div class="scroll">
     {#each groups as [project, items] (project)}
-      <div class="sect group">{project || 'No project'}</div>
+      <div class="sect group row between">
+        <span>{project || 'No project'}</span>
+        <button class="icon small" title="Export this project: every diagram as PNG plus a Markdown memoria" aria-label="Export project {project || 'No project'}" onclick={() => exportProject(project)}><Icon name="PackageOpen" size={14} /></button>
+      </div>
       {#each items as m (m.path)}
         {@const k = kindInfo(m.kind)}
-        <button class="menu-row item" class:on={m.path === app.path} class:archived={m.archived} onclick={() => app.open(m.path)} title="{k.label} · {k.es}">
+        <button class="menu-row item" class:on={m.path === app.path} class:archived={m.archived} onclick={async (e) => {
+            const btn = e.currentTarget;
+            await app.open(m.path);
+            // Hand the keyboard to the diagram (Del, arrows, Ctrl+A act on the canvas, not on this button).
+            btn.blur();
+          }} title="{k.label} · {k.es}">
           <Icon name={k.icon} size={15} />
-          <span class="t">{m.title}</span>
+          <span class="t">{m.title.trim() || 'Sin título'}</span>
         </button>
       {/each}
     {:else}
@@ -42,6 +51,17 @@
     {/each}
   </div>
   <div class="foot">
+    {#if app.deleted.length}
+      <details class="trash">
+        <summary class="small muted">Recently deleted ({app.deleted.length})</summary>
+        {#each app.deleted.slice(0, 20) as d (d.id)}
+          <div class="row between del">
+            <span class="t small">{d.title || 'Sin título'}</span>
+            <button class="secondary small" onclick={() => app.undelete(d)}>Restore</button>
+          </div>
+        {/each}
+      </details>
+    {/if}
     {#if archivedCount}
       <label class="check small muted"><input type="checkbox" bind:checked={app.showArchived} /> Show archived ({archivedCount})</label>
     {/if}
@@ -80,7 +100,15 @@
     padding: 0 var(--sp-2) var(--sp-3);
   }
   .group {
-    padding: var(--sp-3) var(--sp-2) var(--sp-1);
+    padding: var(--sp-3) 0 var(--sp-1) var(--sp-2);
+  }
+  .group button {
+    opacity: 0.55;
+    color: var(--muted);
+  }
+  .group:hover button,
+  .group button:focus-visible {
+    opacity: 1;
   }
   .item {
     color: var(--ink-2);
@@ -112,5 +140,19 @@
   }
   .folder {
     max-width: 100%;
+  }
+  .trash {
+    width: 100%;
+  }
+  .trash summary {
+    cursor: pointer;
+    padding: 2px 0;
+  }
+  .del {
+    gap: var(--sp-2);
+    padding: 2px 0;
+  }
+  .del .t {
+    flex: 1;
   }
 </style>

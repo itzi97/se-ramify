@@ -9,3 +9,6 @@ src-tauri/gen/schemas
 # updater signing key, if generated inside the repo by mistake
 *.key
 *.key.pub
+
+# installers built locally or copied in
+release/

@@ -9,7 +9,7 @@
 import { tick } from 'svelte';
 import { newDiagram, nowIso, uid } from '../model/diagram';
 import type { DataByKind, Diagram, DiagramKind, DiagramMeta, DiagramOf } from '../model/types';
-import { storage, type BackupMeta, type FileKind } from '../storage/diagrams';
+import { storage, type BackupMeta, type DeletedMeta, type FileKind } from '../storage/diagrams';
 import { setThemePref, startAppearance, type ThemePref } from '../desktop/appearance';
 import type { ImageSource, TextExport } from '../editors/types';
 import { slug } from '../model/diagram';
@@ -47,6 +47,10 @@ class AppState {
   private lastKeyAt = 0;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private lastBackup = 0;
+  /** Undo / redo per diagram, so switching away and back keeps them (this session only). */
+  private histories = new Map<string, { undo: string[]; redo: string[] }>();
+  /** Diagrams that already got a backup this session. */
+  private backedUp = new Set<string>();
   private imageSource: (() => ImageSource | Promise<ImageSource>) | null = null;
   private noticeSeq = 0;
 
@@ -88,6 +92,7 @@ class AppState {
   async refresh() {
     const s = await storage();
     this.list = await s.list();
+    void this.refreshDeleted().catch(() => {});
   }
 
   /** The open diagram, narrowed to a kind (editors use this). */
@@ -104,13 +109,16 @@ class AppState {
     const s = await storage();
     try {
       const d = await s.load(path);
+      if (this.doc) this.histories.set(this.doc.id, { undo: this.undoStack, redo: this.redoStack });
       this.imageSource = null;
       this.doc = d;
       this.path = path;
-      this.undoStack = [];
-      this.redoStack = [];
+      const h = this.histories.get(d.id);
+      this.undoStack = h?.undo ?? [];
+      this.redoStack = h?.redo ?? [];
       this.lastKey = null;
-      this.lastBackup = Date.now();
+      // The first save after opening keeps a copy (once per session), then every five minutes.
+      this.lastBackup = this.backedUp.has(d.id) ? Date.now() : 0;
       await s.setSetting('lastPath', path);
     } catch (err) {
       this.notify(`Couldn't open that diagram: ${err instanceof Error ? err.message : err}`, 'error');
@@ -129,6 +137,7 @@ class AppState {
 
   close() {
     void this.flush();
+    if (this.doc) this.histories.set(this.doc.id, { undo: this.undoStack, redo: this.redoStack });
     this.doc = null;
     this.path = null;
     this.imageSource = null;
@@ -147,13 +156,45 @@ class AppState {
   async remove() {
     if (!this.doc || !this.path) return;
     const s = await storage();
-    if (!(await s.confirm(`Delete "${this.doc.title}"? A copy stays under Previous versions.`, 'Delete diagram'))) return;
+    if (!(await s.confirm(`Delete "${this.doc.title}"? You can bring it back from "Recently deleted" at the bottom of the list.`, 'Delete diagram'))) return;
     await s.backup($state.snapshot(this.doc) as Diagram);
     const path = this.path;
     this.doc = null;
     this.path = null;
     await s.remove(path);
     await this.refresh();
+    await this.refreshDeleted();
+  }
+
+  /** Archive closes the diagram (it leaves the list); unarchive keeps it open. */
+  async toggleArchive() {
+    if (!this.doc) return;
+    const archiving = !this.doc.archived;
+    this.change((d) => (d.archived = archiving));
+    if (archiving && !this.showArchived) {
+      await this.flush();
+      this.close();
+      this.notify('Archived. Tick "Show archived" at the bottom of the list to see it again.');
+    }
+  }
+
+  deleted = $state<DeletedMeta[]>([]);
+
+  async refreshDeleted() {
+    const s = await storage();
+    const live = new Set(this.list.map((m) => m.id));
+    this.deleted = (await s.listBackedUp()).filter((b) => !live.has(b.id));
+  }
+
+  /** Bring a deleted diagram back from its newest backup. */
+  async undelete(b: DeletedMeta) {
+    const s = await storage();
+    const d = await s.loadBackup(b.path);
+    const path = await s.save({ ...d, updated: nowIso() });
+    await this.refresh();
+    await this.refreshDeleted();
+    await this.open(path);
+    this.notify(`Restored "${d.title}".`);
   }
 
   /* ------------------------------------------------------------- changes */
@@ -226,6 +267,7 @@ class AppState {
       if (meta) Object.assign(meta, { title: snap.title, project: snap.project, updated: snap.updated, archived: snap.archived });
       if (Date.now() - this.lastBackup > BACKUP_EVERY) {
         this.lastBackup = Date.now();
+        this.backedUp.add(snap.id);
         await s.backup(snap);
       }
     } catch (err) {
@@ -276,15 +318,26 @@ class AppState {
     return slug(`${this.doc.kind}-${this.doc.title}`, 60) || 'diagram';
   }
 
-  async exportImage(format: 'png' | 'svg') {
-    if (!this.doc) return;
+  /**
+   * Render the open diagram to PNG or SVG bytes (on white paper when that's
+   * the setting). Used by Export, Copy as image and the project export.
+   */
+  async renderImage(format: 'png' | 'svg'): Promise<Uint8Array> {
     const root = document.documentElement;
     const prevTheme = root.dataset.theme;
     const flip = this.lightExports && prevTheme !== 'light';
     let restoreSvg: (() => void) | null = null;
+    const restoreTheme = () => {
+      if (flip && root.dataset.theme !== prevTheme) {
+        if (prevTheme) root.dataset.theme = prevTheme;
+        else delete root.dataset.theme;
+      }
+    };
     try {
-      // No transitions while the theme flips, or the capture catches colours halfway.
-      root.classList.add('no-motion');
+      // No transitions while the theme flips, or the capture catches colours halfway;
+      // editors hide selection rings, today lines and the like under `.exporting`.
+      root.classList.add('no-motion', 'exporting');
+      if (this.lightExports) root.style.setProperty('--paper', '#ffffff');
       if (flip) {
         root.dataset.theme = 'light';
         await tick();
@@ -295,7 +348,7 @@ class AppState {
       // html-to-image copies <svg> children without their computed styles: bake them in for the capture.
       restoreSvg = inlineSvgStyles(src.el);
       const bg = getComputedStyle(root).getPropertyValue('--paper').trim() || '#ffffff';
-      const { toPng, toSvg } = await import('html-to-image');
+      const { toPng } = await import('html-to-image');
       const opts = {
         backgroundColor: this.lightExports ? '#ffffff' : bg,
         width: Math.ceil(src.width),
@@ -305,30 +358,48 @@ class AppState {
         filter: (n: Node) =>
           !(n instanceof Element && (('dataset' in n && (n as HTMLElement).dataset.noExport !== undefined) || n.classList.contains('svelte-flow__handle') || n.classList.contains('svelte-flow__resize-control')))
       };
-      const dataUrl = format === 'png' ? await toPng(src.el, opts) : await toSvg(src.el, opts);
-      restoreSvg();
-      restoreSvg = null;
-      if (flip) {
-        if (prevTheme) root.dataset.theme = prevTheme;
-        else delete root.dataset.theme;
-        await tick();
+      if (format === 'png') {
+        const dataUrl = await toPng(src.el, opts);
+        return Uint8Array.from(atob(dataUrl.split(',')[1]), (c) => c.charCodeAt(0));
       }
+      // An SVG made of HTML (foreignObject) only renders in browsers; Typst, LaTeX, Inkscape and Word
+      // show it blank. Wrap a sharp (3×) PNG instead: it scales cleanly and opens everywhere.
+      const png = await toPng(src.el, { ...opts, pixelRatio: 3 });
+      const w = Math.ceil(src.width);
+      const h = Math.ceil(src.height);
+      return new TextEncoder().encode(
+        `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><image width="${w}" height="${h}" xlink:href="${png}" href="${png}"/></svg>\n`
+      );
+    } finally {
+      restoreSvg?.();
+      restoreTheme();
+      root.style.removeProperty('--paper');
+      root.classList.remove('exporting');
+      requestAnimationFrame(() => root.classList.remove('no-motion'));
+    }
+  }
+
+  async exportImage(format: 'png' | 'svg') {
+    if (!this.doc) return;
+    try {
+      const bytes = await this.renderImage(format);
       const s = await storage();
-      const bytes =
-        format === 'png'
-          ? Uint8Array.from(atob(dataUrl.split(',')[1]), (c) => c.charCodeAt(0))
-          : new TextEncoder().encode(decodeURIComponent(dataUrl.slice(dataUrl.indexOf(',') + 1)));
       const kind: FileKind = format === 'png' ? { name: 'PNG image', extensions: ['png'], mime: 'image/png' } : { name: 'SVG image', extensions: ['svg'], mime: 'image/svg+xml' };
       if (await s.exportFile(`${this.fileBase()}.${format}`, bytes, kind)) this.notify(`Exported ${format.toUpperCase()}.`);
     } catch (err) {
       this.notify(`Export failed: ${err instanceof Error ? err.message : err}`, 'error');
-    } finally {
-      restoreSvg?.();
-      requestAnimationFrame(() => root.classList.remove('no-motion'));
-      if (flip && root.dataset.theme !== prevTheme) {
-        if (prevTheme) root.dataset.theme = prevTheme;
-        else delete root.dataset.theme;
-      }
+    }
+  }
+
+  /** Put a PNG of the diagram on the clipboard, to paste into Docs, Word, Slides… */
+  async copyImage() {
+    if (!this.doc) return;
+    try {
+      const bytes = await this.renderImage('png');
+      await (await storage()).copyImage(bytes);
+      this.notify('Copied the diagram as an image — paste it anywhere.');
+    } catch (err) {
+      this.notify(`Couldn't copy the image: ${err instanceof Error ? err.message : err}`, 'error');
     }
   }
 
@@ -350,7 +421,7 @@ class AppState {
 
   async copyText(x: TextExport) {
     try {
-      await navigator.clipboard.writeText(x.build());
+      await (await storage()).copyText(x.build());
       this.notify(`Copied ${x.label} to the clipboard.`);
     } catch (err) {
       this.notify(`Couldn't copy: ${err instanceof Error ? err.message : err}`, 'error');

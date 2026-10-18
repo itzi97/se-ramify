@@ -213,3 +213,137 @@ export async function tidy(kind: GraphKind, nodes: TidyNode[], edges: GEdge[]): 
   walk(laid, 0, 0);
   return out;
 }
+
+/* ------------------------------------------------------- special layouts */
+
+export interface Box {
+  id: string;
+  type: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/**
+ * Swimlanes (activity diagrams, process models): the lanes stay side by side
+ * as equal-height columns; every shape keeps its lane and takes its row
+ * from a top-down layered layout (`rowY`: the flat ELK result).
+ */
+export function laneLayout(
+  lanes: Box[],
+  shapes: Box[],
+  laneOf: Map<string, string | null>,
+  rowY: Map<string, { x: number; y: number }>
+): Map<string, { x: number; y: number; w?: number; h?: number }> {
+  const out = new Map<string, { x: number; y: number; w?: number; h?: number }>();
+  const ordered = [...lanes].sort((a, b) => a.x - b.x);
+  const x0 = Math.min(...ordered.map((l) => l.x));
+  const y0 = Math.min(...ordered.map((l) => l.y));
+  const HEAD = 44;
+  const GAP = 24;
+  const minY = Math.min(...shapes.map((s) => rowY.get(s.id)?.y ?? 0));
+  let x = x0;
+  let bottom = 0;
+  const place = (members: Box[], left: number, width: number) => {
+    // Shapes in the same layered row share a y; spread them across the lane.
+    const rows = new Map<number, Box[]>();
+    for (const m of members) {
+      const y = Math.round((rowY.get(m.id)?.y ?? 0) - minY);
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y)!.push(m);
+    }
+    for (const [y, row] of rows) {
+      row.sort((a, b) => (rowY.get(a.id)?.x ?? 0) - (rowY.get(b.id)?.x ?? 0));
+      const total = row.reduce((s, m) => s + m.w, 0) + GAP * (row.length - 1);
+      let cx = left + (width - total) / 2;
+      for (const m of row) {
+        out.set(m.id, { x: Math.round(cx), y: Math.round(y0 + HEAD + 24 + y) });
+        cx += m.w + GAP;
+        bottom = Math.max(bottom, HEAD + 24 + y + m.h);
+      }
+    }
+  };
+  for (const lane of ordered) {
+    const members = shapes.filter((s) => laneOf.get(s.id) === lane.id);
+    const rows = new Map<number, number>();
+    for (const m of members) {
+      const y = Math.round(rowY.get(m.id)?.y ?? 0);
+      rows.set(y, (rows.get(y) ?? 0) + m.w + GAP);
+    }
+    const width = Math.max(220, lane.w, ...[...rows.values()].map((v) => v - GAP + 48));
+    place(members, x, width);
+    out.set(lane.id, { x, y: y0, w: width });
+    x += width;
+  }
+  // Shapes outside every lane go to the right of the lanes.
+  const loose = shapes.filter((s) => !laneOf.get(s.id));
+  if (loose.length) place(loose, x + 40, Math.max(...loose.map((s) => s.w)) + 48);
+  const height = Math.max(bottom + 40, ...ordered.map((l) => l.h));
+  for (const lane of ordered) out.set(lane.id, { ...out.get(lane.id)!, h: height });
+  return out;
+}
+
+/**
+ * Traceability as in the Tema 3 slide: fixed columns (requisitos, diseño,
+ * componentes, pruebas); acceptance criteria indented under their
+ * requirement; every other shape level with the shapes that trace to it.
+ */
+export function traceLayout(nodes: Box[], column: (type: string) => number | undefined, edges: GEdge[]): Map<string, { x: number; y: number }> {
+  const out = new Map<string, { x: number; y: number }>();
+  const COLS = 4;
+  const colW: number[] = Array(COLS).fill(160);
+  for (const n of nodes) {
+    const c = column(n.type);
+    if (c !== undefined) colW[c] = Math.max(colW[c], n.w + (n.type === 'criterion' ? 28 : 0));
+  }
+  const colX: number[] = [];
+  let x = 0;
+  for (let c = 0; c < COLS; c++) {
+    colX.push(x);
+    x += colW[c] + 80;
+  }
+  const isCrit = (id: string) => nodes.find((n) => n.id === id)?.type === 'criterion';
+  const isReq = (id: string) => nodes.find((n) => n.id === id)?.type === 'req';
+  const critsOf = (reqId: string) =>
+    edges
+      .filter((e) => (e.from === reqId && isCrit(e.to)) || (e.to === reqId && isCrit(e.from)))
+      .map((e) => (e.from === reqId ? e.to : e.from))
+      .filter((id, i, a) => a.indexOf(id) === i);
+  // Column 0: requirements top to bottom, their criteria under each.
+  let y = 0;
+  const placed = new Set<string>();
+  for (const r of nodes.filter((n) => n.type === 'req').sort((a, b) => a.y - b.y)) {
+    out.set(r.id, { x: colX[0], y });
+    placed.add(r.id);
+    y += r.h + 10;
+    for (const cid of critsOf(r.id)) {
+      const c = nodes.find((n) => n.id === cid)!;
+      out.set(cid, { x: colX[0] + 28, y });
+      placed.add(cid);
+      y += c.h + 8;
+    }
+    y += 18;
+  }
+  for (const c of nodes.filter((n) => n.type === 'criterion' && !placed.has(n.id))) {
+    out.set(c.id, { x: colX[0] + 28, y });
+    y += c.h + 8;
+  }
+  // Other columns: each shape level with the average of what traces to it.
+  for (let col = 1; col < COLS; col++) {
+    const items = nodes.filter((n) => column(n.type) === col);
+    const want = (n: Box) => {
+      const from = edges.filter((e) => e.to === n.id && out.has(e.from)).map((e) => out.get(e.from)!.y);
+      return from.length ? from.reduce((s, v) => s + v, 0) / from.length : n.y;
+    };
+    let floor = -Infinity;
+    for (const n of items.map((n) => ({ n, w: want(n) })).sort((a, b) => a.w - b.w)) {
+      const yy = Math.max(n.w, floor);
+      out.set(n.n.id, { x: colX[col], y: Math.round(yy) });
+      floor = yy + n.n.h + 14;
+    }
+  }
+  // Notes and anything else keep their place.
+  void isReq;
+  return out;
+}
