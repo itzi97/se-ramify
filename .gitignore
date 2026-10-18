@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+*.local
+src-tauri/target
+src-tauri/gen/schemas
+.vscode/*
+!.vscode/extensions.json
+# updater signing key, if generated inside the repo by mistake
+*.key
+*.key.pub

@@ -1,0 +1,834 @@
+/* se-ramify: the same quiet table as ramify. Diagrams are ink on paper;
+   colour is opt-in (zones, sticky notes, bars, branches) and comes from
+   model/colors.ts. Everything else is ink on paper.
+
+   The system, in one place. Components use these and nothing ad hoc:
+     type     --fs-xs 11 · --fs-sm 12 · --fs-md 13.5 (body) · --fs-lg 16
+     space    --sp-1 4 · --sp-2 8 · --sp-3 12 · --sp-4 16 · --sp-5 24
+     radii    --r-control (inputs, menu rows, inner boxes) · --r-card (floating
+              surfaces, cards, tier rows) · --r-pill (buttons, segments, pills)
+     motion   --t: the one transition for hover, menus, panels and hints
+     panels   --panel-w: every floating panel is this wide
+     diagram  --d-ink, --d-fill, --d-line: what diagrams are drawn with
+              (shapes, lines, text); exports switch to light paper.
+     chrome   --top-h is the top strip; --list-w the diagram list drawer. */
+
+:root {
+  --paper: #e9ecef;
+  --panel: #ffffff;
+  --panel-2: #f3f4f6;
+  --line: #d3d7dc;
+  --ink: #16191d;
+  --ink-2: #3b4148;
+  --muted: #6c737a;
+  --faint: #a3a9b0;
+  --danger: #b4423a;
+  --ok: #58a55c;
+  --dot: #cfd3d8;
+  --shadow: 0 1px 2px rgba(22, 25, 29, 0.06), 0 8px 24px -12px rgba(22, 25, 29, 0.25);
+  /* Hover and press wash: works on any surface, both themes. */
+  --hover: color-mix(in srgb, var(--ink) 7%, transparent);
+  --press: color-mix(in srgb, var(--ink) 13%, transparent);
+
+  /* Tier colours: the defaults of a new board; App sets the open board's. */
+  --tier-S: #d9534f;
+  --tier-A: #e8873a;
+  --tier-B: #c9a227;
+  --tier-C: #58a55c;
+  --on-tier-S: #ffffff;
+  --on-tier-A: #ffffff;
+  --on-tier-B: #ffffff;
+  --on-tier-C: #ffffff;
+
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13.5px;
+  --fs-lg: 16px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+
+  --r-control: 6px;
+  --r-card: 10px;
+  --r-pill: 999px;
+
+  --t: 140ms ease-out;
+  /* The map re-laying itself out is movement of content, not chrome. */
+  --t-layout: 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  --panel-w: 360px;
+  --top-h: 48px;
+  --list-w: 264px;
+  /* Diagram drawing: shapes are filled with --d-fill, outlined and lettered in --d-ink. */
+  --d-ink: var(--ink);
+  --d-fill: var(--panel);
+  --d-line: var(--ink-2);
+  --d-soft: var(--panel-2);
+  /* The label column of a form row (side panel, model setup). */
+  --label-w: 56px;
+  /* Where floating chrome sits: under the top strip, inside the window edge. */
+  --chrome-top: 60px;
+  /* The bottom row (filters, capture bar, status) is this tall… */
+  --bar-h: 48px;
+  /* …and notices float just above it. */
+  --notice-bottom: calc(var(--edge) * 2 + var(--bar-h));
+  /* Height of the whole bottom zone (bottom row plus the map's zoom controls): panels stop above it. */
+  --chrome-bottom: 100px;
+  /* Width the zoom controls take in the corner, for things that must clear them. */
+  --controls-w: 44px;
+  --edge: 12px;
+
+  --font: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  /* The desktop's accent colour when it has one (set from JS); ink otherwise. */
+  --accent: var(--ink);
+  --accent-ink: var(--paper);
+  color-scheme: light;
+}
+
+/* Dark palette. JS sets data-theme from the desktop (XDG portal) or the
+   person's choice; before it runs, the media query decides. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #16191d;
+    --panel: #1f2328;
+    --panel-2: #272c32;
+    --line: #353b42;
+    --ink: #e9ecef;
+    --ink-2: #c8cdd3;
+    --muted: #8d949c;
+    --faint: #5c636b;
+    --dot: #2a2f35;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --paper: #16191d;
+  --panel: #1f2328;
+  --panel-2: #272c32;
+  --line: #353b42;
+  --ink: #e9ecef;
+  --ink-2: #c8cdd3;
+  --muted: #8d949c;
+  --faint: #5c636b;
+  --dot: #2a2f35;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  /* The app is one fixed window of floating chrome; it never scrolls as a document. */
+  overflow: hidden;
+}
+body {
+  font-family: var(--font);
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+p {
+  margin: 0;
+}
+/* Chrome only: notes on the map keep their own measured styles below. */
+code:not(.notes *),
+pre:not(.notes *) {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+code:not(.notes *) {
+  padding: 0 3px;
+  border-radius: var(--r-control);
+  background: var(--panel-2);
+  user-select: text;
+}
+pre:not(.notes *) {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-control);
+  background: var(--panel-2);
+  white-space: pre-wrap;
+  user-select: text;
+}
+/* Keys named in hints and help: the font of the sentence, in a box. `.quiet` (menus) drops the box. */
+kbd:not(.notes *) {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 var(--sp-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 16px;
+  text-align: center;
+}
+kbd.quiet {
+  padding: 0;
+  border: 0;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+/* A progress bar, whatever is loading (an update, a model download). */
+progress.dl {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+/* The invisible click-catcher behind a menu or popover. Out of the tab order: Esc closes. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: default;
+}
+.scrim:hover,
+.scrim:active:not(:disabled) {
+  background: transparent;
+}
+a {
+  color: inherit;
+}
+
+/* ------------------------------------------------------------ text */
+
+/* One meaning each: .muted is a colour, .small and .tiny are sizes. */
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: var(--fs-sm);
+}
+.tiny {
+  font-size: var(--fs-xs);
+}
+.failed {
+  color: var(--danger);
+}
+/* Section heading inside a panel or menu. */
+.sect {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------ layout */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.between {
+  justify-content: space-between;
+}
+.spacer {
+  flex: 1;
+}
+
+/* Floating chrome shares one surface treatment. */
+.float {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow);
+}
+/* Menus, panels and hints arrive the same way. */
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+.arrive {
+  animation: arrive var(--t);
+}
+/* Something still being worked on (a model answering) breathes; a caret blinks. */
+@keyframes pulse {
+  to {
+    opacity: 0.45;
+  }
+}
+.pulse {
+  animation: pulse 1.4s ease-in-out infinite alternate;
+}
+@keyframes blink {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------ controls */
+
+/* Buttons. The plain one is quiet (toolbars, menus, icon buttons);
+   .secondary is an action inside a panel; .primary is the one thing to do;
+   .danger deletes. All share size, shape, hover, press and focus. */
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--t), color var(--t), border-color var(--t), box-shadow var(--t), opacity var(--t);
+}
+button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+button:active:not(:disabled) {
+  background: var(--press);
+}
+button.secondary {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+}
+button.secondary:hover {
+  border-color: var(--muted);
+  background: var(--panel);
+}
+button.secondary:active:not(:disabled) {
+  background: var(--panel-2);
+}
+button.primary,
+button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+button.primary:hover,
+button.active:hover {
+  background: color-mix(in srgb, var(--accent) 86%, var(--paper));
+  color: var(--accent-ink);
+}
+button.primary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 76%, var(--paper));
+}
+button.danger {
+  color: var(--danger);
+}
+button.danger:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+}
+button.small {
+  height: 26px;
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+}
+button.icon {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+button.icon.small {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--r-control);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button:disabled:hover {
+  background: transparent;
+}
+button.primary:disabled:hover {
+  background: var(--accent);
+}
+/* A button that reads as a link inside a sentence. */
+button.inline {
+  display: inline;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+button.inline:hover {
+  background: none;
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Fields. */
+input[type='text'],
+input[type='search'],
+select,
+textarea {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--panel);
+  transition: background-color var(--t), border-color var(--t);
+}
+input[type='text']:hover,
+input[type='search']:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--muted);
+}
+textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+/* Checkboxes: one box, accent when on. Labels wrap them as .check. */
+input[type='checkbox']:not(.notes *) {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1.5px solid var(--muted);
+  border-radius: var(--r-control);
+  background: var(--panel);
+  cursor: pointer;
+  transition: background-color var(--t), border-color var(--t);
+}
+input[type='checkbox']:not(.notes *):hover {
+  border-color: var(--ink);
+}
+input[type='checkbox']:not(.notes *):checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+input[type='checkbox']:not(.notes *):checked::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--accent-ink);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / 12px no-repeat;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  cursor: pointer;
+}
+
+/* Menu rows: the View and Board panels and right-click menus. */
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 30px;
+  height: auto;
+  padding: 0 var(--sp-2);
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink);
+  font-size: var(--fs-md);
+  text-align: left;
+}
+.menu-row:hover:not(:disabled) {
+  background: var(--hover);
+}
+.menu-row .lucide {
+  color: var(--muted);
+}
+.menu-row.danger,
+.menu-row.danger .lucide {
+  color: var(--danger);
+}
+
+/* Segmented control: one size everywhere (view switch, tiers, layout, theme, tabs). */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--r-pill);
+  background: var(--panel-2);
+}
+.seg button {
+  height: 26px;
+  padding: 0 10px;
+  gap: 5px;
+}
+.seg button.icon {
+  width: 28px;
+  padding: 0;
+}
+
+/* Tier marks: the tier's own colour, the same one as its row in Tiers. */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  border-radius: var(--r-control);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--paper);
+  background: var(--muted);
+}
+.tier-badge.S { background: var(--tier-S); color: var(--on-tier-S); }
+.tier-badge.A { background: var(--tier-A); color: var(--on-tier-A); }
+.tier-badge.B { background: var(--tier-B); color: var(--on-tier-B); }
+.tier-badge.C { background: var(--tier-C); color: var(--on-tier-C); }
+/* In a segmented control the selected tier gets a ring, not a filled slot,
+   so the tier colour stays readable. */
+.seg button.active:has(> .tier-badge) {
+  background: var(--panel);
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+  }
+}
+
+/* Svelte Flow */
+.svelte-flow {
+  background: var(--paper);
+}
+.svelte-flow__background circle {
+  fill: var(--dot);
+}
+.svelte-flow__node {
+  transition: transform var(--t-layout);
+}
+.svelte-flow__edge-path {
+  stroke: var(--edge-color, var(--faint));
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: d var(--t-layout);
+}
+.svelte-flow__edge.dim .svelte-flow__edge-path {
+  opacity: 0.35;
+}
+.svelte-flow__edge.link .svelte-flow__edge-path {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 2 5;
+  opacity: 0.35;
+}
+.svelte-flow__edge.link.lit .svelte-flow__edge-path {
+  stroke: var(--ink);
+  opacity: 1;
+}
+.svelte-flow__handle {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  pointer-events: none;
+}
+.svelte-flow__attribution {
+  display: none;
+}
+.svelte-flow__controls {
+  box-shadow: var(--shadow);
+  border-radius: var(--r-card);
+  overflow: hidden;
+}
+.svelte-flow__controls-button {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  fill: var(--ink-2);
+}
+.svelte-flow__controls-button {
+  transition: background-color var(--t);
+}
+.svelte-flow__controls-button:hover {
+  background: var(--panel-2);
+}
+
+/* Notes blocks on the map, and the offscreen element that measures them.
+   Keep these in sync with NOTES in layout/sizes.ts. */
+.notes {
+  font-size: 12px;
+  line-height: 16px;
+  text-align: left;
+}
+.notes-measure {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  overflow: hidden;
+  font-family: var(--font);
+}
+.notes > :first-child {
+  margin-top: 0;
+}
+.notes > :last-child {
+  margin-bottom: 0;
+}
+.notes p,
+.notes ul,
+.notes ol,
+.notes blockquote,
+.notes pre,
+.notes h1,
+.notes h2,
+.notes h3,
+.notes h4 {
+  margin: 0 0 4px;
+}
+.notes h1,
+.notes h2,
+.notes h3,
+.notes h4 {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.notes ul,
+.notes ol {
+  padding-left: 16px;
+}
+.notes li {
+  margin: 0;
+}
+.notes code {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.notes pre {
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  white-space: pre-wrap;
+}
+pre code,
+.notes pre code {
+  padding: 0;
+  background: none;
+}
+.notes a {
+  color: inherit;
+  text-decoration: underline;
+}
+.notes blockquote {
+  padding-left: 8px;
+  border-left: 2px solid currentColor;
+  opacity: 0.85;
+}
+.notes hr {
+  border: 0;
+  border-top: 1px solid currentColor;
+  opacity: 0.4;
+  margin: 4px 0;
+}
+.notes input[type='checkbox'] {
+  width: auto;
+  margin: 0 4px 0 0;
+  vertical-align: middle;
+  pointer-events: none;
+}
+
+/* Overview map: sits above the zoom controls in the corner. */
+.svelte-flow__minimap.minimap {
+  margin: 0 var(--edge) calc(var(--chrome-bottom) + 50px) 0;
+  border-radius: var(--r-card);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.svelte-flow__minimap.minimap svg {
+  display: block;
+}
+
+/* ------------------------------------------------------------ se-ramify additions */
+
+/* Labels in a form: small, muted, above the field. */
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+}
+label.field > :is(input, textarea, select) {
+  color: var(--ink);
+  font-size: var(--fs-md);
+}
+input[type='number'],
+input[type='date'] {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--panel);
+}
+input[type='range'] {
+  accent-color: var(--accent);
+}
+/* An inline-editable title that looks like text until hovered. */
+.ghost-input {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  padding: 2px 6px !important;
+  border-radius: var(--r-control);
+}
+.ghost-input:hover {
+  border-color: var(--line) !important;
+}
+.ghost-input:focus {
+  border-color: var(--accent) !important;
+  background: var(--panel) !important;
+  outline: none;
+}
+/* A sticky note anywhere (boards, story maps, kanban cards use their own). */
+.sticky {
+  border-radius: var(--r-control);
+  box-shadow: 0 1px 2px rgba(22, 25, 29, 0.12);
+  padding: var(--sp-2);
+  color: var(--ink);
+}
+/* Swatch buttons (colour pickers). */
+.swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: var(--r-pill);
+  border: 2px solid transparent;
+}
+.swatch.on {
+  border-color: var(--ink);
+}
+/* Where editors live: under the top strip, right of the list drawer. */
+.editor-area {
+  position: absolute;
+  inset: var(--top-h) 0 0 0;
+  overflow: hidden;
+}
+.has-list .editor-area {
+  left: var(--list-w);
+}
+/* Scrolling canvas for the structured editors. */
+.scroll-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  background: var(--paper);
+}
+/* Floating side panel used by editors (inspector). Same shell look as Panel. */
+.inspector {
+  position: absolute;
+  top: var(--edge);
+  right: var(--edge);
+  bottom: var(--edge);
+  width: var(--panel-w);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 20;
+}
+.inspector-body {
+  flex: 1;
+  overflow: auto;
+  padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.inspector-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-3) 0 var(--sp-4);
+  min-height: 42px;
+}
+/* A toolbar floating at the top-left of an editor. */
+.toolbar {
+  position: absolute;
+  top: var(--edge);
+  left: var(--edge);
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  flex-wrap: wrap;
+  max-width: calc(100% - var(--panel-w) - 3 * var(--edge));
+}
+.toolbar .sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--line);
+}
+.empty-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: var(--muted);
+  text-align: center;
+}
+.empty-hint > div {
+  max-width: 420px;
+}
+/* Set while an image is captured, so a theme flip lands at once. */
+.no-motion *,
+.no-motion *::before,
+.no-motion *::after {
+  transition: none !important;
+  animation: none !important;
+}
