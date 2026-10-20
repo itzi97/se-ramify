@@ -37,7 +37,7 @@ export function tcoMarkdown(data: TcoData, title: string): string {
   for (const b of BLOCKS) out.push(`| ${b.label} | ${sums.map((s) => eur(s.byBlock[b.key])).join(' | ')} |`);
   out.push('');
   const c = cheapest(data);
-  if (c) out.push(`La alternativa más barata a ${years} años es **${c.name}** (${eur(c.total)}), ${eur(c.saving)} menos que ${c.against}.`, '');
+  if (c) out.push(`La alternativa más barata a ${years} años es **${c.name}** (${eur(c.total)}), ${eur(c.saving)} menos que ${c.against}.${c.unpriced ? ` _Aún faltan ${c.unpriced} precios: la comparación no es definitiva._` : ''}`, '');
   if (data.users > 0) out.push(`Calculado para ${data.users} usuarios.`, '');
 
   if (data.criteria.length) {

@@ -11,6 +11,9 @@ import { moduleFor } from '../editors/registry';
 import type { Diagram, DiagramMeta } from '../model/types';
 import type { TextExport } from '../editors/types';
 import { memoria } from './memoria';
+import { chooseFormats } from './formats.svelte';
+import { kindInfo } from '../model/kinds';
+import { agendaFrom } from './agenda';
 
 const settle = async () => {
   await tick();
@@ -27,13 +30,19 @@ export async function exportProject(project: string) {
 /**
  * Export a set of diagrams in the given order: numbered PNGs, their
  * Gherkin / PlantUML files, and a memoria titled `title` (with `intro`
- * lines after the title, e.g. a hand-in's checklist).
+ * lines after the title, e.g. a hand-in's checklist) — as Markdown and,
+ * as chosen, Word, LaTeX (whole document and a body to \input) and a
+ * PowerPoint deck for the presentation.
  */
 export async function exportSet(items: DiagramMeta[], title: string, fileBase: string, intro: string[] = [], dirTitle?: string) {
   if (!items.length) return;
+  const formats = await chooseFormats(title, items.length);
+  if (!formats) return;
   const s = await storage();
   const dir = await s.pickExportDir(dirTitle ?? `Export "${title}" into…`);
   if (!dir) return;
+  const images = new Map<string, Uint8Array>();
+  const pngs = new Map<string, Uint8Array>();
   const project = title;
   const back = app.path;
   const parts: { doc: Diagram; image: string | null; markdown: string[] }[] = [];
@@ -48,7 +57,10 @@ export async function exportSet(items: DiagramMeta[], title: string, fileBase: s
       const base = `${String(i + 1).padStart(2, '0')}-${slug(doc.title, 50) || doc.kind}`;
       let image: string | null = `${base}.png`;
       try {
-        await s.writeInto(dir, image, await app.renderImage('png'));
+        const png = await app.renderImage('png');
+        await s.writeInto(dir, image, png);
+        images.set(image, png);
+        pngs.set(doc.id, png);
       } catch {
         image = null;
       }
@@ -58,8 +70,32 @@ export async function exportSet(items: DiagramMeta[], title: string, fileBase: s
       for (const x of exports.filter((x) => x.ext === 'feature' || x.ext === 'puml' || x.ext === 'brief.md')) await s.writeInto(dir, `${base}.${x.ext}`, x.build());
       parts.push({ doc: JSON.parse(JSON.stringify(doc)) as Diagram, image, markdown });
     }
-    await s.writeInto(dir, `${fileBase}-memoria.md`, memoria(project, parts, intro));
-    app.notify(`Exported ${parts.length} diagrams and the memoria to ${dir === 'downloads' ? 'your downloads' : dir}.`);
+    const md = memoria(project, parts, intro);
+    await s.writeInto(dir, `${fileBase}-memoria.md`, md);
+    const written = ['Markdown'];
+    if (formats.has('docx')) {
+      const { memoriaDocx } = await import('./docx');
+      await s.writeInto(dir, `${fileBase}-memoria.docx`, await memoriaDocx(md, images, project));
+      written.push('Word');
+    }
+    if (formats.has('latex')) {
+      const { memoriaLatex, memoriaLatexBody } = await import('./latex');
+      await s.writeInto(dir, `${fileBase}-memoria.tex`, memoriaLatex(md, project));
+      await s.writeInto(dir, `${fileBase}-memoria-cuerpo.tex`, memoriaLatexBody(md));
+      written.push('LaTeX');
+    }
+    if (formats.has('pptx')) {
+      const { buildDeck } = await import('./pptx');
+      const deck = await buildDeck({
+        title: project,
+        subtitle: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
+        agenda: agendaFrom(intro),
+        slides: parts.map((p) => ({ title: p.doc.title, kind: kindInfo(p.doc.kind).es, notes: p.doc.notes, png: pngs.get(p.doc.id) ?? null }))
+      });
+      await s.writeInto(dir, `${fileBase}-presentacion.pptx`, deck);
+      written.push('PowerPoint');
+    }
+    app.notify(`Exported ${parts.length} diagrams and the memoria (${written.join(', ')}) to ${dir === 'downloads' ? 'your downloads' : dir}.`);
   } catch (err) {
     console.error('project export', err);
     app.notify(`Project export stopped: ${err instanceof Error ? err.message : err}`, 'error');

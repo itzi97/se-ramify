@@ -15,6 +15,32 @@ The diagrams and documents of a Software Engineering course in one local, open-s
 
 Every kind can start blank or from a small worked example (a library loans system, one of the exercise themes in Tema 3), so they can be compared side by side.
 
+## Install
+
+Download the installer for your computer from the [latest release](https://github.com/itzi97/se-ramify/releases/latest):
+
+| System | File | First time |
+|---|---|---|
+| **Windows** | `se-ramify_…_x64-setup.exe` | Windows SmartScreen may say it "protected your PC" (the app isn't signed with a paid certificate): *More info* → *Run anyway*. It installs for your user only, no admin needed. |
+| **macOS** (Intel and Apple Silicon) | `se-ramify_…_universal.dmg` | Drag it to Applications. The first time, right-click the app → *Open* → *Open* (or System Settings → Privacy & Security → *Open Anyway*). If macOS says the app "is damaged", run `xattr -cr /Applications/se-ramify.app` in Terminal once. |
+| **Linux** | `.AppImage` (any distro), `.deb` (Ubuntu / Debian), `.rpm` (Fedora) | AppImage: `chmod +x se-ramify_*.AppImage` and run it. |
+
+Nothing to sign up for and no internet needed: diagrams are files in a folder you choose.
+
+## Working as a team
+
+Everyone in the group installs the app and points it (*Choose folder* at the bottom of the list) at the **same shared folder**. Each diagram is its own small file, so people working on different diagrams never get in each other's way. Write **your name** at the bottom of the list: it's saved with every diagram you edit, the list shows each diagram's last editor's initial, and hovering shows "Edited by Bruno, 5 min ago".
+
+Three ways to share the folder — use whichever your group already has:
+
+* **Synced folder** (Google Drive for desktop, OneDrive, Dropbox, Nextcloud…): put the folder inside it. The app re-reads the folder every few seconds, so a teammate's changes appear on their own; an open diagram you aren't editing updates in place.
+* **Git repository**: keep the folder in a repo and pull / commit / push as usual. Files are pretty-printed JSON, so diffs are readable. If a merge leaves conflict markers in a file, the app lists it under *Files that need attention* with *Mine* / *Theirs* / *Both*; commit the result to finish the merge.
+* **Sending files**: ⋯ → *Save a copy to send…* writes one diagram as a file you can send by chat or e-mail; *Open a diagram file…* at the bottom of the list adds one someone sent you (if you already have it, you choose between replacing yours or keeping both).
+
+**Nobody's work is overwritten.** Before saving, the app checks whether the file changed since you opened it. If a teammate saved the same diagram while you were editing it, their version opens and yours is kept next to it as "*… (versión de Itziar)*" — compare the two and keep what you need. Copies that a sync app makes when two people save at once (and files copied by hand) are marked with ⚠ in the list, with buttons to open the original, keep the copy as its own diagram, or delete it. Deleted files keep a backup in *Recently deleted*.
+
+Tip: split the work by diagram (one person per use case diagram, another on the TCO…) and use the hand-in checklist together to see what's left.
+
 ## Hand-ins
 
 The checklist icon next to a project in the list (or ⋯ → *Hand-in checklist*) shows, for E1, E2, E3 and the final hand-in of the course project, every part the brief asks for with its weight, which of the project's diagrams cover it, and what is still missing inside them — a use case without its specification, fewer than six stakeholders, a TCO line without a price or a source, a story without Gherkin, an acta with nothing about the methodology. *Create* makes a missing diagram in the project; *Export* writes just that hand-in (the final one includes E1–E3) with its own memoria. Parts that are prose (the brand, your model's pros and cons, the agile report) are listed as reminders.
@@ -23,11 +49,19 @@ The checklist icon next to a project in the list (or ⋯ → *Hand-in checklist*
 
 ## Exports
 
-**For a document:** `Ctrl+Shift+C` (or Export → *Copy as image*) puts the diagram on the clipboard as a PNG, ready to paste into Google Docs, Word or Slides.
+**Into Word, Google Docs or PowerPoint:** `Ctrl+Shift+C` (or Export → *Copy as image*) puts the diagram on the clipboard as a PNG; paste it. Export → *Word document* gives a `.docx` with the diagram, its notes and its tables (use case specifications, TCO…); *PowerPoint slide* a 16:9 `.pptx` with the diagram fitted to the slide.
 
-**For a hand-in:** the box icon next to a project name in the list exports the whole project into a folder you pick: every diagram as a numbered PNG, the PlantUML and Gherkin files, and one `…-memoria.md` that shows the diagrams in order with their notes, use case specifications, stories, tables and matrices.
+**Into LaTeX:** Export → *PNG*, then *Copy LaTeX figure* puts the matching `\begin{figure}…\includegraphics{<the PNG's name>}…\end{figure}` on the clipboard.
 
-PNG and SVG for every diagram, on white by default (untick *White background* in the Export menu to keep your theme). The SVG holds a sharp 3× image, so it opens the same in Typst, LaTeX, Inkscape, Word and browsers. Text exports, also copyable from the same menu:
+**Sharp at the right size:** *Image size* in the Export menu picks 2× (normal), 3× (high) or 4× (print) the screen resolution. Exported PNGs carry their resolution, so Word, PowerPoint and LaTeX insert them at their on-screen size however sharp they are, instead of two to four times too big.
+
+**For a hand-in or the whole project:** the box icon next to a project (or *Export* in the hand-in checklist) asks which documents to write, then exports into a folder you pick: every diagram as a numbered PNG, the PlantUML and Gherkin files, the memoria as Markdown and, as ticked:
+
+* **Word** `…-memoria.docx`: headings with Word's styles (navigation pane, table of contents), real tables, every image with a numbered caption
+* **LaTeX** `…-memoria.tex`, a complete document for `pdflatex` / `latexmk -pdf`, and `…-memoria-cuerpo.tex`, the same body to `\input{}` into your group's template (needs graphicx, float, longtable, booktabs, xcolor and fvextra)
+* **PowerPoint** `…-presentacion.pptx` for the 5–15 minute presentation: title slide, the parts of the hand-in with their weights, one slide per diagram
+
+PNG and SVG for every diagram, on white by default (untick *White background* in the Export menu to keep your theme). The SVG holds a sharp image (3× or more), so it opens the same in Typst, LaTeX, Inkscape, Word and browsers. Text exports, also copyable from the same menu:
 
 * PlantUML: use case, class, state, deployment, mind map
 * Mermaid: class, state, activity, flowchart, sequence, Gantt

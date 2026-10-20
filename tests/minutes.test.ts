@@ -147,3 +147,10 @@ test('the retrospective example is complete: every kind and both areas', () => {
   assert.ok(d.review.some((r) => r.area === 'team') && d.review.some((r) => r.area === 'method'));
   assert.match(minutesMarkdown('Retro', d), /\*\*Acta de retrospectiva nº 8\*\*/);
 });
+
+test('a blank acta starts with its type\'s agenda', async () => {
+  const { blankMinutes } = await import('../src/lib/editors/minutes/model');
+  assert.ok(blankMinutes().agenda.length >= 3);
+  assert.equal(blankMinutes('postmortem').type, 'postmortem');
+  assert.match(blankMinutes('postmortem').agenda[0].text, /bien/i);
+});

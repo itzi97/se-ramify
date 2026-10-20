@@ -49,6 +49,9 @@ export interface DiagramBase {
   created: string;
   updated: string;
   archived?: boolean;
+  /** Who made it / who saved it last (the name set in the app), for teams sharing a folder. */
+  createdBy?: string;
+  updatedBy?: string;
 }
 
 /* ------------------------------------------------------------------ graph */
@@ -558,4 +561,9 @@ export interface DiagramMeta {
   updated: string;
   archived?: boolean;
   path: string;
+  updatedBy?: string;
+  /** Another file in the folder has the same id (a copy made by a sync app or by hand): the path of the original. */
+  dupOf?: string;
+  /** A sync app's conflict copy ("… (conflicted copy …)", "….sync-conflict-…"). */
+  conflict?: boolean;
 }

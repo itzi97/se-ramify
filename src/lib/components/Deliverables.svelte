@@ -7,7 +7,9 @@
   import { app } from '../stores/app.svelte';
   import { storage } from '../storage/diagrams';
   import { kindInfo } from '../model/kinds';
-  import { blankData, slug } from '../model/diagram';
+  import { slug } from '../model/diagram';
+  import { blankMinutes } from '../editors/minutes/model';
+  import { moduleFor } from '../editors/registry';
   import { DELIVERABLES, deliverableDocs, review, type DeliverableId, type Need, type NeedReview } from '../model/deliverables';
   import type { DataByKind, Diagram, DiagramKind, DiagramMeta, MinutesType } from '../model/types';
   import { exportSet } from '../export/project';
@@ -53,8 +55,9 @@
   async function openDoc(d: Diagram) {
     const m = metaOf(d.id);
     if (!m) return;
+    const path = m.path;
     onClose();
-    await app.open(m.path);
+    await app.open(path);
   }
 
   const MINUTES: Record<string, MinutesType> = { client: 'client', pm: 'postmortem', retro: 'retro' };
@@ -64,9 +67,12 @@
     let title = need.title;
     if (need.id === 'arch') title = have === 0 ? 'Arquitectura — local' : 'Arquitectura — nube';
     let data: DataByKind[DiagramKind] | undefined;
-    if (kind === 'minutes') data = { ...blankData('minutes'), type: MINUTES[need.id] ?? 'client' };
+    if (kind === 'minutes') data = blankMinutes(MINUTES[need.id] ?? 'client');
+    else data = (moduleFor(kind).blank as (() => DataByKind[DiagramKind]) | undefined)?.();
+    // Read the project before closing: the prop goes null once the panel is gone.
+    const into = project;
     onClose();
-    await app.create(kind, title, project, data as never);
+    await app.create(kind, title, into, data as never);
   }
 
   function stateIcon(r: NeedReview): string {
@@ -98,7 +104,8 @@
   }
 
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') onClose();
+    // The export-formats dialog opens on top of this one and handles its own Escape.
+    if (e.key === 'Escape' && !document.querySelector('[aria-label="Export formats"]')) onClose();
   }
 </script>
 

@@ -32,6 +32,8 @@ export interface EditorModule<K extends DiagramKind> {
   component: Component;
   /** A small, complete example (neutral subject: a library loans system) to start from. */
   example: () => DataByKind[K];
+  /** What "Blank" starts with when it isn't just the empty data (an acta's agenda template). */
+  blank?: () => DataByKind[K];
   /** Text exports for this diagram. */
   exports: (doc: DiagramOf<K>) => TextExport[];
   /** Optional text import (e.g. PlantUML-like sequence text) — returns new data or throws a readable error. */

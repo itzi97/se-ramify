@@ -9,12 +9,18 @@
 import { tick } from 'svelte';
 import { newDiagram, nowIso, uid } from '../model/diagram';
 import type { DataByKind, Diagram, DiagramKind, DiagramMeta, DiagramOf } from '../model/types';
-import { storage, type BackupMeta, type DeletedMeta, type FileKind } from '../storage/diagrams';
+import { storage, type BackupMeta, type DeletedMeta, type FileKind, type FileProblem } from '../storage/diagrams';
+import { splitConflict } from '../storage/team';
+import { validateDiagram, normalizeDiagram } from '../model/diagram';
 import { setThemePref, startAppearance, type ThemePref } from '../desktop/appearance';
 import type { ImageSource, TextExport } from '../editors/types';
 import { slug } from '../model/diagram';
+import { withPhys } from '../export/png';
+import { kindInfo } from '../model/kinds';
 
 const SAVE_DELAY = 500;
+/** How often the folder is re-read for teammates' changes (synced folder, git pull). */
+const WATCH_EVERY = 4000;
 const BACKUP_EVERY = 5 * 60 * 1000;
 const HISTORY = 150;
 /** Keystrokes in the same field within this window are one undo step. */
@@ -39,6 +45,14 @@ class AppState {
   lightExports = $state(true);
   /** Drawer with the list of diagrams. */
   listOpen = $state(true);
+  /** The name saved with every diagram this person edits, so a team sees who changed what. */
+  userName = $state('');
+  /** Files in the folder that couldn't be read (git conflict markers…). */
+  problems = $state<FileProblem[]>([]);
+  /** The `updated` stamp of the open diagram's file as this app last read or wrote it. */
+  private known: string | null = null;
+  private watching = false;
+  private syncing = false;
   showArchived = $state(false);
 
   private undoStack = $state<string[]>([]);
@@ -62,6 +76,7 @@ class AppState {
     this.theme = (await s.getSetting<ThemePref>('theme')) ?? 'system';
     this.lightExports = (await s.getSetting<boolean>('lightExports')) ?? true;
     this.listOpen = (await s.getSetting<boolean>('listOpen')) ?? true;
+    this.userName = (await s.getSetting<string>('userName')) ?? '';
     await startAppearance(this.theme);
     this.dir = await s.getDir();
     if (this.dir) {
@@ -76,6 +91,7 @@ class AppState {
     }
     this.ready = true;
     window.addEventListener('beforeunload', () => void this.flush());
+    this.watch();
   }
 
   async pickDir() {
@@ -92,7 +108,148 @@ class AppState {
   async refresh() {
     const s = await storage();
     this.list = await s.list();
+    this.problems = s.problems();
     void this.refreshDeleted().catch(() => {});
+  }
+
+  /* --------------------------------------------------------------- team */
+
+  /** Re-read the folder every few seconds and when the window gets focus: teammates' saves, a git pull. */
+  private watch() {
+    if (this.watching || typeof window === 'undefined') return;
+    this.watching = true;
+    setInterval(() => {
+      if (document.visibilityState === 'visible') void this.sync();
+    }, WATCH_EVERY);
+    window.addEventListener('focus', () => void this.sync());
+  }
+
+  /** Pick up changes made outside this window. */
+  async sync() {
+    if (this.syncing || !this.dir) return;
+    this.syncing = true;
+    try {
+      const s = await storage();
+      const next = await s.list();
+      const sig = (l: DiagramMeta[]) => l.map((m) => `${m.path}|${m.updated}|${m.dupOf ?? ''}`).join('\n');
+      if (sig(next) !== sig(this.list)) this.list = next;
+      const probs = s.problems();
+      if (probs.map((p) => p.path).join() !== this.problems.map((p) => p.path).join()) this.problems = probs;
+      if (!this.doc || !this.path) return;
+      const mine = next.find((m) => m.path === this.path);
+      // Someone else saved the open diagram and there's nothing of ours waiting: show theirs.
+      if (mine && this.known !== null && mine.updated !== this.known && this.saving !== 'pending') {
+        const fresh = await s.load(this.path);
+        // An edit may have started while the file was being read: then the save will sort it out.
+        if ((this.saving as string) === 'pending') return;
+        this.doc = fresh;
+        this.known = fresh.updated;
+        this.undoStack = [];
+        this.redoStack = [];
+        this.lastKey = null;
+        this.notify(`"${fresh.title}" was updated${fresh.updatedBy ? ` by ${fresh.updatedBy}` : ' outside the app'}.`);
+      }
+    } catch (err) {
+      console.warn('sync', err);
+    } finally {
+      this.syncing = false;
+    }
+  }
+
+  async setUserName(name: string) {
+    this.userName = name.trim();
+    await (await storage()).setSetting('userName', this.userName);
+  }
+
+  /** Save the open diagram as a single file to send to someone (chat, e-mail). */
+  async exportDiagramFile() {
+    if (!this.doc) return;
+    await this.flush();
+    const s = await storage();
+    const d = $state.snapshot(this.doc) as Diagram;
+    await s.exportFile(`${slug(d.title) || d.kind}.se-ramify.json`, JSON.stringify(d, null, 2) + '\n', { name: 'se-ramify diagram', extensions: ['json'], mime: 'application/json' });
+  }
+
+  /** Bring a diagram file someone sent into the folder. Same diagram already here: replace it or keep both. */
+  async importDiagramFile() {
+    const s = await storage();
+    const file = await s.importText({ name: 'se-ramify diagram', extensions: ['json'], mime: 'application/json' });
+    if (!file) return;
+    let d: Diagram;
+    try {
+      const raw = JSON.parse(file.text);
+      const problems = validateDiagram(raw);
+      if (problems.length) throw new Error(problems.join('; '));
+      d = normalizeDiagram(raw as Diagram);
+    } catch (err) {
+      this.notify(`${file.name} isn't a se-ramify diagram: ${err instanceof Error ? err.message : err}`, 'error');
+      return;
+    }
+    await this.flush();
+    const same = this.list.find((m) => m.id === d.id && !m.dupOf);
+    let path: string;
+    if (same) {
+      const newer = d.updated > same.updated;
+      const replace = await s.confirm(
+        `"${same.title}" is already in your folder (${newer ? 'the file you opened is newer' : 'yours is newer or the same'}). Replace yours with the file? Choose No to keep both.`,
+        'Diagram already here'
+      );
+      if (replace) {
+        await s.backup(await s.load(same.path));
+        path = await s.save(d, same.path);
+        if (this.path === same.path) this.path = null;
+      } else path = await s.save({ ...d, id: uid(), title: `${d.title} (copia)` });
+    } else path = await s.save(d);
+    await this.refresh();
+    await this.open(path);
+    this.notify(`Added "${d.title}"${d.project ? ` to ${d.project}` : ''}.`);
+  }
+
+  /** A file that shares its id with another (a sync app's copy): keep it as a diagram of its own. */
+  async keepAsSeparate(meta: DiagramMeta) {
+    const s = await storage();
+    const d = await s.load(meta.path);
+    const copy = { ...d, id: uid(), title: `${d.title} (copia)`, updated: nowIso(), updatedBy: this.userName || undefined };
+    await s.save(copy, meta.path);
+    if (this.path === meta.path) this.path = null;
+    await this.refresh();
+    await this.open(meta.path);
+  }
+
+  /** Delete one file of the folder (a duplicate or conflict copy) after asking; a backup is kept. */
+  async removeFile(meta: DiagramMeta) {
+    const s = await storage();
+    if (!(await s.confirm(`Delete the file of "${meta.title}"${meta.dupOf ? ' (the copy)' : ''}? A backup is kept in "Recently deleted".`, 'Delete file'))) return;
+    try {
+      await s.backup(await s.load(meta.path));
+    } catch {
+      /* unreadable: nothing to back up */
+    }
+    if (this.path === meta.path) this.close();
+    await s.remove(meta.path);
+    await this.refresh();
+  }
+
+  /** A file left with git conflict markers: keep one side, or both as separate diagrams. */
+  async resolveGitConflict(p: FileProblem, keep: 'ours' | 'theirs' | 'both') {
+    const s = await storage();
+    const sides = splitConflict(await s.readRaw(p.path));
+    if (!sides) return this.notify(`${p.name}: couldn't find both versions in it.`, 'error');
+    const parse = (t: string) => {
+      const raw = JSON.parse(t);
+      if (validateDiagram(raw).length) throw new Error('not a diagram');
+      return normalizeDiagram(raw as Diagram);
+    };
+    try {
+      const ours = parse(sides.ours);
+      const theirs = parse(sides.theirs);
+      await s.writeRaw(p.path, JSON.stringify(keep === 'theirs' ? theirs : ours, null, 2) + '\n');
+      if (keep === 'both') await s.save({ ...theirs, id: uid(), title: `${theirs.title} (${sides.theirsLabel || 'la otra versión'})` });
+      await this.refresh();
+      this.notify(keep === 'both' ? 'Kept both versions as separate diagrams.' : `Kept ${keep === 'ours' ? 'your' : 'the incoming'} version. Commit the file to finish the merge.`);
+    } catch (err) {
+      this.notify(`${p.name}: one side isn't a valid diagram (${err instanceof Error ? err.message : err}). Fix it by hand or with git.`, 'error');
+    }
   }
 
   /** The open diagram, narrowed to a kind (editors use this). */
@@ -113,6 +270,7 @@ class AppState {
       this.imageSource = null;
       this.doc = d;
       this.path = path;
+      this.known = d.updated;
       const h = this.histories.get(d.id);
       this.undoStack = h?.undo ?? [];
       this.redoStack = h?.redo ?? [];
@@ -128,6 +286,7 @@ class AppState {
   async create<K extends DiagramKind>(kind: K, title: string, project: string, data?: DataByKind[K]) {
     await this.flush();
     const d = newDiagram(kind, title, project, data);
+    if (this.userName) d.createdBy = d.updatedBy = this.userName;
     const s = await storage();
     const path = await s.save(d);
     await this.refresh();
@@ -284,11 +443,17 @@ class AppState {
     if (!this.doc || !this.path || this.saving !== 'pending') return;
     const s = await storage();
     const snap = $state.snapshot(this.doc) as Diagram;
+    if (this.userName) snap.updatedBy = this.userName;
     try {
+      // Someone else saved this file since we read it: never write over their work.
+      const disk = await s.peek(this.path);
+      if (disk && this.known !== null && disk.updated !== this.known) return await this.conflict(snap, disk.updatedBy);
       await s.save(snap, this.path);
+      this.known = snap.updated;
+      if (this.doc && this.userName) this.doc.updatedBy = this.userName;
       this.saving = 'saved';
       const meta = this.list.find((m) => m.path === this.path);
-      if (meta) Object.assign(meta, { title: snap.title, project: snap.project, updated: snap.updated, archived: snap.archived });
+      if (meta) Object.assign(meta, { title: snap.title, project: snap.project, updated: snap.updated, archived: snap.archived, updatedBy: snap.updatedBy });
       if (Date.now() - this.lastBackup > BACKUP_EVERY) {
         this.lastBackup = Date.now();
         this.backedUp.add(snap.id);
@@ -298,6 +463,27 @@ class AppState {
       this.saving = 'error';
       this.notify(`Couldn't save: ${err instanceof Error ? err.message : err}`, 'error');
     }
+  }
+
+  /**
+   * Both of us changed the same diagram: their version (already on disk)
+   * opens, ours is saved next to it as a copy, and both names are said.
+   */
+  private async conflict(mine: Diagram, by: string | undefined) {
+    const s = await storage();
+    const who = this.userName || 'tu versión';
+    const copy = { ...mine, id: uid(), title: `${mine.title} (${this.userName ? `versión de ${who}` : who})`, created: nowIso() };
+    await s.save(copy);
+    const path = this.path!;
+    this.saving = 'saved';
+    const theirs = await s.load(path);
+    this.doc = theirs;
+    this.known = theirs.updated;
+    this.undoStack = [];
+    this.redoStack = [];
+    this.lastKey = null;
+    await this.refresh();
+    this.notify(`${by ?? 'Someone'} saved "${theirs.title}" while you were editing it. Their version is open; yours is kept as "${copy.title}".`, 'error');
   }
 
   /* ------------------------------------------------------------- settings */
@@ -311,6 +497,23 @@ class AppState {
   async setLightExports(v: boolean) {
     this.lightExports = v;
     await (await storage()).setSetting('lightExports', v);
+  }
+
+  /** Pixels per CSS pixel in exported images: 2 normal, 3 high, 4 print. */
+  imageScale = $state<2 | 3 | 4>(2);
+  private exportPrefsLoaded = false;
+
+  async loadExportPrefs() {
+    if (this.exportPrefsLoaded) return;
+    this.exportPrefsLoaded = true;
+    const v = await (await storage()).getSetting<number>('imageScale');
+    if (v === 2 || v === 3 || v === 4) this.imageScale = v;
+  }
+
+  async setImageScale(v: 2 | 3 | 4) {
+    this.imageScale = v;
+    this.exportPrefsLoaded = true;
+    await (await storage()).setSetting('imageScale', v);
   }
 
   async toggleList() {
@@ -347,6 +550,7 @@ class AppState {
    * the setting). Used by Export, Copy as image and the project export.
    */
   async renderImage(format: 'png' | 'svg'): Promise<Uint8Array> {
+    await this.loadExportPrefs();
     const root = document.documentElement;
     const prevTheme = root.dataset.theme;
     const flip = this.lightExports && prevTheme !== 'light';
@@ -377,18 +581,19 @@ class AppState {
         backgroundColor: this.lightExports ? '#ffffff' : bg,
         width: Math.ceil(src.width),
         height: Math.ceil(src.height),
-        pixelRatio: 2,
+        pixelRatio: this.imageScale,
         style: { ...(src.style ?? {}) },
         filter: (n: Node) =>
           !(n instanceof Element && (('dataset' in n && (n as HTMLElement).dataset.noExport !== undefined) || n.classList.contains('svelte-flow__handle') || n.classList.contains('svelte-flow__resize-control')))
       };
       if (format === 'png') {
         const dataUrl = await toPng(src.el, opts);
-        return Uint8Array.from(atob(dataUrl.split(',')[1]), (c) => c.charCodeAt(0));
+        // pHYs: the PNG says it is `scale` × 96 dpi, so documents insert it at its on-screen size.
+        return withPhys(Uint8Array.from(atob(dataUrl.split(',')[1]), (c) => c.charCodeAt(0)), this.imageScale);
       }
       // An SVG made of HTML (foreignObject) only renders in browsers; Typst, LaTeX, Inkscape and Word
-      // show it blank. Wrap a sharp (3×) PNG instead: it scales cleanly and opens everywhere.
-      const png = await toPng(src.el, { ...opts, pixelRatio: 3 });
+      // show it blank. Wrap a sharp PNG instead (at least 3×): it scales cleanly and opens everywhere.
+      const png = await toPng(src.el, { ...opts, pixelRatio: Math.max(3, this.imageScale) });
       const w = Math.ceil(src.width);
       const h = Math.ceil(src.height);
       return new TextEncoder().encode(
@@ -424,6 +629,62 @@ class AppState {
       this.notify('Copied the diagram as an image — paste it anywhere.');
     } catch (err) {
       this.notify(`Couldn't copy the image: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  /** The open diagram as a Word document: title, image, notes and its Markdown exports (specifications, tables…). */
+  async exportDocx() {
+    if (!this.doc) return;
+    try {
+      const doc = this.doc;
+      const png = await this.renderImage('png');
+      const image = `${this.fileBase()}.png`;
+      const { moduleFor } = await import('../editors/registry');
+      const exports = (moduleFor(doc.kind).exports as (d: Diagram) => TextExport[])(doc);
+      const md = [
+        `# ${doc.title}`,
+        '',
+        `*${kindInfo(doc.kind).es}*`,
+        '',
+        `![${doc.title}](${image})`,
+        '',
+        doc.notes.trim(),
+        '',
+        ...exports.filter((x) => x.ext === 'md').map((x) => x.build().replace(/^# .*\n+/, ''))
+      ].join('\n');
+      const { memoriaDocx } = await import('../export/docx');
+      const bytes = await memoriaDocx(md, new Map([[image, png]]), doc.title);
+      const kind: FileKind = { name: 'Word document', extensions: ['docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+      if (await (await storage()).exportFile(`${this.fileBase()}.docx`, bytes, kind)) this.notify('Exported a Word document.');
+    } catch (err) {
+      this.notify(`Export failed: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  /** The open diagram as a one-slide PowerPoint deck (16:9, image fitted, kind in the footer). */
+  async exportSlide() {
+    if (!this.doc) return;
+    try {
+      const doc = this.doc;
+      const png = await this.renderImage('png');
+      const { buildDeck } = await import('../export/pptx');
+      const bytes = await buildDeck({ title: doc.title, subtitle: doc.project, agenda: [], slides: [{ title: doc.title, kind: kindInfo(doc.kind).es, notes: doc.notes, png }] });
+      const kind: FileKind = { name: 'PowerPoint presentation', extensions: ['pptx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+      if (await (await storage()).exportFile(`${this.fileBase()}.pptx`, bytes, kind)) this.notify('Exported a PowerPoint slide.');
+    } catch (err) {
+      this.notify(`Export failed: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  /** A LaTeX figure for the PNG that Export → PNG suggests, on the clipboard. */
+  async copyLatexFigure() {
+    if (!this.doc) return;
+    try {
+      const { figureSnippet } = await import('../export/latex');
+      await (await storage()).copyText(figureSnippet(`${this.fileBase()}.png`, this.doc.title));
+      this.notify('Copied a LaTeX figure — export the PNG with the same name next to your .tex.');
+    } catch (err) {
+      this.notify(`Couldn't copy: ${err instanceof Error ? err.message : err}`, 'error');
     }
   }
 

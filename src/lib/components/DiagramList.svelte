@@ -4,6 +4,7 @@
   import type { DiagramMeta } from '../model/types';
   import Icon from './Icon.svelte';
   import { exportProject } from '../export/project';
+  import { editedLine } from '../storage/team';
 
   let { onNew, onHandIns }: { onNew: () => void; onHandIns: (project: string) => void } = $props();
   let query = $state('');
@@ -44,9 +45,11 @@
             await app.open(m.path);
             // Hand the keyboard to the diagram (Del, arrows, Ctrl+A act on the canvas, not on this button).
             btn.blur();
-          }} title="{k.label} · {k.es}">
+          }} title="{k.label} · {k.es}{m.dupOf ? ' · copy of another file (made by a sync app?)' : m.conflict ? ' · conflict copy from your sync app' : ''}&#10;{editedLine(m.updated, m.updatedBy)}">
           <Icon name={k.icon} size={15} />
           <span class="t">{m.title.trim() || 'Sin título'}</span>
+          {#if m.dupOf || m.conflict}<span class="warn" aria-label="Copy"><Icon name="TriangleAlert" size={13} /></span>{/if}
+          {#if m.updatedBy && m.updatedBy !== app.userName}<span class="by" aria-hidden="true">{m.updatedBy.slice(0, 1).toUpperCase()}</span>{/if}
         </button>
       {/each}
     {:else}
@@ -54,6 +57,26 @@
     {/each}
   </div>
   <div class="foot">
+    {#if app.problems.length}
+      <details class="trash problems" open>
+        <summary class="small"><Icon name="TriangleAlert" size={13} /> Files that need attention ({app.problems.length})</summary>
+        {#each app.problems as p (p.path)}
+          <div class="prob">
+            <span class="t small" title={p.error}>{p.name}</span>
+            {#if p.gitConflict}
+              <span class="tiny muted">Git merge conflict. Keep:</span>
+              <span class="row acts2">
+                <button class="secondary small" onclick={() => app.resolveGitConflict(p, 'ours')} title="Your version (before the merge)">Mine</button>
+                <button class="secondary small" onclick={() => app.resolveGitConflict(p, 'theirs')} title="The incoming version">Theirs</button>
+                <button class="secondary small" onclick={() => app.resolveGitConflict(p, 'both')} title="Yours stays in this file; theirs becomes a new diagram">Both</button>
+              </span>
+            {:else}
+              <span class="tiny muted">Not a readable diagram: {p.error.slice(0, 120)}</span>
+            {/if}
+          </div>
+        {/each}
+      </details>
+    {/if}
     {#if app.deleted.length}
       <details class="trash">
         <summary class="small muted">Recently deleted ({app.deleted.length})</summary>
@@ -71,6 +94,10 @@
         <span class="t">Load the example project</span>
       </button>
     {/if}
+    <button class="small folder" onclick={() => app.importDiagramFile()} title="Add a diagram file someone sent you (.json) to this folder">
+      <Icon name="FileInput" size={14} />
+      <span class="t">Open a diagram file…</span>
+    </button>
     {#if archivedCount}
       <label class="check small muted"><input type="checkbox" bind:checked={app.showArchived} /> Show archived ({archivedCount})</label>
     {/if}
@@ -78,6 +105,10 @@
       <Icon name="FolderOpen" size={14} />
       <span class="t">{app.dir?.split(/[\\/]/).pop() ?? 'Choose folder'}</span>
     </button>
+    <label class="me tiny muted" title="Saved with every diagram you edit, so your team sees who changed what">
+      Your name
+      <input type="text" placeholder="e.g. Itziar" value={app.userName} onchange={(e) => app.setUserName(e.currentTarget.value)} onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
+    </label>
   </div>
 </nav>
 
@@ -166,5 +197,55 @@
   }
   .del .t {
     flex: 1;
+  }
+  .warn {
+    margin-left: auto;
+    color: var(--warn, #c98a12);
+    display: inline-flex;
+  }
+  .by {
+    margin-left: auto;
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .warn + .by {
+    margin-left: 4px;
+  }
+  .problems summary {
+    color: var(--warn, #c98a12);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .prob {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .acts2 {
+    gap: 4px;
+  }
+  .me {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+  }
+  .me input {
+    flex: 1;
+    min-width: 0;
+    height: 26px;
+    font-size: var(--fs-sm, 12px);
   }
 </style>

@@ -7,6 +7,18 @@
  */
 import { metaOf, normalizeDiagram, slug, validateDiagram } from '../model/diagram';
 import type { Diagram, DiagramMeta } from '../model/types';
+import { hasConflictMarkers, isConflictCopy, markDuplicates } from './team';
+
+export { isConflictCopy };
+
+/** A file in the folder that isn't a readable diagram (git conflict markers, a half-synced file…). */
+export interface FileProblem {
+  path: string;
+  name: string;
+  error: string;
+  /** It still has git's <<<<<<< ======= >>>>>>> markers: the app can split it. */
+  gitConflict: boolean;
+}
 
 export interface FileKind {
   name: string;
@@ -20,7 +32,14 @@ export interface Storage {
   /** Ask for a folder; null if cancelled. */
   pickDir(): Promise<string | null>;
   list(): Promise<DiagramMeta[]>;
+  /** Files the last `list()` couldn't read. */
+  problems(): FileProblem[];
   load(path: string): Promise<Diagram>;
+  /** The version on disk right now (its `updated` stamp), or null if the file is gone. Cheap: no parsing of the data. */
+  peek(path: string): Promise<{ updated: string; updatedBy?: string } | null>;
+  /** Raw text of a file in the folder, and writing it back (resolving git conflicts). */
+  readRaw(path: string): Promise<string>;
+  writeRaw(path: string, text: string): Promise<void>;
   /** Saves and returns the path the diagram now lives at. */
   save(d: Diagram, path?: string): Promise<string>;
   remove(path: string): Promise<void>;
@@ -81,10 +100,17 @@ function stampToIso(name: string): string {
   return m ? `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z` : name;
 }
 
-/** Nextcloud / Syncthing / Dropbox conflict copies are never listed. */
-export function isConflictCopy(name: string): boolean {
-  return /conflicted copy|sync-conflict/i.test(name);
+/** Parse just enough of a file to know its version, without validating the data. */
+function peekText(text: string): { updated: string; updatedBy?: string } {
+  const m = /"updated"\s*:\s*"([^"]*)"/.exec(text);
+  const b = /"updatedBy"\s*:\s*"([^"]*)"/.exec(text);
+  return { updated: m?.[1] ?? '', updatedBy: b?.[1] };
 }
+
+const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
+/** Same JSON layout everywhere (2 spaces, final newline): smaller, cleaner git diffs. */
+const serialize = (d: Diagram) => JSON.stringify(d, null, 2) + '\n';
 
 /* ------------------------------------------------------------------ Tauri */
 
@@ -96,6 +122,8 @@ async function tauriStorage(): Promise<Storage> {
   const settings = await load('settings.json', { autoSave: true, defaults: {} });
   const join = (dir: string, name: string) => (dir.endsWith('/') || dir.endsWith('\\') ? dir + name : `${dir}/${name}`);
   const getDir = async () => (await settings.get<string>('dir')) ?? null;
+  let problems: FileProblem[] = [];
+  const cache = new Map<string, { mtime: number; meta: DiagramMeta }>();
 
   return {
     getDir,
@@ -107,18 +135,49 @@ async function tauriStorage(): Promise<Storage> {
     },
     async list() {
       const dir = await getDir();
+      problems = [];
       if (!dir || !(await fs.exists(dir))) return [];
       const out: DiagramMeta[] = [];
+      const seen = new Set<string>();
       for (const e of await fs.readDir(dir)) {
-        if (!e.isFile || !e.name.endsWith('.json') || e.name.endsWith('.tmp.json') || isConflictCopy(e.name)) continue;
+        if (!e.isFile || !e.name.endsWith('.json') || e.name.endsWith('.tmp.json')) continue;
         const path = join(dir, e.name);
+        seen.add(path);
         try {
-          out.push(metaOf(parse(await fs.readTextFile(path), path), path));
+          // Only files whose modification time changed are read again (the folder is re-listed every few seconds).
+          const mtime = (await fs.stat(path)).mtime?.getTime() ?? 0;
+          const hit = cache.get(path);
+          let meta: DiagramMeta;
+          if (hit && hit.mtime === mtime && mtime) meta = { ...hit.meta };
+          else {
+            const text = await fs.readTextFile(path);
+            try {
+              meta = metaOf(parse(text, path), path);
+            } catch (err) {
+              problems.push({ path, name: e.name, error: errText(err), gitConflict: hasConflictMarkers(text) });
+              cache.delete(path);
+              continue;
+            }
+            cache.set(path, { mtime, meta: { ...meta } });
+          }
+          if (isConflictCopy(e.name)) meta.conflict = true;
+          out.push(meta);
         } catch (err) {
-          console.warn('skipping', path, err);
+          problems.push({ path, name: e.name, error: errText(err), gitConflict: false });
         }
       }
-      return out.sort((a, b) => b.updated.localeCompare(a.updated));
+      for (const p of [...cache.keys()]) if (!seen.has(p)) cache.delete(p);
+      return markDuplicates(out).sort((a, b) => b.updated.localeCompare(a.updated));
+    },
+    problems: () => problems,
+    async peek(path) {
+      if (!(await fs.exists(path))) return null;
+      return peekText(await fs.readTextFile(path));
+    },
+    readRaw: (path) => fs.readTextFile(path),
+    async writeRaw(path, text) {
+      await fs.writeTextFile(path, text);
+      cache.delete(path);
     },
     async load(path) {
       return parse(await fs.readTextFile(path), path);
@@ -127,10 +186,13 @@ async function tauriStorage(): Promise<Storage> {
       const dir = await getDir();
       if (!dir) throw new Error('No folder chosen');
       if (!(await fs.exists(dir))) await fs.mkdir(dir, { recursive: true });
-      const target = path ?? join(dir, fileNameFor(d));
+      let target = path ?? join(dir, fileNameFor(d));
+      // A new file never replaces another one (an imported copy of a diagram already in the folder).
+      if (!path) for (let i = 2; await fs.exists(target); i++) target = join(dir, fileNameFor(d).replace(/\.json$/, `-${i}.json`));
       const tmp = target.replace(/\.json$/, '.tmp.json');
-      await fs.writeTextFile(tmp, JSON.stringify(d, null, 2));
+      await fs.writeTextFile(tmp, serialize(d));
       await fs.rename(tmp, target);
+      cache.delete(target);
       return target;
     },
     async remove(path) {
@@ -230,6 +292,7 @@ async function tauriStorage(): Promise<Storage> {
 /* ---------------------------------------------------------------- Browser */
 
 function browserStorage(): Storage {
+  let problems: FileProblem[] = [];
   const PREFIX = 'se-ramify:diagram:';
   const BACKUP = 'se-ramify:backup:';
   const DIR = 'se-ramify:dir';
@@ -243,16 +306,29 @@ function browserStorage(): Storage {
     },
     async list() {
       const out: DiagramMeta[] = [];
+      problems = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)!;
         if (!key.startsWith(PREFIX)) continue;
+        const text = localStorage.getItem(key)!;
         try {
-          out.push(metaOf(parse(localStorage.getItem(key)!, key), key));
+          out.push(metaOf(parse(text, key), key));
         } catch (err) {
-          console.warn('skipping', key, err);
+          problems.push({ path: key, name: key.slice(PREFIX.length), error: errText(err), gitConflict: hasConflictMarkers(text) });
         }
       }
-      return out.sort((a, b) => b.updated.localeCompare(a.updated));
+      return markDuplicates(out).sort((a, b) => b.updated.localeCompare(a.updated));
+    },
+    problems: () => problems,
+    async peek(path) {
+      const text = localStorage.getItem(path);
+      return text === null ? null : peekText(text);
+    },
+    async readRaw(path) {
+      return localStorage.getItem(path) ?? '';
+    },
+    async writeRaw(path, text) {
+      localStorage.setItem(path, text);
     },
     async load(path) {
       const text = localStorage.getItem(path);
@@ -260,8 +336,10 @@ function browserStorage(): Storage {
       return parse(text, path);
     },
     async save(d, path) {
-      const key = path ?? PREFIX + d.id;
-      localStorage.setItem(key, JSON.stringify(d));
+      // A new diagram whose id is already taken (an imported copy) gets its own key.
+      let key = path ?? PREFIX + d.id;
+      if (!path) for (let i = 2; localStorage.getItem(key) !== null; i++) key = `${PREFIX}${d.id}-${i}`;
+      localStorage.setItem(key, serialize(d));
       return key;
     },
     async remove(path) {

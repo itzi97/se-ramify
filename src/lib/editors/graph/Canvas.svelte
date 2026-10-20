@@ -33,6 +33,15 @@
   const flow = useSvelteFlow();
   /** Fit leaves room for the toolbar (top) and the properties panel (right), and never blows a small diagram up. */
   const fitOptions = { padding: { top: '80px' as const, right: '40px' as const, bottom: '40px' as const, left: '40px' as const }, maxZoom: 1.1, minZoom: 0.15 };
+  /** Fit the diagram; with something selected, leave room for the inspector on the right so nothing ends up under it. */
+  function fitNow() {
+    let right = fitOptions.padding.right as string;
+    if (selNodes.length || selEdges.length) {
+      const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 320;
+      right = `${Math.round(panel + 40)}px`;
+    }
+    void flow.fitView({ ...fitOptions, padding: { ...fitOptions.padding, right: right as `${number}px` }, duration: 300 });
+  }
   const kind = app.doc!.kind as GraphKind;
   const palette = PALETTES[kind];
   const auto = !!palette.autoLayout;
@@ -595,7 +604,7 @@
 
   async function runTidy() {
     if (auto) {
-      void flow.fitView({ ...fitOptions, duration: 300 });
+      fitNow();
       return;
     }
     const r = rects();
@@ -639,7 +648,7 @@
         }
       }
     });
-    setTimeout(() => void flow.fitView({ ...fitOptions, duration: 300 }), 60);
+    setTimeout(fitNow, 60);
   }
 
   /* ----------------------------------------------------- palette drag */
@@ -743,7 +752,7 @@
     {/if}
   </SvelteFlow>
 
-  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onTidy={runTidy} onFit={() => flow.fitView({ ...fitOptions, duration: 300 })} routing={data.routing} />
+  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onTidy={runTidy} onFit={fitNow} routing={data.routing} />
 
   {#if empty}
     <div class="empty-hint"><div class="stack">

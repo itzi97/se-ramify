@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { app } from '../../stores/app.svelte';
   import type { MinutesData, MinutesType } from '../../model/types';
   import Icon from '../../components/Icon.svelte';
@@ -87,7 +88,14 @@
       add(key, extra);
     } else if (e.key === 'Backspace' && empty) {
       e.preventDefault();
+      // Keep the keyboard in the form: land on the field before the removed row.
+      const form = (e.currentTarget as HTMLElement).closest('form');
+      const fields = form ? [...form.querySelectorAll<HTMLElement>('input:not([type=checkbox]), textarea, select')] : [];
+      const row = (e.currentTarget as HTMLElement).parentElement;
+      const before = fields.filter((f) => !row?.contains(f) && f.compareDocumentPosition(e.currentTarget as Node) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const target = before[before.length - 1];
       del(key, id);
+      void tick().then(() => target?.focus());
     }
   }
 

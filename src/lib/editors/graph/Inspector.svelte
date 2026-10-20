@@ -223,7 +223,7 @@
             </select>
           </label>
         {/if}
-        <label class="field">{ninfo.shape === 'class' ? 'Name' : 'Text'}
+        <label class="field">{ninfo.shape === 'class' ? 'Name' : ninfo.shape === 'role' ? 'Role' : 'Text'}
           <textarea rows={ninfo.shape === 'screen' || ninfo.shape === 'note' ? 6 : 2} value={node.label} onkeydown={ninfo.shape === 'screen' || ninfo.shape === 'note' ? undefined : enterBlurs} oninput={(e) => setNode({ label: e.currentTarget.value.replace(/\n+$/, '') }, 'label')}></textarea>
         </label>
         {#if ninfo.shape === 'screen'}

@@ -3,7 +3,7 @@
  * of what an acta still lacks, and the Markdown / CSV exports. Pure, so the
  * node tests can call it.
  */
-import { uid } from '../../model/diagram';
+import { blankData, uid } from '../../model/diagram';
 import type { MinutesData, MinutesType } from '../../model/types';
 
 export interface MinutesTypeInfo {
@@ -308,4 +308,9 @@ export function minutesCsv(raw: MinutesData): string {
   const lines = [['Acción', 'Responsable', 'Fecha límite', 'Estado'].join(';')];
   for (const a of d.actions.filter((x) => x.text.trim())) lines.push([a.text.trim(), a.owner.trim(), shortDate(a.due), a.done ? 'Hecha' : 'Pendiente'].map(csvCell).join(';'));
   return '﻿' + lines.join('\n') + '\n';
+}
+
+/** A new, empty acta of a type, with that type's agenda already in place. */
+export function blankMinutes(type: MinutesType = 'client'): MinutesData {
+  return { ...blankData('minutes'), type, agenda: templateAgenda(type) };
 }

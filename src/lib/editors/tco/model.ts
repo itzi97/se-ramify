@@ -114,11 +114,17 @@ export function summarizeAll(data: TcoData): AltSummary[] {
 }
 
 /** The cheapest alternative over the horizon and how much it saves against the next one. */
-export function cheapest(data: TcoData): { id: string; name: string; total: number; saving: number; against: string } | null {
+/**
+ * The cheapest priced alternative and its saving against the next one.
+ * `unpriced` counts lines still without a price in the alternatives compared,
+ * so the comparison can say it isn't final yet.
+ */
+export function cheapest(data: TcoData): { id: string; name: string; total: number; saving: number; against: string; unpriced: number } | null {
   const s = summarizeAll(data).filter((x) => x.total > 0);
   if (s.length < 2) return null;
   const sorted = [...s].sort((a, b) => a.total - b.total);
-  return { id: sorted[0].id, name: sorted[0].name, total: sorted[0].total, saving: sorted[1].total - sorted[0].total, against: sorted[1].name };
+  const unpriced = s.reduce((n, x) => n + x.unpriced, 0);
+  return { id: sorted[0].id, name: sorted[0].name, total: sorted[0].total, saving: sorted[1].total - sorted[0].total, against: sorted[1].name, unpriced };
 }
 
 /* ------------------------------------------------------------- criteria */
@@ -160,11 +166,16 @@ export function eur(v: number, cents = false): string {
   return s.replace(/^(-?)(\d)(\d{3})(\D)/, '$1$2.$3$4');
 }
 
-/** A number as typed in Spanish: "1.234,5" → 1234.5. Also accepts "1234.5". */
+/**
+ * A number as typed in Spanish: "1.234,5" → 1234.5. Also accepts "1234.5",
+ * and a price pasted from an English page ("$1,234.50"): with both marks,
+ * the last one is the decimal separator.
+ */
 export function parseAmount(text: string): number {
-  let t = text.replace(/[€\s]/g, '');
+  let t = text.replace(/USD|EUR|US|[€$£\s]/gi, '');
   if (!t) return 0;
-  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+  if (t.includes(',') && t.includes('.') && t.lastIndexOf('.') > t.lastIndexOf(',')) t = t.replace(/,/g, '');
+  else if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
   else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
   const v = Number(t);
   return Number.isFinite(v) ? v : 0;

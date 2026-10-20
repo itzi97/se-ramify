@@ -2,6 +2,18 @@
 
 Each section below is the release note for that version: short bullets, user-facing changes only.
 
+## 0.3.0
+
+- Installers for Windows, macOS (Intel and Apple Silicon) and Linux
+- Team work on a shared folder (Drive, OneDrive, Dropbox or git): teammates' changes appear within seconds, and nobody's work is overwritten — if two people save the same diagram, both versions are kept
+- Your name is saved with the diagrams you edit; the list shows who edited each one last
+- Sync apps' conflict copies and duplicate files are flagged, with buttons to keep or delete them; git conflict markers are resolved from the app (mine / theirs / both)
+- Save a diagram as a file to send, and open a diagram file someone sent you
+- Hand-in and project exports also write the memoria as Word (.docx) and LaTeX (a whole document plus a body to \input into your template), and a PowerPoint deck for the presentation; you pick which
+- Export a single diagram as a Word document or a PowerPoint slide; copy a LaTeX figure for its PNG
+- Image size in the Export menu: normal, high or print resolution; PNGs carry their resolution, so documents insert them at their on-screen size
+- Fixes: Create in the hand-in checklist, blank actas start with their agenda, older or half-written files open without errors, TCO reads prices like "$1,234.50" and says when prices are still missing, fitting the view leaves room for the side panel
+
 ## 0.2.0
 
 - Hand-in checklist per project: what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what's missing inside them; create what's missing and export one hand-in with its own memoria

@@ -1,0 +1,1522 @@
+% Generado con se-ramify. Para incluirlo en vuestra plantilla: \input{...}
+% Necesita graphicx, longtable, booktabs, float, xcolor y fvextra.
+% se-ramify: an image at its natural size, shrunk to fit the text block when bigger.
+\providecommand{\seramifyfigura}[1]{%
+  \sbox0{\includegraphics{#1}}%
+  \ifdim\wd0>\linewidth
+    \includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{#1}%
+  \else\ifdim\ht0>0.78\textheight
+    \includegraphics[height=0.78\textheight,keepaspectratio]{#1}%
+  \else\usebox0\fi\fi}
+
+\section*{Ejemplo — BiblioYa — Entrega final}
+\addcontentsline{toc}{section}{Ejemplo — BiblioYa — Entrega final}
+
+\emph{Exportado con se-ramify el 20/10/2026.}
+
+\subsection*{Contenido de la entrega}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.444\linewidth}>{\raggedright\arraybackslash}p{0.061\linewidth}>{\raggedright\arraybackslash}p{0.419\linewidth}@{}}
+\toprule
+\textbf{Apartado} & \textbf{Peso} & \textbf{Diagramas} \\
+\midrule
+\endhead
+Definición de la empresa: nombre, marca, modelo de negocio y roles & 25 \% & E1 · Modelo de negocio — Faro Software; E1 · Organigrama y roles; \emph{Nombre y marca (logo, lema) (texto)} \\
+Descripción completa de las dos alternativas, con su arquitectura & 25 \% & E1 · Arquitectura — local; E1 · Arquitectura — nube \\
+TCO a 3 años con costes completos y realistas de cada alternativa & 25 \% & E1 · TCO a 3 años \\
+Recomendación razonada de la alternativa más adecuada & 25 \% & E1 · TCO a 3 años \\
+Todos los diagramas UML: casos de uso con especificaciones, clases y secuencia & 60 \% & E2 · Casos de uso; E2 · Diagrama de clases de diseño; E2 · Secuencia — Reservar libro \\
+Mapa de stakeholders (uno de los dos formatos, mínimo seis) & 20 \% & E2 · Mapa de stakeholders \\
+Visión del proyecto según el modelo del "elevator pitch" & 20 \% & E2 · Visión — elevator pitch \\
+Vuestro propio modelo de desarrollo: nombre, etapas, roles, elementos clave, ventajas e inconvenientes & 30 \% & E3 · Modelo de desarrollo Faro; \emph{Descripción, roles, ventajas / inconvenientes y dónde usarlo (texto)} \\
+Backlog completo a nivel de épica, y una épica en historias de usuario & 20 \% & E3 · Backlog de producto \\
+PUD: Gantt, etapas con sus artefactos, actas e informe & 50 \% & E3 · Planificación PUD; E3 · Proceso Unificado — fases y artefactos; E3 · Acta 1 — reunión con el cliente; \emph{Informe con toda la documentación — the memoria this checklist exports, plus your text (texto)} \\
+Elementos previos corregidos & 30 \% & \emph{E1, E2 and E3 complete — see their tabs (texto)} \\
+Acta post mortem: qué ha funcionado y qué mejoraríais (equipo y PUD) & 10 \% & Final · Acta post mortem \\
+Informe "¿y con metodología ágil?" y su acta (bien / mal / mejorable) & 20 \% & Final · Acta — ¿y con metodología ágil?; \emph{Informe: qué habría cambiado con una metodología ágil (texto)} \\
+User Story Mapping de los dos primeros sprints & 10 \% & Final · User Story Mapping — sprints 1 y 2 \\
+Todas las épicas del componente en historias con Gherkin, y el material para generar y probar la app con IA & 30 \% & E3 · Backlog de producto \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{1. E1 · Modelo de negocio — Faro Software}
+
+\emph{Lienzo de modelo de negocio}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{01-e1-modelo-de-negocio-faro-software.png}
+\caption{E1 · Modelo de negocio — Faro Software}
+\end{figure}
+
+Faro Software es una empresa inventada de cuatro personas. Este lienzo describe la empresa, no el producto.
+
+\textbf{Negocio:} Faro Software — software a medida para instituciones educativas y culturales
+
+\subsubsection*{Socios clave}
+
+\begin{itemize}
+\item Proveedor de nube (alojamiento)
+\item Universidades con las que ya trabajamos
+\item Freelance de diseño UX
+\end{itemize}
+
+\subsubsection*{Actividades clave}
+
+\begin{itemize}
+\item Análisis de requisitos con el cliente
+\item Desarrollo y pruebas
+\item Mantenimiento y soporte
+\end{itemize}
+
+\subsubsection*{Recursos clave}
+
+\begin{itemize}
+\item Equipo de 4 ingenieros
+\item Plantillas y componentes reutilizables
+\item Experiencia en el sector educativo
+\end{itemize}
+
+\subsubsection*{Propuesta de valor}
+
+\begin{itemize}
+\item Aplicaciones a medida entregadas por iteraciones cortas
+\item El cliente ve una versión que funciona cada 3 semanas
+\item Documentación formal para poder mantenerla
+\end{itemize}
+
+\subsubsection*{Relación con clientes}
+
+\begin{itemize}
+\item Reunión con el cliente al final de cada iteración
+\item Un único interlocutor (jefa de proyecto)
+\end{itemize}
+
+\subsubsection*{Canales}
+
+\begin{itemize}
+\item Recomendación entre universidades
+\item Concursos públicos
+\item Web y LinkedIn
+\end{itemize}
+
+\subsubsection*{Segmentos de clientes}
+
+\begin{itemize}
+\item Bibliotecas y servicios universitarios
+\item Museos y archivos pequeños
+\end{itemize}
+
+\subsubsection*{Estructura de costes}
+
+\begin{itemize}
+\item Salarios ($\approx$80 \%)
+\item Licencias y nube para desarrollo
+\item Formación
+\end{itemize}
+
+\subsubsection*{Fuentes de ingresos}
+
+\begin{itemize}
+\item Proyecto a precio cerrado por fases
+\item Contrato anual de mantenimiento (15 \% del proyecto)
+\item Bolsa de horas para cambios
+\end{itemize}
+
+\subsubsection*{Notas}
+
+Faro Software es una empresa inventada de cuatro personas. Este lienzo describe la empresa, no el producto.
+
+\subsection*{2. E1 · Organigrama y roles}
+
+\emph{Organigrama y roles}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{02-e1-organigrama-y-roles.png}
+\caption{E1 · Organigrama y roles}
+\end{figure}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.212\linewidth}>{\raggedright\arraybackslash}p{0.106\linewidth}>{\raggedright\arraybackslash}p{0.142\linewidth}>{\raggedright\arraybackslash}p{0.191\linewidth}>{\raggedright\arraybackslash}p{0.263\linewidth}@{}}
+\toprule
+\textbf{Rol} & \textbf{Persona} & \textbf{Área} & \textbf{Depende de} & \textbf{Responsabilidades} \\
+\midrule
+\endhead
+Dirección y jefatura de proyecto & Ana López &  & — & Planifica y sigue el proyecto (Gantt)\newline{}Interlocutora con el cliente\newline{}Redacta las actas \\
+Análisis y requisitos & Bruno Díaz & Equipo de desarrollo & Dirección y jefatura de proyecto & Casos de uso y especificaciones\newline{}Historias de usuario y Gherkin \\
+Arquitectura y diseño & Carla Gómez & Equipo de desarrollo & Dirección y jefatura de proyecto & Diagramas de clases y secuencia\newline{}Arquitectura y TCO \\
+Desarrollo y calidad & David Martín & Equipo de desarrollo & Dirección y jefatura de proyecto & Implementación\newline{}Plan y casos de prueba \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{3. E1 · Arquitectura — local}
+
+\emph{Diagrama de arquitectura / equipos}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{03-e1-arquitectura-local.png}
+\caption{E1 · Arquitectura — local}
+\end{figure}
+
+Alternativa A. Todo duplicado donde una avería pararía el servicio: dos servidores con réplica, dos switches, SAI y copias en NAS.
+
+\subsubsection*{Sala técnica de la biblioteca}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.596\linewidth}>{\raggedright\arraybackslash}p{0.353\linewidth}@{}}
+\toprule
+\textbf{Equipo} & \textbf{Tipo} \\
+\midrule
+\endhead
+Router + firewall & Cortafuegos \\
+SAI & SAI \\
+Switch principal ×2 & Switch \\
+Servidor 1 (app + BD) & Servidor \\
+Servidor 2 (réplica) & Servidor \\
+NAS de copias & NAS / copias \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Mostradores y despachos}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.534\linewidth}>{\raggedright\arraybackslash}p{0.415\linewidth}@{}}
+\toprule
+\textbf{Equipo} & \textbf{Tipo} \\
+\midrule
+\endhead
+Switch de planta & Switch \\
+Lectores de carné ×4 & TPV \\
+PC mostrador ×4 & PC de sobremesa \\
+Portátiles gestión ×2 & Portátil \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Fuera de zonas}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.686\linewidth}>{\raggedright\arraybackslash}p{0.263\linewidth}@{}}
+\toprule
+\textbf{Equipo} & \textbf{Tipo} \\
+\midrule
+\endhead
+Socios (móvil) & Móvil \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Conexiones}
+
+\begin{itemize}
+\item Router + firewall $\rightarrow$ Switch principal ×2
+\item SAI $\rightarrow$ Servidor 1 (app + BD) (corriente)
+\item Switch principal ×2 $\rightarrow$ Servidor 1 (app + BD)
+\item Switch principal ×2 $\rightarrow$ Servidor 2 (réplica)
+\item Switch principal ×2 $\rightarrow$ NAS de copias
+\item Servidor 1 (app + BD) $\rightarrow$ Servidor 2 (réplica) (réplica)
+\item Switch principal ×2 $\rightarrow$ Switch de planta
+\item Switch de planta $\rightarrow$ PC mostrador ×4
+\item Switch de planta $\rightarrow$ Portátiles gestión ×2
+\item Lectores de carné ×4 $\rightarrow$ PC mostrador ×4 (USB)
+\item Socios (móvil) $\rightarrow$ Router + firewall (Internet (HTTPS))
+\end{itemize}
+
+\subsection*{4. E1 · Arquitectura — nube}
+
+\emph{Diagrama de arquitectura / equipos}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{04-e1-arquitectura-nube.png}
+\caption{E1 · Arquitectura — nube}
+\end{figure}
+
+Alternativa B. La aplicación en dos zonas de disponibilidad detrás de un balanceador, con base de datos gestionada multi-AZ.
+
+\subsubsection*{Biblioteca}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.534\linewidth}>{\raggedright\arraybackslash}p{0.415\linewidth}@{}}
+\toprule
+\textbf{Equipo} & \textbf{Tipo} \\
+\midrule
+\endhead
+Router + firewall & Cortafuegos \\
+Switch & Switch \\
+PC mostrador ×4 & PC de sobremesa \\
+Portátiles gestión ×2 & Portátil \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Nube (región eu-south-2, Madrid)}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.551\linewidth}>{\raggedright\arraybackslash}p{0.398\linewidth}@{}}
+\toprule
+\textbf{Equipo} & \textbf{Tipo} \\
+\midrule
+\endhead
+Balanceador de carga & Switch \\
+VM app — zona A & Servicio en la nube \\
+VM app — zona B & Servicio en la nube \\
+BD gestionada (multi-AZ) & Base de datos \\
+Copias (almacenamiento) & NAS / copias \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Fuera de zonas}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.686\linewidth}>{\raggedright\arraybackslash}p{0.263\linewidth}@{}}
+\toprule
+\textbf{Equipo} & \textbf{Tipo} \\
+\midrule
+\endhead
+Socios (móvil) & Móvil \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Conexiones}
+
+\begin{itemize}
+\item Router + firewall $\rightarrow$ Balanceador de carga (Internet (HTTPS))
+\item Switch $\rightarrow$ Router + firewall
+\item PC mostrador ×4 $\rightarrow$ Switch
+\item Portátiles gestión ×2 $\rightarrow$ Switch
+\item Balanceador de carga $\rightarrow$ VM app — zona A
+\item Balanceador de carga $\rightarrow$ VM app — zona B
+\item VM app — zona A $\rightarrow$ BD gestionada (multi-AZ)
+\item VM app — zona B $\rightarrow$ BD gestionada (multi-AZ)
+\item BD gestionada (multi-AZ) $\rightarrow$ Copias (almacenamiento) (copia diaria)
+\item Socios (móvil) $\rightarrow$ Balanceador de carga (4G / Wi-Fi)
+\end{itemize}
+
+\subsection*{5. E1 · TCO a 3 años}
+
+\emph{TCO (coste total de propiedad)}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{05-e1-tco-a-3-anos.png}
+\caption{E1 · TCO a 3 años}
+\end{figure}
+
+\emph{Coste total de propiedad a 3 años, sin inflación ni tasa de descuento. Importes en euros.}
+
+\subsubsection*{Local (on-premises)}
+
+Dos servidores en la sala técnica de la biblioteca central: uno principal y otro de réplica en espera (la base de datos se replica en tiempo real). SAI para cortes de luz, NAS con copias diarias y una copia semanal fuera del edificio. Un cortafuegos y un switch gestionable conectan con los puestos de las cinco bibliotecas.
+
+{\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.109\linewidth}>{\raggedright\arraybackslash}p{0.195\linewidth}>{\raggedright\arraybackslash}p{0.071\linewidth}>{\raggedright\arraybackslash}p{0.071\linewidth}>{\raggedright\arraybackslash}p{0.078\linewidth}>{\raggedright\arraybackslash}p{0.069\linewidth}>{\raggedright\arraybackslash}p{0.078\linewidth}>{\raggedright\arraybackslash}p{0.078\linewidth}>{\raggedright\arraybackslash}p{0.136\linewidth}@{}}
+\toprule
+\textbf{Bloque} & \textbf{Concepto} & \textbf{Tipo} & \textbf{Pago} & \textbf{Año 1} & \textbf{Año 2} & \textbf{Año 3} & \textbf{Total} & \textbf{Fuente} \\
+\midrule
+\endhead
+Desarrollo & Análisis, desarrollo y pruebas (horas del equipo, 35 €/h) (×1200) & CAPEX & Una vez (año 1) & 42.000~€ & 0~€ & 0~€ & \textbf{42.000~€} & ejemplo — horas estimadas × coste/hora \\
+Desarrollo & Instalación, configuración y migración de datos & CAPEX & Una vez (año 1) & 3.200~€ & 0~€ & 0~€ & \textbf{3.200~€} & ejemplo — sustituir por precio real \\
+Desarrollo & Formación del personal de las bibliotecas & CAPEX & Una vez (año 1) & 1.200~€ & 0~€ & 0~€ & \textbf{1.200~€} & ejemplo — sustituir por precio real \\
+HW y SW & Servidor Dell PowerEdge T150 (Xeon E-2314, 32 GB, 2× SSD 960 GB) (×2) & CAPEX & Una vez (año 1) & 3.300~€ & 0~€ & 0~€ & \textbf{3.300~€} & ejemplo — sustituir por precio real \\
+HW y SW & SAI APC Smart-UPS 1500 VA & CAPEX & Una vez (año 1) & 780~€ & 0~€ & 0~€ & \textbf{780~€} & ejemplo — sustituir por precio real \\
+HW y SW & NAS Synology DS923+ & CAPEX & Una vez (año 1) & 620~€ & 0~€ & 0~€ & \textbf{620~€} & ejemplo — sustituir por precio real \\
+HW y SW & Discos para el NAS (4 TB) (×4) & CAPEX & Una vez (año 1) & 480~€ & 0~€ & 0~€ & \textbf{480~€} & ejemplo — sustituir por precio real \\
+HW y SW & Switch gestionable 24 puertos & CAPEX & Una vez (año 1) & 280~€ & 0~€ & 0~€ & \textbf{280~€} & ejemplo — sustituir por precio real \\
+HW y SW & Cortafuegos FortiGate 40F & CAPEX & Una vez (año 1) & 650~€ & 0~€ & 0~€ & \textbf{650~€} & ejemplo — sustituir por precio real \\
+HW y SW & Armario rack 12U & CAPEX & Una vez (año 1) & 350~€ & 0~€ & 0~€ & \textbf{350~€} & ejemplo — sustituir por precio real \\
+HW y SW & Windows Server 2025 Standard (16 núcleos) (×2) & CAPEX & Una vez (año 1) & 2.300~€ & 0~€ & 0~€ & \textbf{2.300~€} & ejemplo — sustituir por precio real \\
+HW y SW & Ampliación de garantía del fabricante (×2) & OPEX & Al año desde el año 2 & 0~€ & 380~€ & 380~€ & \textbf{760~€} & ejemplo — sustituir por precio real \\
+Operaciones & Administrador de sistemas (20 \% de 38.000 €/año) & OPEX & Al año & 7.600~€ & 7.600~€ & 7.600~€ & \textbf{22.800~€} & ejemplo — tabla salarial \\
+Operaciones & Copia externa en la nube (2 TB) & OPEX & Al mes & 300~€ & 300~€ & 300~€ & \textbf{900~€} & ejemplo — sustituir por precio real \\
+Operaciones & Mantenimiento correctivo y parches (40 h/año) & OPEX & Al año & 1.400~€ & 1.400~€ & 1.400~€ & \textbf{4.200~€} & ejemplo — sustituir por precio real \\
+Largo plazo & Reemplazo de discos del NAS (×4) & CAPEX & Una vez (año 3) & 0~€ & 0~€ & 480~€ & \textbf{480~€} & ejemplo — sustituir por precio real \\
+ & \textbf{Total} &  &  & \textbf{64.460~€} & \textbf{9.680~€} & \textbf{10.160~€} & \textbf{84.300~€} &  \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Nube (AWS, región España)}
+
+La aplicación corre en dos máquinas virtuales en dos zonas de disponibilidad detrás de un balanceador; la base de datos es PostgreSQL gestionado con réplica en otra zona. Copias automáticas diarias. Las bibliotecas se conectan por Internet (HTTPS) y la sede, además, por VPN.
+
+{\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.109\linewidth}>{\raggedright\arraybackslash}p{0.201\linewidth}>{\raggedright\arraybackslash}p{0.071\linewidth}>{\raggedright\arraybackslash}p{0.072\linewidth}>{\raggedright\arraybackslash}p{0.078\linewidth}>{\raggedright\arraybackslash}p{0.069\linewidth}>{\raggedright\arraybackslash}p{0.069\linewidth}>{\raggedright\arraybackslash}p{0.078\linewidth}>{\raggedright\arraybackslash}p{0.138\linewidth}@{}}
+\toprule
+\textbf{Bloque} & \textbf{Concepto} & \textbf{Tipo} & \textbf{Pago} & \textbf{Año 1} & \textbf{Año 2} & \textbf{Año 3} & \textbf{Total} & \textbf{Fuente} \\
+\midrule
+\endhead
+Desarrollo & Análisis, desarrollo y pruebas (horas del equipo, 35 €/h) (×1200) & CAPEX & Una vez (año 1) & 42.000~€ & 0~€ & 0~€ & \textbf{42.000~€} & ejemplo — horas estimadas × coste/hora \\
+Desarrollo & Migración de datos y puesta en marcha en la nube & CAPEX & Una vez (año 1) & 2.400~€ & 0~€ & 0~€ & \textbf{2.400~€} & ejemplo — sustituir por precio real \\
+Desarrollo & Formación del personal de las bibliotecas & CAPEX & Una vez (año 1) & 1.200~€ & 0~€ & 0~€ & \textbf{1.200~€} & ejemplo — sustituir por precio real \\
+HW y SW & Máquinas virtuales EC2 t3.medium (una por zona) (×2) & OPEX & Al mes & 840~€ & 840~€ & 840~€ & \textbf{2.520~€} & ejemplo — calculadora de AWS \\
+HW y SW & Base de datos RDS PostgreSQL db.t3.medium multi-AZ & OPEX & Al mes & 1.680~€ & 1.680~€ & 1.680~€ & \textbf{5.040~€} & ejemplo — calculadora de AWS \\
+HW y SW & Balanceador de carga (ALB) & OPEX & Al mes & 264~€ & 264~€ & 264~€ & \textbf{792~€} & ejemplo — calculadora de AWS \\
+HW y SW & Almacenamiento de copias (S3, 300 GB) & OPEX & Al mes & 96~€ & 96~€ & 96~€ & \textbf{288~€} & ejemplo — calculadora de AWS \\
+HW y SW & Tráfico de salida & OPEX & Al mes & 60~€ & 60~€ & 60~€ & \textbf{180~€} & ejemplo — calculadora de AWS \\
+HW y SW & VPN sitio a sitio con la biblioteca central & OPEX & Al mes & 432~€ & 432~€ & 432~€ & \textbf{1.296~€} & ejemplo — calculadora de AWS \\
+Operaciones & Plan de soporte Business & OPEX & Al mes & 1.200~€ & 1.200~€ & 1.200~€ & \textbf{3.600~€} & ejemplo — web del proveedor \\
+Operaciones & Administrador cloud (10 \% de 40.000 €/año) & OPEX & Al año & 4.000~€ & 4.000~€ & 4.000~€ & \textbf{12.000~€} & ejemplo — tabla salarial \\
+Operaciones & Monitorización y alertas & OPEX & Al mes & 120~€ & 120~€ & 120~€ & \textbf{360~€} & ejemplo — calculadora de AWS \\
+Largo plazo & Crecimiento de uso (más socios y préstamos) & OPEX & Al año desde el año 2 & 0~€ & 300~€ & 300~€ & \textbf{600~€} & ejemplo — sustituir por precio real \\
+Largo plazo & Plan de salida: exportar datos si se cambia de proveedor & CAPEX & Una vez (año 3) & 0~€ & 0~€ & 800~€ & \textbf{800~€} & ejemplo — sustituir por precio real \\
+ & \textbf{Total} &  &  & \textbf{54.292~€} & \textbf{8.992~€} & \textbf{9.792~€} & \textbf{73.076~€} &  \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Resumen}
+
+{\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.253\linewidth}>{\raggedright\arraybackslash}p{0.083\linewidth}>{\raggedright\arraybackslash}p{0.073\linewidth}>{\raggedright\arraybackslash}p{0.083\linewidth}>{\raggedright\arraybackslash}p{0.123\linewidth}>{\raggedright\arraybackslash}p{0.083\linewidth}>{\raggedright\arraybackslash}p{0.083\linewidth}>{\raggedright\arraybackslash}p{0.116\linewidth}@{}}
+\toprule
+\textbf{Alternativa} & \textbf{Año 1} & \textbf{Año 2} & \textbf{Año 3} & \textbf{Total 3 años} & \textbf{CAPEX} & \textbf{OPEX} & \textbf{Por usuario} \\
+\midrule
+\endhead
+Local (on-premises) & 64.460~€ & 9.680~€ & 10.160~€ & \textbf{84.300~€} & 55.640~€ & 28.660~€ & 2.810,00~€ \\
+Nube (AWS, región España) & 54.292~€ & 8.992~€ & 9.792~€ & \textbf{73.076~€} & 46.400~€ & 26.676~€ & 2.435,87~€ \\
+\bottomrule
+\end{longtable}}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.286\linewidth}>{\raggedright\arraybackslash}p{0.268\linewidth}>{\raggedright\arraybackslash}p{0.369\linewidth}@{}}
+\toprule
+\textbf{Bloque} & \textbf{Local (on-premises)} & \textbf{Nube (AWS, región España)} \\
+\midrule
+\endhead
+Desarrollo y despliegue & 46.400~€ & 45.600~€ \\
+Hardware y software & 9.520~€ & 10.116~€ \\
+Operaciones & 27.900~€ & 15.960~€ \\
+Gastos a largo plazo & 480~€ & 1.400~€ \\
+\bottomrule
+\end{longtable}}
+
+La alternativa más barata a 3 años es \textbf{Nube (AWS, región España)} (73.076~€), 11.224~€ menos que Local (on-premises).
+
+Calculado para 30 usuarios.
+
+\subsubsection*{Comparación cualitativa}
+
+\emph{Puntuación de 1 (peor) a 5 (mejor), ponderada por el peso de cada criterio.}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.297\linewidth}>{\raggedright\arraybackslash}p{0.061\linewidth}>{\raggedright\arraybackslash}p{0.230\linewidth}>{\raggedright\arraybackslash}p{0.310\linewidth}@{}}
+\toprule
+\textbf{Criterio} & \textbf{Peso} & \textbf{Local (on-premises)} & \textbf{Nube (AWS, región España)} \\
+\midrule
+\endhead
+Disponibilidad (9–18 h, L–V) & 30 \% & 3 & 5 \\
+Redundancia & 30 \% & 3 & 5 \\
+Riesgo operativo & 20 \% & 2 & 4 \\
+Escalabilidad & 10 \% & 2 & 5 \\
+Dependencia del proveedor & 10 \% & 5 & 2 \\
+\textbf{Puntuación ponderada} &  & \textbf{2,90} & \textbf{4,50} \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Recomendación}
+
+Recomendamos la alternativa en la nube. A tres años sale unos 11.000 € más barata, sobre todo porque no hay que comprar servidores ni dedicar tanto tiempo de administración, y cumple mejor los requisitos de la biblioteca: si cae una máquina o una zona, la otra sigue atendiendo, y el proveedor garantiza la disponibilidad en horario de apertura sin depender de una sala técnica que se calienta. Su punto débil es la dependencia del proveedor; por eso incluimos un plan de salida (exportar los datos en formato abierto) y usamos PostgreSQL, que se puede llevar a otro proveedor o a local. Si la biblioteca no tuviera buena conexión a Internet, la alternativa local volvería a ser razonable.
+
+\subsection*{6. E2 · Casos de uso}
+
+\emph{Diagrama de sistema / casos de uso}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{06-e2-casos-de-uso.png}
+\caption{E2 · Casos de uso}
+\end{figure}
+
+\subsubsection*{CU-01 Buscar libro}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.233\linewidth}>{\raggedright\arraybackslash}p{0.716\linewidth}@{}}
+\toprule
+\textbf{Campo} & \textbf{Contenido} \\
+\midrule
+\endhead
+Código & CU-01 \\
+Nombre & Buscar libro \\
+Actor principal & Socio \\
+Actores secundarios &  \\
+Descripción & El socio busca libros del catálogo por título, autor o ISBN y ve si hay ejemplares disponibles. \\
+Disparador & El socio escribe en el buscador. \\
+Precondiciones & Ninguna (la búsqueda es pública). \\
+Flujo principal & 1. El socio escribe un título, autor o ISBN.\newline{}2. El sistema muestra los libros que coinciden, con el número de ejemplares disponibles.\newline{}3. El socio abre la ficha de un libro.\newline{}4. El sistema muestra sus ejemplares y su estado. \\
+Flujos alternativos & 2a. No hay resultados: el sistema lo indica y sugiere revisar la ortografía. \\
+Postcondiciones & Ninguna (no cambia datos). \\
+Prioridad & Alta \\
+Frecuencia & Cientos de veces al día \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{CU-02 Reservar libro}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.232\linewidth}>{\raggedright\arraybackslash}p{0.717\linewidth}@{}}
+\toprule
+\textbf{Campo} & \textbf{Contenido} \\
+\midrule
+\endhead
+Código & CU-02 \\
+Nombre & Reservar libro \\
+Actor principal & Socio \\
+Actores secundarios &  \\
+Descripción & El socio reserva un libro que ahora está prestado para recogerlo cuando se devuelva. \\
+Disparador & El socio pulsa «Reservar» en la ficha de un libro. \\
+Precondiciones & El socio ha iniciado sesión y no tiene sanciones. \\
+Flujo principal & 1. El socio busca el libro (CU-01).\newline{}2. El sistema muestra la ficha con sus ejemplares.\newline{}3. El socio pulsa «Reservar».\newline{}4. El sistema registra la reserva y muestra la posición en la cola. \\
+Flujos alternativos & 3a. Hay un ejemplar disponible: el sistema ofrece reservarlo para recoger hoy.\newline{}4a. El socio ya tiene 3 reservas: el sistema lo impide y lo avisa. \\
+Postcondiciones & La reserva queda registrada y el socio recibirá un aviso al devolverse el libro. \\
+Prioridad & Media \\
+Frecuencia & Unas 20 veces al día \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{CU-03 Prestar libro}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.232\linewidth}>{\raggedright\arraybackslash}p{0.717\linewidth}@{}}
+\toprule
+\textbf{Campo} & \textbf{Contenido} \\
+\midrule
+\endhead
+Código & CU-03 \\
+Nombre & Prestar libro \\
+Actor principal & Bibliotecario \\
+Actores secundarios & Socio \\
+Descripción & El bibliotecario presta un ejemplar a un socio en el mostrador. \\
+Disparador & Un socio entrega un libro en el mostrador para llevárselo. \\
+Precondiciones & El bibliotecario ha iniciado sesión. \\
+Flujo principal & 1. El bibliotecario identifica al socio (CU-04).\newline{}2. El bibliotecario lee el código del ejemplar.\newline{}3. El sistema comprueba que el socio puede pedir y el ejemplar está disponible.\newline{}4. El sistema registra el préstamo con fecha de devolución a 15 días.\newline{}5. El sistema imprime o envía el comprobante. \\
+Flujos alternativos & 3a. El socio tiene una sanción o ya tiene 5 préstamos: el sistema lo impide y muestra el motivo.\newline{}3b. El ejemplar está reservado por otro socio: el sistema lo indica y no lo presta. \\
+Postcondiciones & El ejemplar queda prestado al socio con su fecha de devolución. \\
+Prioridad & Alta \\
+Frecuencia & Unas 150 veces al día \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{CU-04 Identificar socio}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.232\linewidth}>{\raggedright\arraybackslash}p{0.717\linewidth}@{}}
+\toprule
+\textbf{Campo} & \textbf{Contenido} \\
+\midrule
+\endhead
+Código & CU-04 \\
+Nombre & Identificar socio \\
+Actor principal & Bibliotecario \\
+Actores secundarios &  \\
+Descripción & El sistema reconoce al socio por su carné para operar en su nombre. \\
+Disparador & El bibliotecario pasa el carné por el lector. \\
+Precondiciones & El socio tiene carné en vigor. \\
+Flujo principal & 1. El bibliotecario pasa el carné por el lector.\newline{}2. El sistema muestra los datos del socio, sus préstamos y sus sanciones. \\
+Flujos alternativos & 1a. El carné no se lee: el bibliotecario escribe el número de socio.\newline{}2a. El carné está caducado: el sistema lo indica. \\
+Postcondiciones & El socio queda identificado en el mostrador. \\
+Prioridad & Alta \\
+Frecuencia & Cada préstamo y devolución \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{CU-05 Devolver libro}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.232\linewidth}>{\raggedright\arraybackslash}p{0.717\linewidth}@{}}
+\toprule
+\textbf{Campo} & \textbf{Contenido} \\
+\midrule
+\endhead
+Código & CU-05 \\
+Nombre & Devolver libro \\
+Actor principal & Bibliotecario \\
+Actores secundarios & Socio \\
+Descripción & El bibliotecario registra la devolución de un ejemplar y, si hay reservas, avisa al siguiente socio. \\
+Disparador & Un socio devuelve un libro en el mostrador. \\
+Precondiciones & El ejemplar está prestado. \\
+Flujo principal & 1. El bibliotecario lee el código del ejemplar.\newline{}2. El sistema cierra el préstamo con la fecha de hoy.\newline{}3. El sistema comprueba si hay retraso.\newline{}4. El sistema marca el ejemplar como disponible. \\
+Flujos alternativos & 3a. Hay retraso: el sistema calcula la sanción (1 día sin préstamo por día de retraso) y la muestra.\newline{}4a. Hay una reserva: el sistema lo marca como reservado y avisa al socio (CU-06). \\
+Postcondiciones & El préstamo queda cerrado y el ejemplar disponible o reservado. \\
+Prioridad & Alta \\
+Frecuencia & Unas 150 veces al día \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{CU-06 Notificar disponibilidad}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.232\linewidth}>{\raggedright\arraybackslash}p{0.717\linewidth}@{}}
+\toprule
+\textbf{Campo} & \textbf{Contenido} \\
+\midrule
+\endhead
+Código & CU-06 \\
+Nombre & Notificar disponibilidad \\
+Actor principal & Servicio de correo \\
+Actores secundarios &  \\
+Descripción & El sistema avisa al socio de que el libro que reservó ya está disponible. \\
+Disparador & Se devuelve un ejemplar con reservas (CU-05). \\
+Precondiciones & Hay una reserva y el libro se acaba de devolver. \\
+Flujo principal & 1. El sistema toma la reserva más antigua.\newline{}2. El sistema envía un correo al socio con el plazo para recogerlo (3 días). \\
+Flujos alternativos & 2a. El correo falla: el sistema lo reintenta en una hora y lo anota. \\
+Postcondiciones & El socio está avisado y el ejemplar apartado para él. \\
+Prioridad & Media \\
+Frecuencia & Unas 20 veces al día \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{7. E2 · Diagrama de clases de diseño}
+
+\emph{Diagrama de clases}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{07-e2-diagrama-de-clases-de-diseno.png}
+\caption{E2 · Diagrama de clases de diseño}
+\end{figure}
+
+\subsection*{8. E2 · Secuencia — Reservar libro}
+
+\emph{Diagrama de secuencia}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{08-e2-secuencia-reservar-libro.png}
+\caption{E2 · Secuencia — Reservar libro}
+\end{figure}
+
+\subsection*{9. E2 · Mapa de stakeholders}
+
+\emph{Mapa de stakeholders}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{09-e2-mapa-de-stakeholders.png}
+\caption{E2 · Mapa de stakeholders}
+\end{figure}
+
+\textbf{Producto / proyecto:} App de préstamos
+
+{\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.114\linewidth}>{\raggedright\arraybackslash}p{0.129\linewidth}>{\raggedright\arraybackslash}p{0.139\linewidth}>{\raggedright\arraybackslash}p{0.067\linewidth}>{\raggedright\arraybackslash}p{0.089\linewidth}>{\raggedright\arraybackslash}p{0.096\linewidth}>{\raggedright\arraybackslash}p{0.094\linewidth}>{\raggedright\arraybackslash}p{0.063\linewidth}>{\raggedright\arraybackslash}p{0.095\linewidth}@{}}
+\toprule
+\textbf{Stakeholder} & \textbf{Rol} & \textbf{Poder/Influencia} & \textbf{Interés} & \textbf{Estrategia} & \textbf{Anillo} & \textbf{Sector} & \textbf{Actitud} & \textbf{Notas} \\
+\midrule
+\endhead
+Dirección de la biblioteca & Cliente: encarga y paga el proyecto & 90 \% & 85 \% & Gestionar de cerca & Es vital involucrarlo & Decisores & A favor & Aprueba el alcance y el presupuesto. \\
+Vicerrectorado & Financia la biblioteca & 82 \% & 30 \% & Mantener satisfechos & Es necesario involucrarlos & Decisores & Neutral & Solo interviene si cambia el presupuesto. \\
+Bibliotecarios & Usuarios internos diarios & 45 \% & 90 \% & Mantener informados & Es vital involucrarlo & Clientes & En contra & Temen más trabajo durante la migración. \\
+Estudiantes & Usuarios finales & 30 \% & 80 \% & Mantener informados & Es necesario involucrarlos & Clientes & A favor &  \\
+Profesores & Recomiendan bibliografía & 35 \% & 55 \% & Mantener informados & Estaría bien involucrarlos & Clientes & Neutral &  \\
+Servicio de informática & Mantiene servidores y la red & 70 \% & 60 \% & Gestionar de cerca & Es necesario involucrarlos & Proveedores & Neutral & Necesitamos su visto bueno para integrar el catálogo. \\
+Proveedor del catálogo & Licencia del software actual (OPAC) & 60 \% & 25 \% & Mantener satisfechos & Estaría bien involucrarlos & Proveedores & En contra & Puede cobrar por abrir su API. \\
+Delegado de protección de datos & RGPD & 75 \% & 30 \% & Mantener satisfechos & Estaría bien involucrarlos & Influyentes & Neutral &  \\
+Consejo de estudiantes & Representa a los alumnos & 25 \% & 45 \% & Monitorizar & Informar por cortesía & Influyentes & A favor &  \\
+Otras bibliotecas de la red & Préstamo interbibliotecario & 15 \% & 20 \% & Monitorizar & Informar por cortesía & Proveedores & Neutral &  \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Por estrategia (matriz poder/influencia – interés)}
+
+\begin{itemize}
+\item \textbf{Gestionar de cerca} (Champions · Drivers): Dirección de la biblioteca, Servicio de informática
+\item \textbf{Mantener satisfechos} (Context setters · Blockers): Vicerrectorado, Proveedor del catálogo, Delegado de protección de datos
+\item \textbf{Mantener informados} (Defenders · Subjects): Bibliotecarios, Estudiantes, Profesores
+\item \textbf{Monitorizar} (Crowd · Bystanders): Consejo de estudiantes, Otras bibliotecas de la red
+\end{itemize}
+
+\subsection*{10. E2 · Visión — elevator pitch}
+
+\emph{Visión — elevator pitch}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{10-e2-vision-elevator-pitch.png}
+\caption{E2 · Visión — elevator pitch}
+\end{figure}
+
+\begin{quote}
+Para los socios de las bibliotecas municipales que quieren saber si un libro está disponible y llevárselo sin colas, BiblioYa es un servicio web y móvil de préstamos que permite buscar, reservar y renovar préstamos en dos clics. A diferencia del catálogo en línea actual, que solo informa, nuestro producto avisa cuando el libro vuelve, gestiona la cola de reservas y recuerda las devoluciones.
+\end{quote}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.421\linewidth}>{\raggedright\arraybackslash}p{0.528\linewidth}@{}}
+\toprule
+\textbf{Plantilla} & \textbf{Contenido} \\
+\midrule
+\endhead
+Para (cliente objetivo) & los socios de las bibliotecas municipales \\
+Que (necesidad u oportunidad) & quieren saber si un libro está disponible y llevárselo sin colas \\
+Producto (nombre) & BiblioYa \\
+Es (categoría, con su artículo) & un servicio web y móvil de préstamos \\
+Que (beneficio clave, razón para comprarlo) & permite buscar, reservar y renovar préstamos en dos clics \\
+A diferencia de (alternativa / competidor) & el catálogo en línea actual, que solo informa \\
+Nuestro producto (diferenciador) & avisa cuando el libro vuelve, gestiona la cola de reservas y recuerda las devoluciones \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{11. E3 · Modelo de desarrollo Faro}
+
+\emph{Diagrama de flujo / modelo de proceso}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{11-e3-modelo-de-desarrollo-faro.png}
+\caption{E3 · Modelo de desarrollo Faro}
+\end{figure}
+
+Modelo propio: iteraciones de tres semanas que acaban en una demo al cliente; la especificación (historias y Gherkin) se mantiene al día en cada iteración.
+
+\subsection*{12. E3 · Backlog de producto}
+
+\emph{Backlog de producto (épicas e historias)}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{12-e3-backlog-de-producto.png}
+\caption{E3 · Backlog de producto}
+\end{figure}
+
+\textbf{Producto:} BiblioYa
+
+7 épicas · 6 historias de usuario · 17 puntos.
+
+\subsubsection*{Épicas}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.092\linewidth}>{\raggedright\arraybackslash}p{0.290\linewidth}>{\raggedright\arraybackslash}p{0.157\linewidth}>{\raggedright\arraybackslash}p{0.130\linewidth}>{\raggedright\arraybackslash}p{0.130\linewidth}>{\raggedright\arraybackslash}p{0.099\linewidth}@{}}
+\toprule
+\textbf{Código} & \textbf{Épica} & \textbf{Componente} & \textbf{Prioridad} & \textbf{Historias} & \textbf{Puntos} \\
+\midrule
+\endhead
+EP-01 & Búsqueda en el catálogo & Préstamos & Must & 2 & 5 \\
+EP-02 & Préstamo y devolución & Préstamos & Must & 0 & — \\
+EP-03 & Reservas & Préstamos & Should & 0 & — \\
+EP-04 & Cuenta del socio & Préstamos & Could & 0 & — \\
+EP-05 & Alta de fondos & Catálogo & Must & 2 & 5 \\
+EP-06 & Bajas y expurgo & Catálogo & Should & 1 & 2 \\
+EP-07 & Inventario & Catálogo & Could & 1 & 5 \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{EP-01 · Búsqueda en el catálogo}
+
+Componente: Préstamos · Prioridad: Must
+
+Encontrar una obra y ver en qué sedes hay ejemplares disponibles.
+
+\paragraph*{HU-01.1 · Buscar por título o autor}
+
+\begin{quote}
+Como socio, quiero buscar una obra por título o autor, para saber si la tienen sin ir a la biblioteca.
+\end{quote}
+
+Prioridad: Must · Puntos: 3
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Hay obras que coinciden
+  Dado que el catálogo tiene la obra «La sombra del viento» de Carlos Ruiz Zafón
+  Cuando el socio busca «sombra del viento»
+  Entonces ve la obra en los resultados con su autor y su año
+
+Escenario: No hay resultados
+  Dado que ninguna obra del catálogo contiene «zzzz»
+  Cuando el socio busca «zzzz»
+  Entonces ve el mensaje «No hay obras con esa búsqueda»
+  Y se le sugiere revisar la ortografía
+\end{Verbatim}
+
+\paragraph*{HU-01.2 · Ver disponibilidad por sede}
+
+\begin{quote}
+Como socio, quiero ver cuántos ejemplares hay libres en cada sede, para ir a la que me pille mejor.
+\end{quote}
+
+Prioridad: Should · Puntos: 2
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Ejemplares libres en varias sedes
+  Dado que la obra tiene 2 ejemplares libres en la sede Centro y 0 en la sede Norte
+  Cuando el socio abre la ficha de la obra
+  Entonces ve «Centro: 2 disponibles» y «Norte: ninguno disponible»
+
+Escenario: Ningún ejemplar libre
+  Dado que todos los ejemplares de la obra están prestados
+  Cuando el socio abre la ficha de la obra
+  Entonces ve «Sin ejemplares disponibles»
+  Y ve el botón «Reservar»
+\end{Verbatim}
+
+\subsubsection*{EP-02 · Préstamo y devolución}
+
+Componente: Préstamos · Prioridad: Must
+
+Prestar y devolver ejemplares en el mostrador, con plazos y multas por retraso.
+
+\emph{Sin desglosar en historias de usuario.}
+
+\subsubsection*{EP-03 · Reservas}
+
+Componente: Préstamos · Prioridad: Should
+
+Reservar una obra prestada y recibir aviso cuando vuelva.
+
+\emph{Sin desglosar en historias de usuario.}
+
+\subsubsection*{EP-04 · Cuenta del socio}
+
+Componente: Préstamos · Prioridad: Could
+
+Consultar préstamos, renovar y ver el historial.
+
+\emph{Sin desglosar en historias de usuario.}
+
+\subsubsection*{EP-05 · Alta de fondos}
+
+Componente: Catálogo · Prioridad: Must
+
+Registrar los libros que llegan a la biblioteca: la obra y cada uno de sus ejemplares.
+
+\paragraph*{HU-05.1 · Registrar una obra nueva}
+
+\begin{quote}
+Como bibliotecario, quiero dar de alta una obra con su ISBN, título, autor y materia, para que los socios la encuentren en el catálogo.
+\end{quote}
+
+Prioridad: Must · Puntos: 3
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Alta de una obra con datos completos
+  Dado que estoy identificado como bibliotecario
+  Y que no existe ninguna obra con ISBN "978-84-376-0494-7"
+  Cuando registro la obra con ISBN "978-84-376-0494-7", título "Cien años de soledad" y autor "Gabriel García Márquez"
+  Entonces la obra aparece en el catálogo
+  Y veo el mensaje "Obra registrada"
+
+Escenario: ISBN repetido
+  Dado que ya existe una obra con ISBN "978-84-376-0494-7"
+  Cuando intento registrar otra obra con ese ISBN
+  Entonces la obra no se registra
+  Y veo el mensaje "Ya existe una obra con ese ISBN"
+
+Escenario: Falta un dato obligatorio
+  Dado que estoy identificado como bibliotecario
+  Cuando registro una obra sin título
+  Entonces la obra no se registra
+  Y el campo "Título" se marca como obligatorio
+\end{Verbatim}
+
+\paragraph*{HU-05.2 · Añadir ejemplares a una obra}
+
+\begin{quote}
+Como bibliotecario, quiero añadir ejemplares a una obra indicando su sede, para saber cuántas copias se pueden prestar en cada biblioteca.
+\end{quote}
+
+Prioridad: Must · Puntos: 2
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Añadir dos ejemplares en una sede
+  Dado que la obra "Cien años de soledad" tiene 1 ejemplar en la sede "Campus Norte"
+  Cuando añado 2 ejemplares en la sede "Campus Norte"
+  Entonces la obra tiene 3 ejemplares en "Campus Norte"
+  Y cada ejemplar nuevo tiene un código de barras distinto
+
+Escenario: Cantidad no válida
+  Dado que estoy en la ficha de la obra "Cien años de soledad"
+  Cuando intento añadir 0 ejemplares
+  Entonces no se añade ningún ejemplar
+  Y veo el mensaje "Indica al menos un ejemplar"
+\end{Verbatim}
+
+\subsubsection*{EP-06 · Bajas y expurgo}
+
+Componente: Catálogo · Prioridad: Should
+
+Retirar ejemplares perdidos o deteriorados sin perder su historial de préstamos.
+
+\paragraph*{HU-06.1 · Dar de baja un ejemplar}
+
+\begin{quote}
+Como bibliotecario, quiero dar de baja un ejemplar indicando el motivo, para que deje de aparecer como disponible.
+\end{quote}
+
+Prioridad: Should · Puntos: 2
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Baja de un ejemplar deteriorado
+  Dado que el ejemplar "BY-000123" está disponible
+  Cuando lo doy de baja con el motivo "Deteriorado"
+  Entonces el ejemplar deja de aparecer como disponible
+  Y su historial de préstamos se conserva
+
+Escenario: Ejemplar prestado
+  Dado que el ejemplar "BY-000123" está prestado
+  Cuando intento darlo de baja
+  Entonces la baja no se hace
+  Y veo el mensaje "El ejemplar está prestado; espera a que se devuelva"
+\end{Verbatim}
+
+\subsubsection*{EP-07 · Inventario}
+
+Componente: Catálogo · Prioridad: Could
+
+Comprobar cada curso que los ejemplares están donde dice el sistema.
+
+\paragraph*{HU-07.1 · Pasar inventario de una sede}
+
+\begin{quote}
+Como bibliotecario, quiero leer los códigos de barras de una estantería y compararlos con el sistema, para detectar ejemplares perdidos o mal colocados.
+\end{quote}
+
+Prioridad: Could · Puntos: 5
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Todos los ejemplares están en su sitio
+  Dado que la estantería "N-12" tiene 40 ejemplares según el sistema
+  Cuando leo los 40 códigos de barras
+  Entonces el informe dice "Sin incidencias"
+
+Escenario: Falta un ejemplar
+  Dado que la estantería "N-12" tiene 40 ejemplares según el sistema
+  Cuando leo 39 códigos de barras y termino
+  Entonces el informe lista el ejemplar que falta
+  Y lo marca como "No localizado"
+\end{Verbatim}
+
+\subsection*{13. E3 · Planificación PUD}
+
+\emph{Diagrama de Gantt}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{13-e3-planificacion-pud.png}
+\caption{E3 · Planificación PUD}
+\end{figure}
+
+\subsection*{14. E3 · Proceso Unificado — fases y artefactos}
+
+\emph{Proceso Unificado (fases y artefactos)}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{14-e3-proceso-unificado-fases-y-artefactos.png}
+\caption{E3 · Proceso Unificado — fases y artefactos}
+\end{figure}
+
+Artefactos: 16 hechos, 7 en curso y 0 pendientes (23 en total).
+
+\subsubsection*{1. Inicio}
+
+\textbf{Objetivo:} Decidir con la biblioteca si BiblioYa merece la pena: alcance, visión y coste.
+
+\textbf{Hito:} Objetivos del ciclo de vida
+
+\textbf{Iteraciones:} I1
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.393\linewidth}>{\raggedright\arraybackslash}p{0.179\linewidth}>{\raggedright\arraybackslash}p{0.092\linewidth}>{\raggedright\arraybackslash}p{0.234\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Visión — Elevator pitch aprobado por la directora de la biblioteca & Modelado del negocio & Hecho & E2 · Visión — elevator pitch \\
+Caso de negocio & Modelado del negocio & Hecho & — \\
+Lista de riesgos — Riesgo principal: integración con el catálogo actual & Gestión del proyecto & Hecho & — \\
+Modelo de casos de uso inicial & Requisitos & Hecho & E2 · Casos de uso \\
+Plan del proyecto (Gantt) & Gestión del proyecto & Hecho & E3 · Planificación PUD \\
+Glosario — Ejemplar, préstamo, reserva, sanción & Requisitos & En curso & — \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{2. Elaboración}
+
+\textbf{Objetivo:} Cerrar los casos de uso de préstamo y reserva y validar la arquitectura con un prototipo.
+
+\textbf{Hito:} Arquitectura del ciclo de vida
+
+\textbf{Iteraciones:} E1, E2
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.396\linewidth}>{\raggedright\arraybackslash}p{0.167\linewidth}>{\raggedright\arraybackslash}p{0.091\linewidth}>{\raggedright\arraybackslash}p{0.244\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Modelo de casos de uso con especificaciones — CU-01 a CU-06 especificados; faltan los de administración & Requisitos & Hecho & E2 · Casos de uso \\
+Modelo del dominio & Modelado del negocio & Hecho & E2 · Diagrama de clases de diseño \\
+Modelo de análisis & Análisis y diseño & En curso & — \\
+Arquitectura base / descripción de la arquitectura & Análisis y diseño & Hecho & E3 · Despliegue \\
+Plan de iteraciones & Gestión del proyecto & Hecho & E3 · Planificación PUD \\
+Prototipo — Pantallas de búsqueda y préstamo & Requisitos & Hecho & E3 · Pantallas \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{3. Construcción}
+
+\textbf{Objetivo:} Construir préstamos, reservas y avisos en tres iteraciones de dos semanas.
+
+\textbf{Hito:} Capacidad operativa inicial
+
+\textbf{Iteraciones:} C1, C2, C3
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.380\linewidth}>{\raggedright\arraybackslash}p{0.172\linewidth}>{\raggedright\arraybackslash}p{0.091\linewidth}>{\raggedright\arraybackslash}p{0.254\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Modelo de diseño (clases de diseño) & Análisis y diseño & Hecho & E2 · Diagrama de clases de diseño \\
+Diagramas de secuencia — Uno por escenario principal: prestar, devolver, reservar & Análisis y diseño & Hecho & E2 · Secuencia — Reservar libro \\
+Modelo de datos (E/R) & Análisis y diseño & Hecho & E3 · Modelo de datos (E/R) \\
+Código / componentes & Implementación & En curso & — \\
+Plan y casos de prueba & Pruebas & Hecho & E3 · Trazabilidad de requisitos \\
+Diagrama de despliegue & Despliegue & Hecho & E3 · Despliegue \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{4. Transición}
+
+\textbf{Objetivo:} Poner BiblioYa en marcha en la biblioteca central y formar al personal.
+
+\textbf{Hito:} Entrega del producto
+
+\textbf{Iteraciones:} T1
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.311\linewidth}>{\raggedright\arraybackslash}p{0.224\linewidth}>{\raggedright\arraybackslash}p{0.096\linewidth}>{\raggedright\arraybackslash}p{0.267\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Plan de despliegue & Despliegue & En curso & — \\
+Manual de usuario & Despliegue & En curso & — \\
+Formación & Despliegue & En curso & — \\
+Versión beta y feedback & Pruebas & En curso & — \\
+Acta de cierre / post mortem & Gestión del proyecto & Hecho & Final · Acta post mortem \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Esfuerzo por disciplina}
+
+\emph{De 0 (nada) a 4 (máximo), por fase.}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.389\linewidth}>{\raggedright\arraybackslash}p{0.079\linewidth}>{\raggedright\arraybackslash}p{0.147\linewidth}>{\raggedright\arraybackslash}p{0.166\linewidth}>{\raggedright\arraybackslash}p{0.133\linewidth}@{}}
+\toprule
+\textbf{Disciplina} & \textbf{Inicio} & \textbf{Elaboración} & \textbf{Construcción} & \textbf{Transición} \\
+\midrule
+\endhead
+Modelado del negocio & $\bullet$$\bullet$$\bullet$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ \\
+Requisitos & $\bullet$$\bullet$$\bullet$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\circ$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ \\
+Análisis y diseño & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\bullet$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ \\
+Implementación & $\circ$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\circ$$\circ$$\circ$ \\
+Pruebas & $\circ$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\bullet$$\circ$$\circ$ \\
+Despliegue & $\circ$$\circ$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ \\
+Gestión de configuración y cambios & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ \\
+Gestión del proyecto & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ \\
+Entorno & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{15. E3 · Acta 1 — reunión con el cliente}
+
+\emph{Acta de reunión}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{15-e3-acta-1-reunion-con-el-cliente.png}
+\caption{E3 · Acta 1 — reunión con el cliente}
+\end{figure}
+
+\textbf{Acta de reunión con el cliente nº 1}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.317\linewidth}>{\raggedright\arraybackslash}p{0.129\linewidth}>{\raggedright\arraybackslash}p{0.478\linewidth}@{}}
+\toprule
+\textbf{Fecha} & \textbf{Hora} & \textbf{Lugar} \\
+\midrule
+\endhead
+miércoles, 21 de octubre de 2026 & 17:00–18:15 & Biblioteca central del campus, sala de reuniones 2 \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Asistentes}
+
+\begin{itemize}
+\item Marta Ruiz — Directora de la biblioteca (cliente)
+\item Luis Ortega — Bibliotecario de mostrador (usuario)
+\item Ana López — Jefa de proyecto (Faro Software)
+\item Bruno Díaz — Analista funcional (Faro Software)
+\item Carla Gómez — Arquitecta de software (Faro Software)
+\end{itemize}
+
+\subsubsection*{Ausentes}
+
+\begin{itemize}
+\item David Martín — Desarrollo y pruebas (Faro Software)
+\end{itemize}
+
+\subsubsection*{Orden del día}
+
+\begin{enumerate}
+\item Presentación de los asistentes
+\item Aclarar requisitos de préstamos, reservas y sanciones
+\item Dudas del equipo sobre el diagrama de casos de uso
+\item Próximos pasos
+\end{enumerate}
+
+\subsubsection*{Desarrollo de la reunión}
+
+Ana presenta el objetivo de la reunión y el diagrama de casos de uso provisional. Marta confirma que los dos actores principales son el socio y el bibliotecario, y que el sistema de gestión académica solo se consulta para validar que el socio sigue matriculado.
+
+Se repasan las reglas de préstamo y de reservas (ver preguntas). Luis pide que el mostrador pueda registrar una devolución leyendo solo el código del ejemplar, sin buscar al socio.
+
+\subsubsection*{Preguntas y respuestas}
+
+\begin{enumerate}
+\item \textbf{¿Cuántos libros puede tener prestados un socio a la vez y durante cuánto tiempo?}
+Estudiantes: 5 libros durante 15 días. Personal docente: 10 libros durante 30 días.
+\item \textbf{¿Se puede renovar un préstamo?}
+Sí, hasta 2 veces, siempre que nadie haya reservado el libro.
+\item \textbf{¿Hay multas económicas por devolver tarde?}
+No. Se suspende el préstamo un día por cada día de retraso y por cada libro.
+\item \textbf{¿Cuántas reservas puede tener un socio y cuánto se guarda el libro?}
+Hasta 3 reservas. Cuando el libro vuelve, se guarda 48 horas en el mostrador y se avisa al socio por correo.
+\item \textbf{¿Necesitáis informes de uso?}
+Un informe mensual de préstamos por facultad. Se confirmará el formato en la próxima reunión.
+\end{enumerate}
+
+\subsubsection*{Acuerdos}
+
+\begin{enumerate}
+\item El socio se identifica con el carné universitario; no habrá usuario y contraseña propios de BiblioYa.
+\item La devolución en mostrador solo necesita el código del ejemplar.
+\item Las sanciones son de suspensión de préstamo, sin importes económicos.
+\end{enumerate}
+
+\subsubsection*{Acciones}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.503\linewidth}>{\raggedright\arraybackslash}p{0.145\linewidth}>{\raggedright\arraybackslash}p{0.139\linewidth}>{\raggedright\arraybackslash}p{0.111\linewidth}@{}}
+\toprule
+\textbf{Acción} & \textbf{Responsable} & \textbf{Fecha límite} & \textbf{Estado} \\
+\midrule
+\endhead
+Actualizar el diagrama de casos de uso con renovar préstamo y avisar de reserva disponible & Bruno Díaz & 26/10/2026 & Pendiente \\
+Escribir las especificaciones de prestar y devolver libro & Carla Gómez & 28/10/2026 & Pendiente \\
+Enviar un ejemplo del informe mensual de préstamos & Marta Ruiz & 30/10/2026 & Pendiente \\
+Pasar esta acta a todos los asistentes & Ana López & 22/10/2026 & Hecha \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Próxima reunión}
+
+Miércoles 4 de noviembre de 2026, 17:00, en la misma sala: validación del diagrama de casos de uso y del informe mensual.
+
+\subsection*{16. Final · Acta post mortem}
+
+\emph{Acta de reunión}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{16-final-acta-post-mortem.png}
+\caption{Final · Acta post mortem}
+\end{figure}
+
+\textbf{Acta de reunión post mortem nº 7}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.550\linewidth}>{\raggedright\arraybackslash}p{0.237\linewidth}>{\raggedright\arraybackslash}p{0.136\linewidth}@{}}
+\toprule
+\textbf{Fecha} & \textbf{Hora} & \textbf{Lugar} \\
+\midrule
+\endhead
+jueves, 14 de enero de 2027 & 16:00–17:30 & Teams \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Asistentes}
+
+\begin{itemize}
+\item Ana López — Jefa de proyecto (Faro Software)
+\item Bruno Díaz — Analista funcional (Faro Software)
+\item Carla Gómez — Arquitecta de software (Faro Software)
+\item David Martín — Desarrollo y pruebas (Faro Software)
+\end{itemize}
+
+\subsubsection*{Orden del día}
+
+\begin{enumerate}
+\item Qué ha funcionado bien
+\item Qué ha ido mal
+\item Qué mejoraríamos
+\item Acciones para el próximo proyecto
+\end{enumerate}
+
+\subsubsection*{Desarrollo de la reunión}
+
+Cada miembro escribe por separado lo que ha ido bien, lo que ha ido mal y lo que mejoraría, sobre el equipo y sobre el Proceso Unificado. Después se agrupan las notas repetidas y se votan las tres mejoras más importantes.
+
+\subsubsection*{Valoración}
+
+\paragraph*{Equipo}
+
+\textbf{Bien}
+
+\begin{itemize}
+\item Repartimos los roles desde el primer día y cada entrega tuvo un responsable claro.
+\item Las revisiones cruzadas de diagramas detectaron errores antes de entregar.
+\end{itemize}
+
+\textbf{Mal}
+
+\begin{itemize}
+\item Las tareas de la última semana se acumularon y dos personas cargaron con casi todo.
+\end{itemize}
+
+\textbf{Mejorable}
+
+\begin{itemize}
+\item Revisar la carga de trabajo de cada persona en la reunión semanal.
+\end{itemize}
+
+\paragraph*{Metodología}
+
+\textbf{Bien}
+
+\begin{itemize}
+\item Dirigir el proyecto por casos de uso nos dio una lista de requisitos que el cliente entendía.
+\item La fase de elaboración dejó la arquitectura estable antes de construir.
+\end{itemize}
+
+\textbf{Mal}
+
+\begin{itemize}
+\item Mantener al día todos los artefactos del PUD llevó más tiempo que construir.
+\item El cliente solo vio el producto al final de la construcción y pidió cambios tarde.
+\end{itemize}
+
+\textbf{Mejorable}
+
+\begin{itemize}
+\item Enseñar al cliente una versión funcionando al final de cada iteración.
+\item Documentar solo los artefactos que alguien va a leer.
+\end{itemize}
+
+\subsubsection*{Acuerdos}
+
+\begin{enumerate}
+\item En el próximo proyecto probaremos Scrum con sprints de dos semanas y una demo al cliente en cada uno.
+\item El tablero de tareas será la única fuente del estado del trabajo.
+\end{enumerate}
+
+\subsubsection*{Acciones}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.501\linewidth}>{\raggedright\arraybackslash}p{0.145\linewidth}>{\raggedright\arraybackslash}p{0.140\linewidth}>{\raggedright\arraybackslash}p{0.111\linewidth}@{}}
+\toprule
+\textbf{Acción} & \textbf{Responsable} & \textbf{Fecha límite} & \textbf{Estado} \\
+\midrule
+\endhead
+Preparar la plantilla de backlog y de definición de hecho & Bruno Díaz & 21/01/2027 & Pendiente \\
+Escribir el informe "qué habría cambiado con una metodología ágil" & Ana López & 25/01/2027 & Pendiente \\
+Proponer un límite de trabajo en curso por persona & David Martín & 21/01/2027 & Pendiente \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Próxima reunión}
+
+Sin fecha: es la reunión de cierre del proyecto.
+
+\subsection*{17. Final · Acta — ¿y con metodología ágil?}
+
+\emph{Acta de reunión}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{17-final-acta-y-con-metodologia-agil.png}
+\caption{Final · Acta — ¿y con metodología ágil?}
+\end{figure}
+
+\textbf{Acta de retrospectiva nº 8}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.423\linewidth}>{\raggedright\arraybackslash}p{0.194\linewidth}>{\raggedright\arraybackslash}p{0.307\linewidth}@{}}
+\toprule
+\textbf{Fecha} & \textbf{Hora} & \textbf{Lugar} \\
+\midrule
+\endhead
+lunes, 18 de enero de 2027 & 16:00–17:15 & Aula 2.3 del campus \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Asistentes}
+
+\begin{itemize}
+\item Ana López — Jefa de proyecto (Faro Software)
+\item Bruno Díaz — Analista funcional (Faro Software)
+\item Carla Gómez — Arquitecta de software (Faro Software)
+\item David Martín — Desarrollo y pruebas (Faro Software)
+\end{itemize}
+
+\subsubsection*{Orden del día}
+
+\begin{enumerate}
+\item Qué habría cambiado con una metodología ágil (Scrum)
+\item Qué ha ido bien, qué ha ido mal y qué es mejorable
+\item Acuerdos para el próximo proyecto
+\end{enumerate}
+
+\subsubsection*{Desarrollo de la reunión}
+
+Se repasa el proyecto como si se hubiera hecho con Scrum: los requisitos pasan a épicas, las épicas a historias de usuario con criterios de aceptación en Gherkin y el trabajo se organiza en sprints de dos semanas con una demo a la directora de la biblioteca al final de cada uno.
+
+El equipo coincide en que el cliente habría visto el préstamo y la devolución funcionando en el primer sprint, y que los cambios en las reservas habrían llegado antes. A cambio, habría hecho falta más disciplina para mantener el backlog ordenado.
+
+\subsubsection*{Valoración}
+
+\paragraph*{Equipo}
+
+\textbf{Bien}
+
+\begin{itemize}
+\item El equipo ya trabajaba en reuniones semanales cortas; el paso a una daily habría sido natural.
+\end{itemize}
+
+\textbf{Mal}
+
+\begin{itemize}
+\item Nadie del equipo ha hecho de Product Owner; priorizar el backlog habría costado al principio.
+\end{itemize}
+
+\textbf{Mejorable}
+
+\begin{itemize}
+\item Rotar el papel de Scrum Master para que todos aprendan a facilitar.
+\end{itemize}
+
+\paragraph*{Metodología}
+
+\textbf{Bien}
+
+\begin{itemize}
+\item Las historias con criterios Gherkin dejan claro cuándo una funcionalidad está terminada.
+\item Las demos de cada sprint habrían adelantado la opinión del cliente sobre las reservas.
+\end{itemize}
+
+\textbf{Mal}
+
+\begin{itemize}
+\item Con sprints cortos, la arquitectura de la elaboración se habría decidido sobre la marcha.
+\end{itemize}
+
+\textbf{Mejorable}
+
+\begin{itemize}
+\item Escribir la definición de hecho antes del primer sprint.
+\item Reservar un sprint inicial (sprint 0) para la arquitectura y el entorno.
+\end{itemize}
+
+\subsubsection*{Acuerdos}
+
+\begin{enumerate}
+\item El informe recomendará Scrum con un sprint 0 de arquitectura para proyectos parecidos.
+\item El User Story Mapping de los dos primeros sprints se incluye como anexo del informe.
+\end{enumerate}
+
+\subsubsection*{Acciones}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.500\linewidth}>{\raggedright\arraybackslash}p{0.145\linewidth}>{\raggedright\arraybackslash}p{0.141\linewidth}>{\raggedright\arraybackslash}p{0.111\linewidth}@{}}
+\toprule
+\textbf{Acción} & \textbf{Responsable} & \textbf{Fecha límite} & \textbf{Estado} \\
+\midrule
+\endhead
+Redactar el apartado de épicas e historias del informe ágil & Bruno Díaz & 22/01/2027 & Pendiente \\
+Preparar el User Story Mapping de los sprints 1 y 2 & Carla Gómez & 22/01/2027 & Pendiente \\
+Revisar los criterios Gherkin de todas las historias & David Martín & 24/01/2027 & Pendiente \\
+\bottomrule
+\end{longtable}}
+
+\subsubsection*{Próxima reunión}
+
+Lunes 25 de enero de 2027, 16:00: revisión final del informe antes de entregarlo.
+
+\subsection*{18. Final · User Story Mapping — sprints 1 y 2}
+
+\emph{User Story Mapping}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{18-final-user-story-mapping-sprints-1-y-2.png}
+\caption{Final · User Story Mapping — sprints 1 y 2}
+\end{figure}
+
+\textbf{Persona:} Socio de la biblioteca (y el bibliotecario en el mostrador)
+
+\subsubsection*{Backbone}
+
+\begin{itemize}
+\item \textbf{Buscar libros}
+
+\begin{itemize}
+\item Buscar en el catálogo
+\item Ver la ficha del libro
+\end{itemize}
+\item \textbf{Pedir prestado}
+
+\begin{itemize}
+\item Reservar
+\item Recoger en el mostrador
+\end{itemize}
+\item \textbf{Devolver}
+
+\begin{itemize}
+\item Devolver el libro
+\item Renovar el préstamo
+\end{itemize}
+\item \textbf{Gestionar mi cuenta}
+
+\begin{itemize}
+\item Ver mis préstamos
+\item Recibir avisos
+\end{itemize}
+\end{itemize}
+
+\subsubsection*{Sprint 1 (18 pts)}
+
+\paragraph*{Buscar libros › Buscar en el catálogo}
+
+\subparagraph*{Buscar por título o autor}
+
+\begin{quote}
+Como socio, quiero buscar un libro por título o autor, para saber si la biblioteca lo tiene.
+\end{quote}
+
+Épica: Catálogo · Prioridad: Must · Puntos: 3
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Buscar un libro que existe
+  Dado que el catálogo tiene "Cien años de soledad"
+  Cuando busco "cien años"
+  Entonces veo "Cien años de soledad" en los resultados
+
+Escenario: Buscar un libro que no existe
+  Dado que el catálogo no tiene ningún libro de "Zzz"
+  Cuando busco "Zzz"
+  Entonces veo el mensaje "No hay resultados"
+\end{Verbatim}
+
+\paragraph*{Buscar libros › Ver la ficha del libro}
+
+\subparagraph*{Ver disponibilidad}
+
+\begin{quote}
+Como socio, quiero ver cuántos ejemplares quedan libres, para decidir si lo reservo.
+\end{quote}
+
+Épica: Catálogo · Prioridad: Must · Puntos: 2
+
+\paragraph*{Pedir prestado › Reservar}
+
+\subparagraph*{Reservar un libro disponible}
+
+\begin{quote}
+Como socio, quiero reservar un ejemplar disponible, para recogerlo en las próximas 48 horas.
+\end{quote}
+
+Épica: Préstamos · Prioridad: Must · Puntos: 5
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Reservar un ejemplar libre
+  Dado que hay 2 ejemplares disponibles de "Rayuela"
+  Cuando reservo "Rayuela"
+  Entonces quedan 1 ejemplares disponibles
+  Y recibo un aviso con el plazo de recogida
+\end{Verbatim}
+
+\paragraph*{Pedir prestado › Recoger en el mostrador}
+
+\subparagraph*{Registrar el préstamo}
+
+\begin{quote}
+Como bibliotecario, quiero registrar el préstamo al entregar el libro, para que conste quién lo tiene y hasta cuándo.
+\end{quote}
+
+Épica: Préstamos · Prioridad: Must · Puntos: 3
+
+\paragraph*{Devolver › Devolver el libro}
+
+\subparagraph*{Registrar la devolución}
+
+\begin{quote}
+Como bibliotecario, quiero registrar una devolución escaneando el libro, para que el ejemplar vuelva a estar disponible.
+\end{quote}
+
+Épica: Préstamos · Prioridad: Must · Puntos: 3
+
+\paragraph*{Gestionar mi cuenta › Ver mis préstamos}
+
+\subparagraph*{Ver mis préstamos}
+
+\begin{quote}
+Como socio, quiero ver los libros que tengo y su fecha de devolución, para no pasarme del plazo.
+\end{quote}
+
+Épica: Mi cuenta · Prioridad: Should · Puntos: 2
+
+\subsubsection*{Sprint 2 (16 pts)}
+
+\paragraph*{Buscar libros › Buscar en el catálogo}
+
+\subparagraph*{Filtrar por género y año}
+
+\begin{quote}
+Como socio, quiero filtrar los resultados por género y año, para encontrar lecturas parecidas.
+\end{quote}
+
+Épica: Catálogo · Prioridad: Could · Puntos: 3
+
+\paragraph*{Pedir prestado › Reservar}
+
+\subparagraph*{Cancelar una reserva}
+
+\begin{quote}
+Como socio, quiero cancelar una reserva, para liberar el ejemplar para otro socio.
+\end{quote}
+
+Épica: Préstamos · Prioridad: Should · Puntos: 2
+
+\subparagraph*{Lista de espera}
+
+\begin{quote}
+Como socio, quiero apuntarme a la lista de espera de un libro prestado, para que me avisen cuando vuelva.
+\end{quote}
+
+Épica: Préstamos · Prioridad: Could · Puntos: 5
+
+\paragraph*{Devolver › Renovar el préstamo}
+
+\subparagraph*{Renovar un préstamo}
+
+\begin{quote}
+Como socio, quiero renovar un préstamo una vez, para terminar el libro sin multa.
+\end{quote}
+
+Épica: Préstamos · Prioridad: Should · Puntos: 3
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Renovar un préstamo sin reservas pendientes
+  Dado que tengo "Rayuela" prestado y nadie lo ha reservado
+  Cuando pido renovarlo
+  Entonces la fecha de devolución se amplía 14 días
+\end{Verbatim}
+
+\paragraph*{Gestionar mi cuenta › Recibir avisos}
+
+\subparagraph*{Aviso de vencimiento}
+
+\begin{quote}
+Como socio, quiero recibir un aviso dos días antes del vencimiento, para devolver a tiempo.
+\end{quote}
+
+Épica: Mi cuenta · Prioridad: Should · Puntos: 3

@@ -4,6 +4,7 @@
  */
 import { FORMAT, type DataByKind, type Diagram, type DiagramKind, type DiagramMeta, type UpData, type UpDiscipline, type UpPhase, type UseCaseSpec, type UserStory } from './types';
 import { KINDS } from './kinds';
+import { repairData } from './repair';
 
 export function uid(): string {
   return (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`).replace(/-/g, '').slice(0, 12);
@@ -161,6 +162,9 @@ export function normalizeDiagram(raw: Diagram): Diagram {
     if (Array.isArray(v) && !Array.isArray(data[k])) data[k] = [];
     if (v && typeof v === 'object' && !Array.isArray(v) && (typeof data[k] !== 'object' || data[k] === null)) data[k] = {};
   }
+  // Each item of the structured kinds' lists, not just the top level.
+  const fixed = repairData(raw.kind, data, uid);
+  Object.assign(data, fixed);
   if ('nodes' in data) {
     data.nodes = (data.nodes as Record<string, unknown>[]).filter((n) => n && typeof n.id === 'string').map((n) => ({ label: '', x: 0, y: 0, ...n }));
     const ids = new Set((data.nodes as { id: string }[]).map((n) => n.id));
@@ -178,7 +182,7 @@ export function normalizeDiagram(raw: Diagram): Diagram {
 }
 
 export function metaOf(d: Diagram, path: string): DiagramMeta {
-  return { id: d.id, kind: d.kind, title: d.title, project: d.project, updated: d.updated, archived: d.archived, path };
+  return { id: d.id, kind: d.kind, title: d.title, project: d.project, updated: d.updated, archived: d.archived, updatedBy: d.updatedBy, path };
 }
 
 /** "Mapa de stakeholders — Bodega" → "mapa-de-stakeholders-bodega" (for file names). */

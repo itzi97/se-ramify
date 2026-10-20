@@ -11,7 +11,9 @@
   import DiagramList from './lib/components/DiagramList.svelte';
   import NewDiagram from './lib/components/NewDiagram.svelte';
   import Deliverables from './lib/components/Deliverables.svelte';
+  import { editedLine } from './lib/storage/team';
   import Notices from './lib/components/Notices.svelte';
+  import ExportFormats from './lib/components/ExportFormats.svelte';
 
   type Menu = 'export' | 'more' | null;
   type Side = 'notes' | 'versions' | 'help' | null;
@@ -133,20 +135,31 @@
         oninput={(e) => app.change((d) => (d.project = e.currentTarget.value), 'project')}
       />
       <div class="spacer"></div>
-      <span class="status tiny muted" class:failed={app.saving === 'error'} aria-live="polite">
+      <span class="status tiny muted" class:failed={app.saving === 'error'} aria-live="polite" title={app.doc ? editedLine(app.doc.updated, app.doc.updatedBy) : ''}>
         {app.saving === 'pending' ? 'Saving…' : app.saving === 'error' ? 'Not saved' : 'Saved'}
       </span>
       <button class="icon" onclick={() => app.undo()} disabled={!app.canUndo} aria-label="Undo" title="Undo (Ctrl+Z)"><Icon name="Undo2" /></button>
       <button class="icon" onclick={() => app.redo()} disabled={!app.canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Icon name="Redo2" /></button>
       <div class="menu-anchor">
-        <button class:active={menu === 'export'} onclick={() => toggle('export')} aria-haspopup="menu" aria-expanded={menu === 'export'}><Icon name="Download" size={16} /> Export</button>
+        <button class:active={menu === 'export'} onclick={() => { void app.loadExportPrefs(); toggle('export'); }} aria-haspopup="menu" aria-expanded={menu === 'export'}><Icon name="Download" size={16} /> Export</button>
         {#if menu === 'export'}
           <button class="scrim" aria-label="Close menu" tabindex="-1" onclick={() => (menu = null)}></button>
           <div class="menu float arrive" role="menu">
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportImage('png'); }}><Icon name="Image" size={16} /> PNG image</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportImage('svg'); }}><Icon name="FileImage" size={16} /> SVG image</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.copyImage(); }}><Icon name="ClipboardCopy" size={16} /> Copy as image <kbd class="quiet">Ctrl+Shift+C</kbd></button>
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportDocx(); }}><Icon name="FileText" size={16} /> Word document (.docx)</button>
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportSlide(); }}><Icon name="Presentation" size={16} /> PowerPoint slide (.pptx)</button>
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.copyLatexFigure(); }}><Icon name="Sigma" size={16} /> Copy LaTeX figure</button>
             <label class="check small muted pad"><input type="checkbox" checked={app.lightExports} onchange={(e) => app.setLightExports(e.currentTarget.checked)} /> White background</label>
+            <div class="row pad size-row">
+              <span class="small muted">Image size</span>
+              <div class="seg" role="radiogroup" aria-label="Image size">
+                {#each [[2, 'Normal'], [3, 'High'], [4, 'Print']] as [v, l] (v)}
+                  <button class:active={app.imageScale === v} role="radio" aria-checked={app.imageScale === v} title="{v}× the screen resolution" onclick={() => app.setImageScale(v as 2)}>{l}</button>
+                {/each}
+              </div>
+            </div>
             {#if textExports.length}
               <div class="sect pad">As text</div>
               {#each textExports as x (x.label)}
@@ -170,6 +183,7 @@
             {/if}
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; handIns = app.doc?.project ?? ''; }}><Icon name="ClipboardCheck" size={16} /> Hand-in checklist…</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.duplicate(); }}><Icon name="Copy" size={16} /> Duplicate</button>
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportDiagramFile(); }}><Icon name="Send" size={16} /> Save a copy to send…</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.toggleArchive(); }}><Icon name="Archive" size={16} /> {app.doc.archived ? 'Unarchive' : 'Archive'}</button>
             <button class="menu-row" role="menuitem" onclick={openVersions}><Icon name="History" size={16} /> Previous versions…</button>
             <button class="menu-row danger" role="menuitem" onclick={() => { menu = null; void app.remove(); }}><Icon name="Trash2" size={16} /> Delete…</button>
@@ -207,6 +221,16 @@
         {#key app.doc.id}
           <Editor />
         {/key}
+        {@const openMeta = app.list.find((m) => m.path === app.path)}
+        {#if openMeta && (openMeta.dupOf || openMeta.conflict)}
+          <div class="copy-banner float row" role="status">
+            <Icon name="TriangleAlert" size={16} />
+            <span class="small">{openMeta.conflict ? 'This is a conflict copy your sync app made: two people saved at once.' : 'This file is a copy of another diagram in the folder (same id), probably made by your sync app.'} Compare it with the original, then keep it or delete it.</span>
+            {#if openMeta.dupOf}<button class="secondary small" onclick={() => app.open(openMeta.dupOf!)}>Open the original</button>{/if}
+            <button class="secondary small" onclick={() => app.keepAsSeparate(openMeta)}>Keep as its own diagram</button>
+            <button class="secondary small" onclick={() => app.removeFile(openMeta)}>Delete this copy</button>
+          </div>
+        {/if}
       {:else}
         <div class="empty-hint">
           <div class="stack">
@@ -239,7 +263,7 @@
   {:else if side === 'help'}
     <Panel title="Help" onClose={() => (side = null)}>
       <div class="stack small help">
-        <p>Every change saves itself within half a second. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes, <kbd>Ctrl</kbd>+<kbd>N</kbd> starts a new diagram.</p>
+        <p>Every change saves itself within half a second. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes, <kbd>Ctrl</kbd>+<kbd>N</kbd> starts a new diagram. Inside a text box <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes your typing there; click outside it to undo whole steps.</p>
         <div class="sect">Canvas diagrams (UML, maps, DFD, E/R…)</div>
         <ul>
           <li>Click a shape in the toolbar to drop it in the middle, or drag it onto the canvas.</li>
@@ -252,11 +276,14 @@
         <ul>
           <li><kbd>Tab</kbd> adds an idea under the selected one, <kbd>Enter</kbd> one beside it, <kbd>F2</kbd> renames.</li>
         </ul>
+        <div class="sect">Working as a team</div>
+        <p>Everyone points the app at the same shared folder (Google Drive / OneDrive / Dropbox, or a git repo) and writes their name at the bottom of the list. Changes from others appear within a few seconds. Nobody's work is overwritten: if someone saved a diagram while you were editing it, theirs opens and yours is kept as a copy. ⋯ → <em>Save a copy to send…</em> and <em>Open a diagram file…</em> (bottom of the list) pass single diagrams around.</p>
         <div class="sect">Hand-ins</div>
         <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in. "Load the example project" at the bottom of the list adds every hand-in done for an invented library app.</p>
         <p><button class="secondary small" onclick={async () => { side = null; handIns = await app.loadExampleProject(); }}>Load the example project</button></p>
         <div class="sect">Exports</div>
-        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into a document. The box icon next to a project in the list exports the whole project: every diagram as a PNG plus a Markdown memoria with the specifications and stories.</p>
+        <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into Word, Google Docs or PowerPoint. The Export menu also makes a Word document or a PowerPoint slide of the diagram, and copies a LaTeX figure for its PNG; <em>Image size</em> sets how sharp images are (they keep their on-screen size in documents).</p>
+        <p>The box icon next to a project in the list exports the whole project — every diagram as a PNG plus the memoria with the specifications and stories, as Markdown and, if you tick them, Word, LaTeX and a PowerPoint deck for the presentation.</p>
         <p>PNG and SVG for every diagram (on white by default). UML diagrams also export PlantUML; the Gantt exports Mermaid; specifications, stories and maps export Markdown; stories export Gherkin <code>.feature</code> files.</p>
         <p class="tiny muted">se-ramify {__APP_VERSION__}</p>
       </div>
@@ -265,10 +292,23 @@
 
   {#if newOpen}<NewDiagram onClose={() => (newOpen = false)} />{/if}
   {#if handIns !== null}<Deliverables project={handIns} onClose={() => (handIns = null)} />{/if}
+  <ExportFormats />
   <Notices />
 </div>
 
 <style>
+  .copy-banner {
+    position: absolute;
+    left: 50%;
+    bottom: var(--sp-4);
+    transform: translateX(-50%);
+    z-index: 40;
+    gap: var(--sp-2);
+    max-width: min(900px, calc(100% - 32px));
+    padding: var(--sp-2) var(--sp-3);
+    border-left: 3px solid var(--warn, #c98a12);
+    flex-wrap: wrap;
+  }
   .shell {
     position: relative;
     height: 100%;
@@ -367,5 +407,11 @@
     .project {
       display: none;
     }
+  }
+  .size-row {
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding-top: var(--sp-1);
+    padding-bottom: var(--sp-1);
   }
 </style>

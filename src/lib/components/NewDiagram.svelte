@@ -55,7 +55,7 @@
 
   async function create() {
     const mod = moduleFor(kind);
-    const data = start === 'example' ? mod.example() : undefined;
+    const data = start === 'example' ? mod.example() : mod.blank?.();
     await app.create(kind, title.trim() || info.es, project, data as never);
     onClose();
   }

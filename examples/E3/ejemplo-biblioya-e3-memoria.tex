@@ -1,0 +1,519 @@
+% Generado con se-ramify. Compila con pdflatex (o latexmk -pdf) junto a las imágenes.
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\IfFileExists{lmodern.sty}{\usepackage{lmodern}\usepackage{microtype}}{}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage[a4paper,margin=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage[table]{xcolor}
+\usepackage{amssymb}
+\usepackage{fvextra}
+\usepackage[hidelinks,pdftitle={Ejemplo — BiblioYa — Entrega 3 — Modelo propio, backlog y PUD}]{hyperref}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.25}
+% se-ramify: an image at its natural size, shrunk to fit the text block when bigger.
+\providecommand{\seramifyfigura}[1]{%
+  \sbox0{\includegraphics{#1}}%
+  \ifdim\wd0>\linewidth
+    \includegraphics[width=\linewidth,height=0.78\textheight,keepaspectratio]{#1}%
+  \else\ifdim\ht0>0.78\textheight
+    \includegraphics[height=0.78\textheight,keepaspectratio]{#1}%
+  \else\usebox0\fi\fi}
+
+\begin{document}
+
+\begin{center}
+{\LARGE\bfseries Ejemplo — BiblioYa — Entrega 3 — Modelo propio, backlog y PUD\par}
+\end{center}
+
+\emph{Exportado con se-ramify el 20/10/2026.}
+
+\section*{Contenido de la entrega}
+\addcontentsline{toc}{section}{Contenido de la entrega}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.431\linewidth}>{\raggedright\arraybackslash}p{0.061\linewidth}>{\raggedright\arraybackslash}p{0.431\linewidth}@{}}
+\toprule
+\textbf{Apartado} & \textbf{Peso} & \textbf{Diagramas} \\
+\midrule
+\endhead
+Vuestro propio modelo de desarrollo: nombre, etapas, roles, elementos clave, ventajas e inconvenientes & 30 \% & E3 · Modelo de desarrollo Faro; \emph{Descripción, roles, ventajas / inconvenientes y dónde usarlo (texto)} \\
+Backlog completo a nivel de épica, y una épica en historias de usuario & 20 \% & E3 · Backlog de producto \\
+PUD: Gantt, etapas con sus artefactos, actas e informe & 50 \% & E3 · Planificación PUD; E3 · Proceso Unificado — fases y artefactos; E3 · Acta 1 — reunión con el cliente; \emph{Informe con toda la documentación — the memoria this checklist exports, plus your text (texto)} \\
+\bottomrule
+\end{longtable}}
+
+\tableofcontents
+
+\bigskip
+
+\section*{1. E3 · Modelo de desarrollo Faro}
+\addcontentsline{toc}{section}{1. E3 · Modelo de desarrollo Faro}
+
+\emph{Diagrama de flujo / modelo de proceso}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{01-e3-modelo-de-desarrollo-faro.png}
+\caption{E3 · Modelo de desarrollo Faro}
+\end{figure}
+
+Modelo propio: iteraciones de tres semanas que acaban en una demo al cliente; la especificación (historias y Gherkin) se mantiene al día en cada iteración.
+
+\section*{2. E3 · Backlog de producto}
+\addcontentsline{toc}{section}{2. E3 · Backlog de producto}
+
+\emph{Backlog de producto (épicas e historias)}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{02-e3-backlog-de-producto.png}
+\caption{E3 · Backlog de producto}
+\end{figure}
+
+\textbf{Producto:} BiblioYa
+
+7 épicas · 6 historias de usuario · 17 puntos.
+
+\subsection*{Épicas}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.092\linewidth}>{\raggedright\arraybackslash}p{0.290\linewidth}>{\raggedright\arraybackslash}p{0.157\linewidth}>{\raggedright\arraybackslash}p{0.130\linewidth}>{\raggedright\arraybackslash}p{0.130\linewidth}>{\raggedright\arraybackslash}p{0.099\linewidth}@{}}
+\toprule
+\textbf{Código} & \textbf{Épica} & \textbf{Componente} & \textbf{Prioridad} & \textbf{Historias} & \textbf{Puntos} \\
+\midrule
+\endhead
+EP-01 & Búsqueda en el catálogo & Préstamos & Must & 2 & 5 \\
+EP-02 & Préstamo y devolución & Préstamos & Must & 0 & — \\
+EP-03 & Reservas & Préstamos & Should & 0 & — \\
+EP-04 & Cuenta del socio & Préstamos & Could & 0 & — \\
+EP-05 & Alta de fondos & Catálogo & Must & 2 & 5 \\
+EP-06 & Bajas y expurgo & Catálogo & Should & 1 & 2 \\
+EP-07 & Inventario & Catálogo & Could & 1 & 5 \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{EP-01 · Búsqueda en el catálogo}
+
+Componente: Préstamos · Prioridad: Must
+
+Encontrar una obra y ver en qué sedes hay ejemplares disponibles.
+
+\subsubsection*{HU-01.1 · Buscar por título o autor}
+
+\begin{quote}
+Como socio, quiero buscar una obra por título o autor, para saber si la tienen sin ir a la biblioteca.
+\end{quote}
+
+Prioridad: Must · Puntos: 3
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Hay obras que coinciden
+  Dado que el catálogo tiene la obra «La sombra del viento» de Carlos Ruiz Zafón
+  Cuando el socio busca «sombra del viento»
+  Entonces ve la obra en los resultados con su autor y su año
+
+Escenario: No hay resultados
+  Dado que ninguna obra del catálogo contiene «zzzz»
+  Cuando el socio busca «zzzz»
+  Entonces ve el mensaje «No hay obras con esa búsqueda»
+  Y se le sugiere revisar la ortografía
+\end{Verbatim}
+
+\subsubsection*{HU-01.2 · Ver disponibilidad por sede}
+
+\begin{quote}
+Como socio, quiero ver cuántos ejemplares hay libres en cada sede, para ir a la que me pille mejor.
+\end{quote}
+
+Prioridad: Should · Puntos: 2
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Ejemplares libres en varias sedes
+  Dado que la obra tiene 2 ejemplares libres en la sede Centro y 0 en la sede Norte
+  Cuando el socio abre la ficha de la obra
+  Entonces ve «Centro: 2 disponibles» y «Norte: ninguno disponible»
+
+Escenario: Ningún ejemplar libre
+  Dado que todos los ejemplares de la obra están prestados
+  Cuando el socio abre la ficha de la obra
+  Entonces ve «Sin ejemplares disponibles»
+  Y ve el botón «Reservar»
+\end{Verbatim}
+
+\subsection*{EP-02 · Préstamo y devolución}
+
+Componente: Préstamos · Prioridad: Must
+
+Prestar y devolver ejemplares en el mostrador, con plazos y multas por retraso.
+
+\emph{Sin desglosar en historias de usuario.}
+
+\subsection*{EP-03 · Reservas}
+
+Componente: Préstamos · Prioridad: Should
+
+Reservar una obra prestada y recibir aviso cuando vuelva.
+
+\emph{Sin desglosar en historias de usuario.}
+
+\subsection*{EP-04 · Cuenta del socio}
+
+Componente: Préstamos · Prioridad: Could
+
+Consultar préstamos, renovar y ver el historial.
+
+\emph{Sin desglosar en historias de usuario.}
+
+\subsection*{EP-05 · Alta de fondos}
+
+Componente: Catálogo · Prioridad: Must
+
+Registrar los libros que llegan a la biblioteca: la obra y cada uno de sus ejemplares.
+
+\subsubsection*{HU-05.1 · Registrar una obra nueva}
+
+\begin{quote}
+Como bibliotecario, quiero dar de alta una obra con su ISBN, título, autor y materia, para que los socios la encuentren en el catálogo.
+\end{quote}
+
+Prioridad: Must · Puntos: 3
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Alta de una obra con datos completos
+  Dado que estoy identificado como bibliotecario
+  Y que no existe ninguna obra con ISBN "978-84-376-0494-7"
+  Cuando registro la obra con ISBN "978-84-376-0494-7", título "Cien años de soledad" y autor "Gabriel García Márquez"
+  Entonces la obra aparece en el catálogo
+  Y veo el mensaje "Obra registrada"
+
+Escenario: ISBN repetido
+  Dado que ya existe una obra con ISBN "978-84-376-0494-7"
+  Cuando intento registrar otra obra con ese ISBN
+  Entonces la obra no se registra
+  Y veo el mensaje "Ya existe una obra con ese ISBN"
+
+Escenario: Falta un dato obligatorio
+  Dado que estoy identificado como bibliotecario
+  Cuando registro una obra sin título
+  Entonces la obra no se registra
+  Y el campo "Título" se marca como obligatorio
+\end{Verbatim}
+
+\subsubsection*{HU-05.2 · Añadir ejemplares a una obra}
+
+\begin{quote}
+Como bibliotecario, quiero añadir ejemplares a una obra indicando su sede, para saber cuántas copias se pueden prestar en cada biblioteca.
+\end{quote}
+
+Prioridad: Must · Puntos: 2
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Añadir dos ejemplares en una sede
+  Dado que la obra "Cien años de soledad" tiene 1 ejemplar en la sede "Campus Norte"
+  Cuando añado 2 ejemplares en la sede "Campus Norte"
+  Entonces la obra tiene 3 ejemplares en "Campus Norte"
+  Y cada ejemplar nuevo tiene un código de barras distinto
+
+Escenario: Cantidad no válida
+  Dado que estoy en la ficha de la obra "Cien años de soledad"
+  Cuando intento añadir 0 ejemplares
+  Entonces no se añade ningún ejemplar
+  Y veo el mensaje "Indica al menos un ejemplar"
+\end{Verbatim}
+
+\subsection*{EP-06 · Bajas y expurgo}
+
+Componente: Catálogo · Prioridad: Should
+
+Retirar ejemplares perdidos o deteriorados sin perder su historial de préstamos.
+
+\subsubsection*{HU-06.1 · Dar de baja un ejemplar}
+
+\begin{quote}
+Como bibliotecario, quiero dar de baja un ejemplar indicando el motivo, para que deje de aparecer como disponible.
+\end{quote}
+
+Prioridad: Should · Puntos: 2
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Baja de un ejemplar deteriorado
+  Dado que el ejemplar "BY-000123" está disponible
+  Cuando lo doy de baja con el motivo "Deteriorado"
+  Entonces el ejemplar deja de aparecer como disponible
+  Y su historial de préstamos se conserva
+
+Escenario: Ejemplar prestado
+  Dado que el ejemplar "BY-000123" está prestado
+  Cuando intento darlo de baja
+  Entonces la baja no se hace
+  Y veo el mensaje "El ejemplar está prestado; espera a que se devuelva"
+\end{Verbatim}
+
+\subsection*{EP-07 · Inventario}
+
+Componente: Catálogo · Prioridad: Could
+
+Comprobar cada curso que los ejemplares están donde dice el sistema.
+
+\subsubsection*{HU-07.1 · Pasar inventario de una sede}
+
+\begin{quote}
+Como bibliotecario, quiero leer los códigos de barras de una estantería y compararlos con el sistema, para detectar ejemplares perdidos o mal colocados.
+\end{quote}
+
+Prioridad: Could · Puntos: 5
+
+\begin{Verbatim}[breaklines,fontsize=\small,frame=single,framerule=0.4pt,rulecolor=\color{black!25}]
+Escenario: Todos los ejemplares están en su sitio
+  Dado que la estantería "N-12" tiene 40 ejemplares según el sistema
+  Cuando leo los 40 códigos de barras
+  Entonces el informe dice "Sin incidencias"
+
+Escenario: Falta un ejemplar
+  Dado que la estantería "N-12" tiene 40 ejemplares según el sistema
+  Cuando leo 39 códigos de barras y termino
+  Entonces el informe lista el ejemplar que falta
+  Y lo marca como "No localizado"
+\end{Verbatim}
+
+\section*{3. E3 · Planificación PUD}
+\addcontentsline{toc}{section}{3. E3 · Planificación PUD}
+
+\emph{Diagrama de Gantt}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{03-e3-planificacion-pud.png}
+\caption{E3 · Planificación PUD}
+\end{figure}
+
+\section*{4. E3 · Proceso Unificado — fases y artefactos}
+\addcontentsline{toc}{section}{4. E3 · Proceso Unificado — fases y artefactos}
+
+\emph{Proceso Unificado (fases y artefactos)}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{04-e3-proceso-unificado-fases-y-artefactos.png}
+\caption{E3 · Proceso Unificado — fases y artefactos}
+\end{figure}
+
+Artefactos: 16 hechos, 7 en curso y 0 pendientes (23 en total).
+
+\subsection*{1. Inicio}
+
+\textbf{Objetivo:} Decidir con la biblioteca si BiblioYa merece la pena: alcance, visión y coste.
+
+\textbf{Hito:} Objetivos del ciclo de vida
+
+\textbf{Iteraciones:} I1
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.393\linewidth}>{\raggedright\arraybackslash}p{0.179\linewidth}>{\raggedright\arraybackslash}p{0.092\linewidth}>{\raggedright\arraybackslash}p{0.234\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Visión — Elevator pitch aprobado por la directora de la biblioteca & Modelado del negocio & Hecho & E2 · Visión — elevator pitch \\
+Caso de negocio & Modelado del negocio & Hecho & — \\
+Lista de riesgos — Riesgo principal: integración con el catálogo actual & Gestión del proyecto & Hecho & — \\
+Modelo de casos de uso inicial & Requisitos & Hecho & E2 · Casos de uso \\
+Plan del proyecto (Gantt) & Gestión del proyecto & Hecho & E3 · Planificación PUD \\
+Glosario — Ejemplar, préstamo, reserva, sanción & Requisitos & En curso & — \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{2. Elaboración}
+
+\textbf{Objetivo:} Cerrar los casos de uso de préstamo y reserva y validar la arquitectura con un prototipo.
+
+\textbf{Hito:} Arquitectura del ciclo de vida
+
+\textbf{Iteraciones:} E1, E2
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.396\linewidth}>{\raggedright\arraybackslash}p{0.167\linewidth}>{\raggedright\arraybackslash}p{0.091\linewidth}>{\raggedright\arraybackslash}p{0.244\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Modelo de casos de uso con especificaciones — CU-01 a CU-06 especificados; faltan los de administración & Requisitos & Hecho & E2 · Casos de uso \\
+Modelo del dominio & Modelado del negocio & Hecho & E2 · Diagrama de clases de diseño \\
+Modelo de análisis & Análisis y diseño & En curso & — \\
+Arquitectura base / descripción de la arquitectura & Análisis y diseño & Hecho & E3 · Despliegue \\
+Plan de iteraciones & Gestión del proyecto & Hecho & E3 · Planificación PUD \\
+Prototipo — Pantallas de búsqueda y préstamo & Requisitos & Hecho & E3 · Pantallas \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{3. Construcción}
+
+\textbf{Objetivo:} Construir préstamos, reservas y avisos en tres iteraciones de dos semanas.
+
+\textbf{Hito:} Capacidad operativa inicial
+
+\textbf{Iteraciones:} C1, C2, C3
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.380\linewidth}>{\raggedright\arraybackslash}p{0.172\linewidth}>{\raggedright\arraybackslash}p{0.091\linewidth}>{\raggedright\arraybackslash}p{0.254\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Modelo de diseño (clases de diseño) & Análisis y diseño & Hecho & E2 · Diagrama de clases de diseño \\
+Diagramas de secuencia — Uno por escenario principal: prestar, devolver, reservar & Análisis y diseño & Hecho & E2 · Secuencia — Reservar libro \\
+Modelo de datos (E/R) & Análisis y diseño & Hecho & E3 · Modelo de datos (E/R) \\
+Código / componentes & Implementación & En curso & — \\
+Plan y casos de prueba & Pruebas & Hecho & E3 · Trazabilidad de requisitos \\
+Diagrama de despliegue & Despliegue & Hecho & E3 · Despliegue \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{4. Transición}
+
+\textbf{Objetivo:} Poner BiblioYa en marcha en la biblioteca central y formar al personal.
+
+\textbf{Hito:} Entrega del producto
+
+\textbf{Iteraciones:} T1
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.311\linewidth}>{\raggedright\arraybackslash}p{0.224\linewidth}>{\raggedright\arraybackslash}p{0.096\linewidth}>{\raggedright\arraybackslash}p{0.267\linewidth}@{}}
+\toprule
+\textbf{Artefacto} & \textbf{Disciplina} & \textbf{Estado} & \textbf{Diagrama} \\
+\midrule
+\endhead
+Plan de despliegue & Despliegue & En curso & — \\
+Manual de usuario & Despliegue & En curso & — \\
+Formación & Despliegue & En curso & — \\
+Versión beta y feedback & Pruebas & En curso & — \\
+Acta de cierre / post mortem & Gestión del proyecto & Hecho & Final · Acta post mortem \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{Esfuerzo por disciplina}
+
+\emph{De 0 (nada) a 4 (máximo), por fase.}
+
+{\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.389\linewidth}>{\raggedright\arraybackslash}p{0.079\linewidth}>{\raggedright\arraybackslash}p{0.147\linewidth}>{\raggedright\arraybackslash}p{0.166\linewidth}>{\raggedright\arraybackslash}p{0.133\linewidth}@{}}
+\toprule
+\textbf{Disciplina} & \textbf{Inicio} & \textbf{Elaboración} & \textbf{Construcción} & \textbf{Transición} \\
+\midrule
+\endhead
+Modelado del negocio & $\bullet$$\bullet$$\bullet$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ \\
+Requisitos & $\bullet$$\bullet$$\bullet$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\circ$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ \\
+Análisis y diseño & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\bullet$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ \\
+Implementación & $\circ$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\circ$$\circ$$\circ$ \\
+Pruebas & $\circ$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ & $\bullet$$\bullet$$\circ$$\circ$ \\
+Despliegue & $\circ$$\circ$$\circ$$\circ$ & $\circ$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\bullet$$\bullet$ \\
+Gestión de configuración y cambios & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ \\
+Gestión del proyecto & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ \\
+Entorno & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\bullet$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ & $\bullet$$\circ$$\circ$$\circ$ \\
+\bottomrule
+\end{longtable}}
+
+\section*{5. E3 · Acta 1 — reunión con el cliente}
+\addcontentsline{toc}{section}{5. E3 · Acta 1 — reunión con el cliente}
+
+\emph{Acta de reunión}
+
+\begin{figure}[H]
+\centering
+\seramifyfigura{05-e3-acta-1-reunion-con-el-cliente.png}
+\caption{E3 · Acta 1 — reunión con el cliente}
+\end{figure}
+
+\textbf{Acta de reunión con el cliente nº 1}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.317\linewidth}>{\raggedright\arraybackslash}p{0.129\linewidth}>{\raggedright\arraybackslash}p{0.478\linewidth}@{}}
+\toprule
+\textbf{Fecha} & \textbf{Hora} & \textbf{Lugar} \\
+\midrule
+\endhead
+miércoles, 21 de octubre de 2026 & 17:00–18:15 & Biblioteca central del campus, sala de reuniones 2 \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{Asistentes}
+
+\begin{itemize}
+\item Marta Ruiz — Directora de la biblioteca (cliente)
+\item Luis Ortega — Bibliotecario de mostrador (usuario)
+\item Ana López — Jefa de proyecto (Faro Software)
+\item Bruno Díaz — Analista funcional (Faro Software)
+\item Carla Gómez — Arquitecta de software (Faro Software)
+\end{itemize}
+
+\subsection*{Ausentes}
+
+\begin{itemize}
+\item David Martín — Desarrollo y pruebas (Faro Software)
+\end{itemize}
+
+\subsection*{Orden del día}
+
+\begin{enumerate}
+\item Presentación de los asistentes
+\item Aclarar requisitos de préstamos, reservas y sanciones
+\item Dudas del equipo sobre el diagrama de casos de uso
+\item Próximos pasos
+\end{enumerate}
+
+\subsection*{Desarrollo de la reunión}
+
+Ana presenta el objetivo de la reunión y el diagrama de casos de uso provisional. Marta confirma que los dos actores principales son el socio y el bibliotecario, y que el sistema de gestión académica solo se consulta para validar que el socio sigue matriculado.
+
+Se repasan las reglas de préstamo y de reservas (ver preguntas). Luis pide que el mostrador pueda registrar una devolución leyendo solo el código del ejemplar, sin buscar al socio.
+
+\subsection*{Preguntas y respuestas}
+
+\begin{enumerate}
+\item \textbf{¿Cuántos libros puede tener prestados un socio a la vez y durante cuánto tiempo?}
+Estudiantes: 5 libros durante 15 días. Personal docente: 10 libros durante 30 días.
+\item \textbf{¿Se puede renovar un préstamo?}
+Sí, hasta 2 veces, siempre que nadie haya reservado el libro.
+\item \textbf{¿Hay multas económicas por devolver tarde?}
+No. Se suspende el préstamo un día por cada día de retraso y por cada libro.
+\item \textbf{¿Cuántas reservas puede tener un socio y cuánto se guarda el libro?}
+Hasta 3 reservas. Cuando el libro vuelve, se guarda 48 horas en el mostrador y se avisa al socio por correo.
+\item \textbf{¿Necesitáis informes de uso?}
+Un informe mensual de préstamos por facultad. Se confirmará el formato en la próxima reunión.
+\end{enumerate}
+
+\subsection*{Acuerdos}
+
+\begin{enumerate}
+\item El socio se identifica con el carné universitario; no habrá usuario y contraseña propios de BiblioYa.
+\item La devolución en mostrador solo necesita el código del ejemplar.
+\item Las sanciones son de suspensión de préstamo, sin importes económicos.
+\end{enumerate}
+
+\subsection*{Acciones}
+
+{\small
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.503\linewidth}>{\raggedright\arraybackslash}p{0.145\linewidth}>{\raggedright\arraybackslash}p{0.139\linewidth}>{\raggedright\arraybackslash}p{0.111\linewidth}@{}}
+\toprule
+\textbf{Acción} & \textbf{Responsable} & \textbf{Fecha límite} & \textbf{Estado} \\
+\midrule
+\endhead
+Actualizar el diagrama de casos de uso con renovar préstamo y avisar de reserva disponible & Bruno Díaz & 26/10/2026 & Pendiente \\
+Escribir las especificaciones de prestar y devolver libro & Carla Gómez & 28/10/2026 & Pendiente \\
+Enviar un ejemplo del informe mensual de préstamos & Marta Ruiz & 30/10/2026 & Pendiente \\
+Pasar esta acta a todos los asistentes & Ana López & 22/10/2026 & Hecha \\
+\bottomrule
+\end{longtable}}
+
+\subsection*{Próxima reunión}
+
+Miércoles 4 de noviembre de 2026, 17:00, en la misma sala: validación del diagrama de casos de uso y del informe mensual.
+
+\end{document}

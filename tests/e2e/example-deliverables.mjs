@@ -43,10 +43,16 @@ for (const id of ['E1', 'E2', 'E3', 'Final']) {
   };
   page.on('download', onDownload);
   await page.getByRole('button', { name: new RegExp(`^Export ${id}`) }).click();
-  // The export opens every diagram in turn; it ends with the memoria.
-  const memoria = `-${id.toLowerCase()}-memoria.md`;
-  for (let i = 0; i < 720 && !saved.some((n) => n.endsWith(memoria)); i++) await page.waitForTimeout(250);
-  if (!saved.some((n) => n.endsWith(memoria))) (console.log(`  no memoria for ${id}`), (failed = true));
+  // Which documents: tick them all.
+  const chooser = page.getByRole('dialog', { name: 'Export formats' });
+  await chooser.waitFor();
+  for (const box of await chooser.getByRole('checkbox').all()) await box.check();
+  await chooser.getByRole('button', { name: /^Export/ }).click();
+  // The export opens every diagram in turn; it ends with the memoria, then the documents, the deck last.
+  const last = `-${id.toLowerCase()}-presentacion.pptx`;
+  for (let i = 0; i < 960 && !saved.some((n) => n.endsWith(last)); i++) await page.waitForTimeout(250);
+  for (const ext of ['memoria.md', 'memoria.docx', 'memoria.tex', 'memoria-cuerpo.tex', 'presentacion.pptx'])
+    if (!saved.some((n) => n.endsWith(`-${id.toLowerCase()}-${ext}`))) (console.log(`  no ${ext} for ${id}`), (failed = true));
   await page.waitForTimeout(500);
   page.off('download', onDownload);
   console.log(`  ${saved.length} files`);

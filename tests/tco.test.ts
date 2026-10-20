@@ -110,3 +110,22 @@ test('CSV: BOM, semicolons, decimal comma, one row per line', () => {
   assert.equal(rows[0].split(';').length, 8 + 3 + 2);
   assert.match(rows[1], /;35,5;1200;42600;0;0;42600;/);
 });
+
+test('amounts pasted from English pages and the warning for unpriced lines', async () => {
+  const { parseAmount, cheapest } = await import('../src/lib/editors/tco/model');
+  assert.equal(parseAmount('$1,234.50'), 1234.5);
+  assert.equal(parseAmount('1.234,50 €'), 1234.5);
+  assert.equal(parseAmount('USD 99.90'), 99.9);
+  const data = {
+    years: 3,
+    users: 0,
+    criteria: [],
+    scores: {},
+    recommendation: '',
+    alternatives: [
+      { id: 'a', name: 'A', description: '', lines: [{ id: '1', name: 'x', block: 'hwsw', nature: 'capex', unitCost: 100, qty: 1, when: 'once', year: 1, source: '' }, { id: '2', name: 'y', block: 'hwsw', nature: 'capex', unitCost: 0, qty: 1, when: 'once', year: 1, source: '' }] },
+      { id: 'b', name: 'B', description: '', lines: [{ id: '3', name: 'z', block: 'hwsw', nature: 'capex', unitCost: 300, qty: 1, when: 'once', year: 1, source: '' }] }
+    ]
+  } as never;
+  assert.equal(cheapest(data)!.unpriced, 1);
+});

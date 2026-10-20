@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '../../stores/app.svelte';
+  import { storage } from '../../storage/diagrams';
   import type { TcoAlternative, TcoData, TcoLine } from '../../model/types';
   import Icon from '../../components/Icon.svelte';
   import Swatches from '../../components/Swatches.svelte';
@@ -122,8 +123,10 @@
     });
     if (id) tab = id;
   }
-  function deleteAlternative(id: string) {
+  async function deleteAlternative(id: string) {
     const i = data.alternatives.findIndex((a) => a.id === id);
+    const alt = data.alternatives[i];
+    if (alt?.lines.length && !(await (await storage()).confirm(`Delete "${alt.name}" and its ${alt.lines.length} cost ${alt.lines.length === 1 ? 'line' : 'lines'}? Ctrl+Z brings it back.`, 'TCO'))) return;
     app.change((d) => removeAlternative(td(d), id));
     tab = data.alternatives[Math.max(0, i - 1)]?.id ?? '';
   }
@@ -410,7 +413,7 @@
         </tbody>
       </table>
       {#if best}
-        <p class="saving">A {years} {years === 1 ? 'año' : 'años'}, <strong>{best.name}</strong> cuesta {eur(best.saving)} menos que {best.against}.{#if data.users > 0}&nbsp;Calculado para {data.users} usuarios.{/if}</p>
+        <p class="saving">A {years} {years === 1 ? 'año' : 'años'}, <strong>{best.name}</strong> cuesta {eur(best.saving)} menos que {best.against}.{#if best.unpriced}&nbsp;<span class="warn-note">Aún faltan {best.unpriced} precios: la comparación no es definitiva.</span>{/if}{#if data.users > 0}&nbsp;Calculado para {data.users} usuarios.{/if}</p>
       {/if}
 
       <figure class="chart">
@@ -531,8 +534,16 @@
     padding: var(--sp-5);
     min-width: max-content;
   }
+  /* Narrower than the summary card: keep the editing card on screen, the summary scrolls. */
+  @container (max-width: 960px) {
+    .page {
+      align-items: flex-start;
+    }
+  }
   .edit {
-    width: min(1180px, max(920px, calc(100cqw - 48px)));
+    /* Fits the window down to small laptops; the lines table scrolls on its own. */
+    width: min(1180px, max(600px, calc(100cqw - 48px)));
+    min-width: 0;
     padding: var(--sp-3) var(--sp-4) var(--sp-4);
     display: flex;
     flex-direction: column;
@@ -684,6 +695,9 @@
   .amount {
     width: 88px;
     text-align: right;
+  }
+  .warn-note {
+    color: #b0700c;
   }
   .amount.unpriced {
     background: color-mix(in srgb, var(--tier-B) 14%, transparent) !important;
