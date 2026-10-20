@@ -1,7 +1,9 @@
 # Builds installers for Linux (AppImage, .deb, .rpm), Windows (NSIS .exe) and
 # macOS (universal .dmg, Intel and Apple Silicon) and attaches them to a draft
-# GitHub release when a tag like v0.3.0 is pushed; publish the draft once all
-# three are there. Each OS builds its own (no cross-compiling).
+# GitHub release when a tag like v0.3.0 is pushed, or when the workflow is run
+# by hand (Actions → release → Run workflow: the version comes from
+# tauri.conf.json and the tag is made when the draft is published). Publish
+# the draft once all three are there. Each OS builds its own (no cross-compiling).
 name: release
 
 on:
@@ -55,7 +57,7 @@ jobs:
         id: notes
         shell: bash
         run: |
-          v="${GITHUB_REF_NAME#v}"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="$(node -p "require('./src-tauri/tauri.conf.json').version")"; fi
           body="$(awk -v v="$v" '
             /^## /{ on = ($2 == v) ; next }
             on && /^- / { print }
@@ -67,8 +69,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'se-ramify ${{ github.ref_name }}'
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: 'se-ramify v__VERSION__'
+          releaseCommitish: ${{ github.sha }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
