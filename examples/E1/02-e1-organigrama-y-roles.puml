@@ -1,0 +1,12 @@
+@startuml
+skinparam rectangle { RoundCorner 8 }
+rectangle "**Dirección y jefatura de proyecto**\nAna López\n· Planifica y sigue el proyecto (Gantt)\n· Interlocutora con el cliente\n· Redacta las actas" as R1
+rectangle "**Análisis y requisitos**\nBruno Díaz\n· Casos de uso y especificaciones\n· Historias de usuario y Gherkin" as R2
+rectangle "**Arquitectura y diseño**\nCarla Gómez\n· Diagramas de clases y secuencia\n· Arquitectura y TCO" as R3
+rectangle "**Desarrollo y calidad**\nDavid Martín\n· Implementación\n· Plan y casos de prueba" as R4
+R1 -down- R2
+R1 -down- R3
+R1 -down- R4
+R2 .. R3
+R3 .. R4
+@enduml

@@ -49,6 +49,12 @@ export function estimateSize(_kind: GraphKind, n: GNode, info: NodeTypeInfo): Si
       const rows = (n.attrs?.length ?? 0) + (n.ops?.length ?? 0);
       return { w, h: 34 + (n.stereotype || info.stereotype ? 14 : 0) + rows * 16 + 2 * 10 };
     }
+    case 'role': {
+      const items = n.attrs ?? [];
+      const w = Math.min(260, Math.max(170, textWidth(n.label, 13, true) + 28, textWidth(n.person ?? '', 12) + 28, ...items.map((m) => textWidth(m, 12) + 26)));
+      const wrapped = items.reduce((k, m) => k + Math.max(1, Math.ceil((textWidth(m, 12) + 26) / w)), 0);
+      return { w, h: 5 + 30 + (n.person ? 18 : 0) + (items.length ? 10 + wrapped * 16 : 0) };
+    }
     case 'ellipse': {
       const t = block(n.label, 13);
       return { w: Math.max(120, t.w + 52 + 3), h: Math.max(54, t.h + 28 + 3) };

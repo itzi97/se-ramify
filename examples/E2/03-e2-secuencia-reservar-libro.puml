@@ -1,0 +1,33 @@
+@startuml
+title E2 · Secuencia — Reservar libro
+autonumber
+autoactivate on
+
+actor Socio
+boundary ":PantallaPréstamo" as P1
+control ":ControlPréstamo" as P2
+entity ":Catálogo" as P3
+participant ":Préstamo" as P4
+database BD
+
+Socio -> P1: prestar(isbn, nºsocio)
+P1 -> P2: solicitarPréstamo(isbn, nºsocio)
+P2 -> P3: disponible(isbn)
+P3 -> BD: consultarEjemplares(isbn)
+BD --> P3: ejemplares
+P3 --> P2: ejemplar
+alt ejemplar disponible
+  create P4
+  P2 -> P4: new(ejemplar, socio)
+  P2 ->> BD: guardar(préstamo)
+  P2 --> P1: préstamo OK, devolver antes del 15/11
+else no disponible
+  P2 -> P2: calcularFechaReserva()
+  P2 --> P1: no disponible, ¿reservar?
+end
+P1 --> Socio: mostrarResultado()
+note over Socio, P1
+  Máximo 3 préstamos
+  a la vez por socio
+end note
+@enduml

@@ -21,10 +21,20 @@ const settle = async () => {
 
 export async function exportProject(project: string) {
   const items: DiagramMeta[] = app.list.filter((m) => (m.project || '') === project && !m.archived).sort((a, b) => a.title.localeCompare(b.title, 'es'));
+  await exportSet(items, project || 'Diagramas', slug(project, 50) || 'diagramas');
+}
+
+/**
+ * Export a set of diagrams in the given order: numbered PNGs, their
+ * Gherkin / PlantUML files, and a memoria titled `title` (with `intro`
+ * lines after the title, e.g. a hand-in's checklist).
+ */
+export async function exportSet(items: DiagramMeta[], title: string, fileBase: string, intro: string[] = [], dirTitle?: string) {
   if (!items.length) return;
   const s = await storage();
-  const dir = await s.pickExportDir(`Export "${project || 'No project'}" into…`);
+  const dir = await s.pickExportDir(dirTitle ?? `Export "${title}" into…`);
   if (!dir) return;
+  const project = title;
   const back = app.path;
   const parts: { doc: Diagram; image: string | null; markdown: string[] }[] = [];
   app.notify(`Exporting ${items.length} diagrams…`);
@@ -44,11 +54,11 @@ export async function exportProject(project: string) {
       }
       const exports = (moduleFor(doc.kind).exports as (d: Diagram) => TextExport[])(doc);
       const markdown = exports.filter((x) => x.ext === 'md').map((x) => x.build());
-      // Gherkin and PlantUML go next to the images, as files of their own.
-      for (const x of exports.filter((x) => x.ext === 'feature' || x.ext === 'puml')) await s.writeInto(dir, `${base}.${x.ext}`, x.build());
+      // Gherkin, PlantUML and the AI brief go next to the images, as files of their own.
+      for (const x of exports.filter((x) => x.ext === 'feature' || x.ext === 'puml' || x.ext === 'brief.md')) await s.writeInto(dir, `${base}.${x.ext}`, x.build());
       parts.push({ doc: JSON.parse(JSON.stringify(doc)) as Diagram, image, markdown });
     }
-    await s.writeInto(dir, `${slug(project, 50) || 'diagramas'}-memoria.md`, memoria(project, parts));
+    await s.writeInto(dir, `${fileBase}-memoria.md`, memoria(project, parts, intro));
     app.notify(`Exported ${parts.length} diagrams and the memoria to ${dir === 'downloads' ? 'your downloads' : dir}.`);
   } catch (err) {
     console.error('project export', err);

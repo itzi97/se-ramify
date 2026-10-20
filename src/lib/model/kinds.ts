@@ -17,12 +17,16 @@ export interface KindInfo {
   /** One line: what it's for. */
   blurb: string;
   /** Which part of the course / project it belongs to. */
-  group: 'UML' | 'Requirements' | 'Design thinking' | 'Planning' | 'Architecture';
+  group: 'Company' | 'UML' | 'Requirements' | 'Design thinking' | 'Planning' | 'Architecture';
   /** Where it shows up in the course (topic or deliverable). */
   course: string;
 }
 
 export const KINDS: KindInfo[] = [
+  // Company (E1)
+  { kind: 'orgchart', family: 'graph', label: 'Org chart / roles', es: 'Organigrama y roles', icon: 'Building2', group: 'Company', course: 'E1 Empresa: jerarquía y roles', blurb: 'The company hierarchy: each role, who holds it and what they are responsible for.' },
+  { kind: 'tco', family: 'structured', label: 'TCO calculator', es: 'TCO (coste total de propiedad)', icon: 'Calculator', group: 'Company', course: 'T2 TCO · E1', blurb: 'Cost lines per alternative (local / cloud): CAPEX and OPEX by year, 3-year totals, a comparison chart and a reasoned recommendation.' },
+  { kind: 'minutes', family: 'structured', label: 'Meeting minutes', es: 'Acta de reunión', icon: 'NotebookPen', group: 'Company', course: 'E3 Actas con el cliente · Entrega final post mortem', blurb: 'Client meetings, team meetings, post mortem and retrospectives: attendees, agenda, decisions, actions, what went well and what to improve.' },
   // UML
   { kind: 'usecase', family: 'graph', label: 'System / use case diagram', es: 'Diagrama de sistema / casos de uso', icon: 'PersonStanding', group: 'UML', course: 'T3 Requisitos · T4 UML · E2', blurb: 'Actors outside, use cases inside the system boundary, «include» / «extend» — and a specification for each use case.' },
   { kind: 'class', family: 'graph', label: 'Class diagram', es: 'Diagrama de clases', icon: 'Boxes', group: 'UML', course: 'T3 Requisitos · T4 UML · E2', blurb: 'Classes with attributes and operations; association, aggregation, composition, inheritance, realisation, dependency.' },
@@ -38,7 +42,7 @@ export const KINDS: KindInfo[] = [
   { kind: 'traceability', family: 'graph', label: 'Requirements traceability', es: 'Trazabilidad de requisitos', icon: 'Route', group: 'Requirements', course: 'T3 Requisitos', blurb: 'Requirements → acceptance criteria → design elements → components → test cases, in columns.' },
   { kind: 'stakeholder', family: 'structured', label: 'Stakeholder map', es: 'Mapa de stakeholders', icon: 'Users', group: 'Requirements', course: 'T3 Requisitos · E2', blurb: 'Power / interest grid and the onion (decisores, clientes, influyentes, proveedores) — the same stakeholders in both formats.' },
   { kind: 'vision', family: 'structured', label: 'Vision (elevator pitch)', es: 'Visión — elevator pitch', icon: 'Megaphone', group: 'Requirements', course: 'T5 Visión · E2', blurb: "Moore's template: para / que / el producto / es un / que / a diferencia de / nuestro producto." },
-  { kind: 'canvas', family: 'structured', label: 'Business model canvas', es: 'Lienzo de modelo de negocio', icon: 'LayoutDashboard', group: 'Requirements', course: 'E1 Empresa y modelo de negocio', blurb: 'The nine blocks of a business model, as sticky notes.' },
+  { kind: 'canvas', family: 'structured', label: 'Business model canvas', es: 'Lienzo de modelo de negocio', icon: 'LayoutDashboard', group: 'Company', course: 'E1 Empresa y modelo de negocio', blurb: 'The nine blocks of a business model, as sticky notes.' },
   // Design thinking
   { kind: 'mindmap', family: 'graph', label: 'Mind map', es: 'Mapa mental', icon: 'Network', group: 'Design thinking', course: 'T3 · 1 Comprender', blurb: 'One central idea and branches of keywords, laid out for you (Tab adds under, Enter beside).' },
   { kind: 'context', family: 'structured', label: 'Context map', es: 'Mapa de contexto', icon: 'Telescope', group: 'Design thinking', course: 'T3 · 1 Comprender', blurb: 'The challenge at a glance: stakeholders, competition, uncertainties, strengths, trends.' },
@@ -50,6 +54,8 @@ export const KINDS: KindInfo[] = [
   { kind: 'sixhats', family: 'structured', label: 'Six thinking hats', es: '6 sombreros', icon: 'GraduationCap', group: 'Design thinking', course: 'T3 · 4 Idear', blurb: "De Bono's six perspectives: creativity, optimism, caution, facts, emotions, process." },
   { kind: 'conceptmap', family: 'graph', label: 'Concept map', es: 'Mapa conceptual', icon: 'Share2', group: 'Design thinking', course: 'Estudio', blurb: 'Concepts joined by labelled arrows ("es un", "tiene", "causa").' },
   // Planning & process
+  { kind: 'backlog', family: 'structured', label: 'Product backlog', es: 'Backlog de producto (épicas e historias)', icon: 'ListTree', group: 'Planning', course: 'T5 Épicas e historias · E3 · Entrega final', blurb: 'Every epic, broken down into user stories with Gherkin criteria — and the brief for generating the app with AI (vibe coding).' },
+  { kind: 'up', family: 'structured', label: 'Unified Process plan', es: 'Proceso Unificado (fases y artefactos)', icon: 'Layers', group: 'Planning', course: 'T8 Proceso Unificado · E3', blurb: 'The four phases with their iterations and milestones, the disciplines\' effort curves, and the artefacts of each phase linked to your diagrams.' },
   { kind: 'storymap', family: 'structured', label: 'User story map', es: 'User Story Mapping', icon: 'Map', group: 'Planning', course: 'T5 Épicas e historias · Entrega final', blurb: 'Activities and steps across the top, user stories below, sliced into sprints — with Gherkin criteria.' },
   { kind: 'kanban', family: 'structured', label: 'Kanban board', es: 'Tablero Kanban', icon: 'SquareKanban', group: 'Planning', course: 'T10 Kanban y XP', blurb: 'Columns with WIP limits and cards for epics, stories, tasks and bugs.' },
   { kind: 'gantt', family: 'structured', label: 'Gantt chart', es: 'Diagrama de Gantt', icon: 'ChartGantt', group: 'Planning', course: 'T8 Proceso unificado · E3', blurb: 'Phases, tasks, milestones and dependencies on a timeline — the PUD plan.' },
@@ -58,7 +64,7 @@ export const KINDS: KindInfo[] = [
   { kind: 'architecture', family: 'graph', label: 'Infrastructure diagram', es: 'Diagrama de arquitectura / equipos', icon: 'Server', group: 'Architecture', course: 'T2 TCO · E1', blurb: 'Every machine and service of a solution (local or cloud) as icons in zones — the picture behind a TCO.' }
 ];
 
-export const GROUP_ORDER: KindInfo['group'][] = ['UML', 'Requirements', 'Design thinking', 'Planning', 'Architecture'];
+export const GROUP_ORDER: KindInfo['group'][] = ['Company', 'UML', 'Requirements', 'Design thinking', 'Planning', 'Architecture'];
 
 export function kindInfo(kind: DiagramKind): KindInfo {
   return KINDS.find((k) => k.kind === kind)!;
@@ -111,7 +117,8 @@ export type Shape =
   | 'external'
   | 'datastore'
   | 'screen'
-  | 'trace';
+  | 'trace'
+  | 'role';
 
 export interface NodeTypeInfo {
   type: string;
@@ -359,6 +366,19 @@ export const PALETTES: Record<GraphKind, Palette> = {
       note
     ],
     edges: [{ type: 'trace', label: 'Traces to', es: 'Se traza a', end: 'filled' }, { type: 'refines', label: 'Refined by', es: 'Se detalla en', end: 'none' }]
+  },
+  orgchart: {
+    defaultEdge: 'reports',
+    nodes: [
+      { type: 'role', label: 'Role', es: 'Rol', shape: 'role', defaultLabel: 'Rol', icon: 'UserRound' },
+      { type: 'unit', label: 'Area / team', es: 'Área / equipo', shape: 'zone', defaultLabel: 'Área', icon: 'Square', container: true, size: { w: 420, h: 260 } },
+      note
+    ],
+    edges: [
+      { type: 'reports', label: 'Reports to', es: 'Depende de', end: 'none' },
+      { type: 'collab', label: 'Works with', es: 'Colabora con', dashed: true, end: 'none' },
+      noteLink
+    ]
   },
   mindmap: {
     defaultEdge: 'crosslink',

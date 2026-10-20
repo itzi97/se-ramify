@@ -1,6 +1,6 @@
 {
   "name": "se-ramify",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local-first, open-source desktop app for the diagrams of a Software Engineering course: UML, maps, stakeholders, Gantt, story maps and Kanban.",
   "private": true,
   "license": "MIT",
@@ -12,7 +12,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
     "test": "tsx --test tests/*.test.ts",
-    "e2e": "tests/e2e/run.sh"
+    "e2e": "tests/e2e/run.sh",
+    "examples": "tests/e2e/examples.sh"
   },
   "dependencies": {
     "@fontsource/atkinson-hyperlegible": "^5.3.0",

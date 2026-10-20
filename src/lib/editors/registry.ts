@@ -12,6 +12,10 @@ import { stakeholderModule } from './stakeholder';
 import { journeyModule } from './journey';
 import { visionModule } from './vision';
 import { boardModule } from './board';
+import { tcoModule } from './tco';
+import { backlogModule } from './backlog';
+import { minutesModule } from './minutes';
+import { upModule } from './up';
 
 export const MODULES: { [K in DiagramKind]: EditorModule<K> } = {
   usecase: graphModule('usecase'),
@@ -28,6 +32,7 @@ export const MODULES: { [K in DiagramKind]: EditorModule<K> } = {
   traceability: graphModule('traceability'),
   mindmap: graphModule('mindmap'),
   conceptmap: graphModule('conceptmap'),
+  orgchart: graphModule('orgchart'),
   sequence: sequenceModule,
   gantt: ganttModule,
   kanban: kanbanModule,
@@ -35,6 +40,10 @@ export const MODULES: { [K in DiagramKind]: EditorModule<K> } = {
   stakeholder: stakeholderModule,
   journey: journeyModule,
   vision: visionModule,
+  tco: tcoModule,
+  backlog: backlogModule,
+  minutes: minutesModule,
+  up: upModule,
   empathy: boardModule('empathy'),
   canvas: boardModule('canvas'),
   context: boardModule('context'),

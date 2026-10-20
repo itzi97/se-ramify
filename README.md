@@ -1,18 +1,25 @@
 # se-ramify
 
-The diagrams of a Software Engineering course in one local, open-source desktop app: system and use case diagrams with their specifications, the rest of UML, stakeholder maps, the design thinking boards, user story maps, Kanban and Gantt. Same idea as ramify: every diagram is a plain JSON file in a folder you choose, so it's yours to sync, back up, put in git or read without this app.
+The diagrams and documents of a Software Engineering course in one local, open-source desktop app: system and use case diagrams with their specifications, the rest of UML, stakeholder maps, the design thinking boards, TCO, org chart, backlog with Gherkin, Unified Process plan, meeting minutes, user story maps, Kanban and Gantt — plus a checklist of what each project hand-in asks for. Same idea as ramify: every diagram is a plain JSON file in a folder you choose, so it's yours to sync, back up, put in git or read without this app.
 
 ## What it draws
 
 | Group | Diagrams |
 |---|---|
+| **Company** (E1 and the actas) | Organigrama y roles (who holds each role, responsibilities) · TCO calculator (cost lines per alternative by Tema 2 block, CAPEX / OPEX per year, 3-year total and per user, weighted criteria, recommendation) · lienzo de modelo de negocio · acta de reunión (client meeting, team meeting, post mortem, agile retrospective) |
 | **UML** | Diagrama de sistema / casos de uso (actors, system boundary, «include» / «extend», generalisation, plus a full specification per use case) · clases · secuencia · comunicación · actividad (swimlanes, fork / join) · estados · despliegue / componentes |
-| **Requirements** (Tema 3) | Modelo entidad / relación (Chen) · DFD (context diagram and levels, Gane–Sarson) · diseño de pantallas · trazabilidad de requisitos (RQ → criterios → diseño → componentes → casos de prueba) · mapa de stakeholders (power / interest grid **and** the onion) · visión (elevator pitch) · lienzo de modelo de negocio |
+| **Requirements** (Tema 3) | Modelo entidad / relación (Chen) · DFD (context diagram and levels, Gane–Sarson) · diseño de pantallas · trazabilidad de requisitos (RQ → criterios → diseño → componentes → casos de prueba) · mapa de stakeholders (power / interest grid **and** the onion) · visión (elevator pitch) |
 | **Design thinking** (Tema 3) | Mapa mental · mapa de contexto · customer persona · customer journey (with the emotion curve and moments of truth) · mapa de empatía · brainstorming (random-word stimulus, impact × feasibility) · crazy eight (with the timer) · 6 sombreros · mapa conceptual |
-| **Planning** | User Story Mapping (sprints, stories with Gherkin) · Kanban (WIP limits) · Gantt (phases, milestones, dependencies) · flowcharts / process models |
+| **Planning** | Backlog de producto (epics → user stories with Gherkin, a checker, and the AI brief / pack for vibe coding) · Proceso Unificado (phases, iterations, milestones, the disciplines' effort humps and each phase's artefacts linked to your diagrams) · User Story Mapping (sprints, stories with Gherkin) · Kanban (WIP limits) · Gantt (phases, milestones, dependencies) · flowcharts / process models |
 | **Architecture** | Infrastructure diagram: every machine and service of a local or cloud solution, in zones — the picture behind a TCO |
 
 Every kind can start blank or from a small worked example (a library loans system, one of the exercise themes in Tema 3), so they can be compared side by side.
+
+## Hand-ins
+
+The checklist icon next to a project in the list (or ⋯ → *Hand-in checklist*) shows, for E1, E2, E3 and the final hand-in of the course project, every part the brief asks for with its weight, which of the project's diagrams cover it, and what is still missing inside them — a use case without its specification, fewer than six stakeholders, a TCO line without a price or a source, a story without Gherkin, an acta with nothing about the methodology. *Create* makes a missing diagram in the project; *Export* writes just that hand-in (the final one includes E1–E3) with its own memoria. Parts that are prose (the brand, your model's pros and cons, the agile report) are listed as reminders.
+
+*Load the example project* (bottom of the list, or Help) adds every hand-in done for an invented product — BiblioYa, a library loans app by an invented company, Faro Software — to see what a complete one looks like. [`examples/`](examples/) has its exports: the images, PlantUML, Gherkin, AI pack and a PDF memoria per hand-in.
 
 ## Exports
 
@@ -24,8 +31,8 @@ PNG and SVG for every diagram, on white by default (untick *White background* in
 
 * PlantUML: use case, class, state, deployment, mind map
 * Mermaid: class, state, activity, flowchart, sequence, Gantt
-* Markdown: use case specifications (one table per use case), stories by sprint, stakeholder table, journey, boards, E/R, DFD, screens, traceability matrix, equipment inventory, vision
-* Gherkin `.feature` (`# language: es`) from story maps and Kanban cards, CSV for Gantt, stakeholders, traceability and the equipment inventory
+* Markdown: use case specifications (one table per use case), TCO tables and recommendation, backlog and AI brief, actas, UP phases and artefacts, roles, stories by sprint, stakeholder table, journey, boards, E/R, DFD, screens, traceability matrix, equipment inventory, vision
+* Gherkin `.feature` (`# language: es`) from the backlog, story maps and Kanban cards, CSV for Gantt, TCO, acta actions, stakeholders, traceability and the equipment inventory
 
 The sequence diagram also *imports* PlantUML (⋯ → Import), and has a text tab that round-trips with the clickable editor.
 

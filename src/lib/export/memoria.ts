@@ -9,8 +9,10 @@ export function demoteHeadings(md: string, by: number): string {
 }
 
 /** The memoria for a project, given each diagram, its image name and its Markdown exports. */
-export function memoria(project: string, parts: { doc: Diagram; image: string | null; markdown: string[] }[]): string {
-  const out = [`# ${project || 'Diagramas'}`, '', `_Exportado con se-ramify el ${new Date().toLocaleDateString('es-ES')}._`, '', '## Índice', ''];
+export function memoria(project: string, parts: { doc: Diagram; image: string | null; markdown: string[] }[], intro: string[] = []): string {
+  const out = [`# ${project || 'Diagramas'}`, '', `_Exportado con se-ramify el ${new Date().toLocaleDateString('es-ES')}._`, ''];
+  if (intro.length) out.push(...intro, '');
+  out.push('## Índice', '');
   parts.forEach((p, i) => out.push(`${i + 1}. [${p.doc.title}](#${slug(`${i + 1} ${p.doc.title}`, 80)}) — ${kindInfo(p.doc.kind).es}`));
   out.push('');
   parts.forEach((p, i) => {

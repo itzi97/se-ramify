@@ -9,7 +9,7 @@ import type { EdgeRouting, GEdge, GNode, GraphData, GraphKind } from '../../mode
 type N = Omit<GNode, 'id'> & { key: string };
 type E = Omit<GEdge, 'id' | 'from' | 'to'> & { from: string; to: string };
 
-function build(nodes: N[], edges: E[], routing: EdgeRouting = 'orthogonal'): GraphData {
+export function build(nodes: N[], edges: E[], routing: EdgeRouting = 'orthogonal'): GraphData {
   const ids = new Map<string, string>();
   for (const n of nodes) ids.set(n.key, uid());
   return {
@@ -19,8 +19,8 @@ function build(nodes: N[], edges: E[], routing: EdgeRouting = 'orthogonal'): Gra
   };
 }
 
-const n = (key: string, type: string, x: number, y: number, label: string, extra: Partial<GNode> = {}): N => ({ key, type, x, y, label, ...extra });
-const e = (from: string, to: string, type: string, extra: Partial<GEdge> = {}): E => ({ from, to, type, ...extra });
+export const n = (key: string, type: string, x: number, y: number, label: string, extra: Partial<GNode> = {}): N => ({ key, type, x, y, label, ...extra });
+export const e = (from: string, to: string, type: string, extra: Partial<GEdge> = {}): E => ({ from, to, type, ...extra });
 
 export function graphExample(kind: GraphKind): GraphData {
   switch (kind) {
@@ -332,6 +332,17 @@ export function graphExample(kind: GraphKind): GraphData {
       });
       return build(nodes, [e('m4s1', 'm0s0', 'crosslink')], 'straight');
     }
+    case 'orgchart':
+      return build(
+        [
+          n('ceo', 'role', 300, 0, 'Dirección y jefatura de proyecto', { person: 'Ana López', attrs: ['Planifica y sigue el proyecto (Gantt)', 'Interlocutora con el cliente', 'Redacta las actas'], color: '#d9534f' }),
+          n('area', 'unit', 0, 170, 'Equipo de desarrollo', { w: 860, h: 190 }),
+          n('ana', 'role', 30, 220, 'Análisis y requisitos', { person: 'Bruno Díaz', attrs: ['Casos de uso y especificaciones', 'Historias de usuario y Gherkin'], color: '#3a7bd5' }),
+          n('arq', 'role', 310, 220, 'Arquitectura y diseño', { person: 'Carla Gómez', attrs: ['Diagramas de clases y secuencia', 'Arquitectura y TCO'], color: '#58a55c' }),
+          n('qa', 'role', 590, 220, 'Desarrollo y calidad', { person: 'David Martín', attrs: ['Implementación', 'Plan y casos de prueba'], color: '#e8873a' })
+        ],
+        [e('ana', 'ceo', 'reports'), e('arq', 'ceo', 'reports'), e('qa', 'ceo', 'reports'), e('ana', 'arq', 'collab'), e('arq', 'qa', 'collab')]
+      );
     case 'conceptmap':
       return build(
         [

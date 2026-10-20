@@ -143,6 +143,30 @@ class AppState {
     this.imageSource = null;
   }
 
+  /**
+   * Add the example project (every hand-in done for an invented product) to
+   * the folder, under its own project name, and open its hand-in checklist
+   * source: the first diagram. Loaded lazily so its text stays out of the
+   * main bundle.
+   */
+  async loadExampleProject(): Promise<string> {
+    await this.flush();
+    const { exampleProject, EXAMPLE_PROJECT } = await import('../examples/project');
+    // A second copy gets its own name rather than mixing with the first.
+    let name = EXAMPLE_PROJECT;
+    for (let i = 2; this.list.some((m) => m.project === name); i++) name = `${EXAMPLE_PROJECT} (${i})`;
+    const s = await storage();
+    let first: string | null = null;
+    for (const d of exampleProject(name)) {
+      const path = await s.save(d);
+      first ??= path;
+    }
+    await this.refresh();
+    if (first) await this.open(first);
+    this.notify(`Added the example project "${name}": every hand-in, done for an invented library app.`);
+    return name;
+  }
+
   async duplicate() {
     if (!this.doc) return;
     await this.flush();

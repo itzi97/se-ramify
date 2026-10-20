@@ -250,6 +250,12 @@
           {/if}
           <p class="tiny muted">Visibility: <code>+</code> public, <code>-</code> private, <code>#</code> protected, <code>~</code> package. Add <code>{'{static}'}</code> to underline, <code>{'{abstract}'}</code> for italics. Double-click a compartment on the canvas to edit it in place.</p>
         {/if}
+        {#if ninfo.shape === 'role'}
+          <label class="field">Person <input type="text" placeholder="Who holds the role" value={node.person ?? ''} onkeydown={enterBlurs} oninput={(e) => setNode({ person: e.currentTarget.value || undefined }, 'person')} /></label>
+          <label class="field">Responsibilities — one per line
+            <textarea rows="4" placeholder="Planifica las iteraciones&#10;Habla con el cliente" value={(node.attrs ?? []).join('\n')} oninput={(e) => setNode({ attrs: lines(e.currentTarget.value) }, 'attrs')}></textarea>
+          </label>
+        {/if}
         {#if ninfo.shape === 'state'}
           <label class="field">Internal activities — one per line
             <textarea class="mono" rows="3" placeholder="entry / …&#10;do / …&#10;exit / …" value={(node.attrs ?? []).join('\n')} oninput={(e) => setNode({ attrs: lines(e.currentTarget.value) }, 'attrs')}></textarea>

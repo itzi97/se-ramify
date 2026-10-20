@@ -288,6 +288,12 @@
         {/each}
       {/if}
     </div>
+  {:else if shape === 'role'}
+    <div class="r-head">{@render text()}</div>
+    {#if n.person}<div class="r-person">{n.person}</div>{/if}
+    {#if (n.attrs?.length ?? 0) > 0 || data.editing === 'attrs'}
+      {@render list('attrs', n.attrs)}
+    {/if}
   {:else if shape === 'trace'}
     <span class="trace-icon"><Icon name={info.icon} size={13} /></span>
     {@render text()}
@@ -508,6 +514,39 @@
     border-left: 1px solid var(--d-line);
     border-bottom: 1px solid var(--d-line);
     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  }
+
+  /* org chart role */
+  .s-role {
+    align-items: stretch;
+    min-width: 170px;
+    max-width: 260px;
+    border: 1.5px solid var(--d-ink);
+    border-top: 5px solid var(--tint, var(--accent));
+    border-radius: 6px;
+    background: var(--d-fill);
+  }
+  .r-head {
+    padding: 6px 12px 2px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .r-person {
+    padding: 0 12px 6px;
+    text-align: center;
+    font-size: 12px;
+    opacity: 0.8;
+  }
+  .s-role .compartment {
+    border-top-width: 1px;
+  }
+  .s-role .member {
+    white-space: normal;
+    padding-left: 10px;
+    text-indent: -10px;
+  }
+  .s-role .member::before {
+    content: '· ';
   }
 
   /* class */

@@ -163,13 +163,17 @@ function optionsFor(kind: GraphKind): Record<string, string> {
         'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
         'elk.padding': '[top=48,left=28,bottom=28,right=28]'
       };
+    case 'orgchart':
+      return layered('DOWN', { 'elk.layered.spacing.nodeNodeBetweenLayers': '56', 'elk.spacing.nodeNode': '28', 'elk.edgeRouting': 'ORTHOGONAL' });
     default:
       return layered('DOWN');
   }
 }
 
 /** Edge types drawn "upwards" (child → parent): reversed for layout so parents end up first. */
-const UPWARD = new Set(['generalization', 'realization', 'isa']);
+const UPWARD = new Set(['generalization', 'realization', 'isa', 'reports']);
+/** Edge types between peers: they don't decide the layers (org chart "works with"). */
+const SIDEWAYS = new Set(['collab']);
 
 export async function tidy(kind: GraphKind, nodes: TidyNode[], edges: GEdge[]): Promise<Map<string, TidyResult>> {
   const { default: ELK } = await import('elkjs/lib/elk.bundled.js');
@@ -197,7 +201,7 @@ export async function tidy(kind: GraphKind, nodes: TidyNode[], edges: GEdge[]): 
   }
   const ids = new Set(nodes.map((n) => n.id));
   const elkEdges: ElkExtendedEdge[] = edges
-    .filter((e) => ids.has(e.from) && ids.has(e.to) && e.from !== e.to)
+    .filter((e) => ids.has(e.from) && ids.has(e.to) && e.from !== e.to && !SIDEWAYS.has(e.type))
     .map((e) => (UPWARD.has(e.type) ? { id: e.id, sources: [e.to], targets: [e.from] } : { id: e.id, sources: [e.from], targets: [e.to] }));
   root.edges = elkEdges;
   const laid = await elk.layout(root);

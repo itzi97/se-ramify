@@ -5,7 +5,7 @@
   import Icon from './Icon.svelte';
   import { exportProject } from '../export/project';
 
-  let { onNew }: { onNew: () => void } = $props();
+  let { onNew, onHandIns }: { onNew: () => void; onHandIns: (project: string) => void } = $props();
   let query = $state('');
 
   /** Diagrams grouped by project, newest first inside each; "No project" last. */
@@ -32,7 +32,10 @@
     {#each groups as [project, items] (project)}
       <div class="sect group row between">
         <span>{project || 'No project'}</span>
+        <span class="row acts">
+        <button class="icon small" title="Hand-ins: what E1, E2, E3 and the final ask for, and what's missing" aria-label="Hand-in checklist for {project || 'No project'}" onclick={() => onHandIns(project)}><Icon name="ClipboardCheck" size={14} /></button>
         <button class="icon small" title="Export this project: every diagram as PNG plus a Markdown memoria" aria-label="Export project {project || 'No project'}" onclick={() => exportProject(project)}><Icon name="PackageOpen" size={14} /></button>
+        </span>
       </div>
       {#each items as m (m.path)}
         {@const k = kindInfo(m.kind)}
@@ -62,6 +65,12 @@
         {/each}
       </details>
     {/if}
+    {#if !app.list.some((m) => m.project.startsWith('Ejemplo — BiblioYa'))}
+      <button class="small folder" onclick={async () => onHandIns(await app.loadExampleProject())} title="Every hand-in (E1, E2, E3, final) done for an invented library app, to see what a complete one looks like">
+        <Icon name="GraduationCap" size={14} />
+        <span class="t">Load the example project</span>
+      </button>
+    {/if}
     {#if archivedCount}
       <label class="check small muted"><input type="checkbox" bind:checked={app.showArchived} /> Show archived ({archivedCount})</label>
     {/if}
@@ -73,6 +82,9 @@
 </nav>
 
 <style>
+  .acts {
+    gap: 2px;
+  }
   .list {
     position: absolute;
     top: var(--top-h);

@@ -2,7 +2,7 @@
  * Creating, validating and normalising diagrams. No Svelte here, so the
  * node tests can import it.
  */
-import { FORMAT, type DataByKind, type Diagram, type DiagramKind, type DiagramMeta, type UseCaseSpec, type UserStory } from './types';
+import { FORMAT, type DataByKind, type Diagram, type DiagramKind, type DiagramMeta, type UpData, type UpDiscipline, type UpPhase, type UseCaseSpec, type UserStory } from './types';
 import { KINDS } from './kinds';
 
 export function uid(): string {
@@ -36,6 +36,7 @@ export function blankData<K extends DiagramKind>(kind: K): DataByKind[K] {
     traceability: () => ({ ...graph, nodes: [], edges: [], routing: 'straight' }),
     mindmap: () => ({ nodes: [{ id: uid(), type: 'central', x: 0, y: 0, label: 'Idea central' }], edges: [], routing: 'straight' }),
     conceptmap: () => ({ ...graph, nodes: [], edges: [], routing: 'straight' }),
+    orgchart: () => ({ ...graph, nodes: [], edges: [] }),
     sequence: () => ({ participants: [], items: [], activations: true, autonumber: false }),
     gantt: () => ({ tasks: [], scale: 'week', showWeekends: true }),
     storymap: () => ({ persona: '', activities: [], releases: [{ id: uid(), name: 'Sprint 1' }, { id: uid(), name: 'Sprint 2' }], stories: [] }),
@@ -66,9 +67,62 @@ export function blankData<K extends DiagramKind>(kind: K): DataByKind[K] {
     brainstorm: () => ({ subject: '', sections: {} }),
     crazy8: () => ({ subject: '', sections: {} }),
     sixhats: () => ({ subject: '', sections: {} }),
-    vision: () => ({ forWho: '', who: '', product: '', isA: '', that: '', unlike: '', ourProduct: '' })
+    vision: () => ({ forWho: '', who: '', product: '', isA: '', that: '', unlike: '', ourProduct: '' }),
+    tco: () => ({
+      years: 3,
+      users: 0,
+      alternatives: [
+        { id: uid(), name: 'Local (on-premises)', description: '', lines: [] },
+        { id: uid(), name: 'Nube', description: '', lines: [] }
+      ],
+      criteria: [],
+      scores: {},
+      recommendation: ''
+    }),
+    backlog: () => ({ product: '', components: [], epics: [], ai: { context: '', stack: '', guardrails: '', glossary: '', outOfScope: '', process: '' } }),
+    minutes: () => ({
+      type: 'client',
+      number: '',
+      date: new Date().toISOString().slice(0, 10),
+      start: '',
+      end: '',
+      place: '',
+      attendees: [],
+      agenda: [],
+      discussion: '',
+      decisions: [],
+      actions: [],
+      questions: [],
+      review: [],
+      next: ''
+    }),
+    up: () => blankUp()
   };
   return all[kind]() as DataByKind[K];
+}
+
+/** The four UP phases and the usual disciplines, with the textbook effort curves. */
+export function blankUp(): UpData {
+  const phases: UpPhase[] = [
+    { name: 'Inicio', goal: '¿Merece la pena? Alcance, visión y viabilidad.', milestone: 'Objetivos del ciclo de vida', iterations: ['I1'] },
+    { name: 'Elaboración', goal: 'Estabilizar los requisitos y la arquitectura.', milestone: 'Arquitectura del ciclo de vida', iterations: ['E1', 'E2'] },
+    { name: 'Construcción', goal: 'Construir el sistema por iteraciones.', milestone: 'Capacidad operativa inicial', iterations: ['C1', 'C2', 'C3'] },
+    { name: 'Transición', goal: 'Entregarlo a los usuarios.', milestone: 'Entrega del producto', iterations: ['T1'] }
+  ].map((p) => ({ id: uid(), ...p }));
+  const disciplines: UpDiscipline[] = (
+    [
+      ['Modelado del negocio', [3, 2, 0, 0]],
+      ['Requisitos', [3, 4, 1, 0]],
+      ['Análisis y diseño', [1, 4, 2, 0]],
+      ['Implementación', [0, 2, 4, 1]],
+      ['Pruebas', [0, 1, 4, 2]],
+      ['Despliegue', [0, 0, 1, 4]],
+      ['Gestión de configuración y cambios', [1, 1, 2, 2]],
+      ['Gestión del proyecto', [2, 2, 2, 2]],
+      ['Entorno', [2, 2, 1, 1]]
+    ] as [string, number[]][]
+  ).map(([name, effort]) => ({ id: uid(), name, effort }));
+  return { phases, disciplines, artifacts: [] };
 }
 
 export function blankSpec(): UseCaseSpec {

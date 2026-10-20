@@ -515,6 +515,43 @@ function communicationMarkdown(doc: DiagramOf<'communication'>): string {
   return [`# ${doc.title} — mensajes`, '', '| Nº | Mensaje | De | A |', '|---|---|---|---|', ...msgs.map((m) => `| ${m.seq} | ${cell(m.text)} | ${cell(m.from)} | ${cell(m.to)} |`)].join('\n');
 }
 
+/* --------------------------------------------------------------- org chart */
+
+/** Who each role reports to (the "reports" line goes from the role to its boss). */
+function bossOf(g: GraphData): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const e of g.edges) if (e.type === 'reports') out.set(e.from, e.to);
+  return out;
+}
+
+function orgMarkdown(doc: DiagramOf<'orgchart'>): string {
+  const nodes = byId(doc.data);
+  const boss = bossOf(doc.data);
+  const roles = doc.data.nodes.filter((n) => n.type === 'role');
+  const parents = containment('orgchart', doc.data);
+  const rows = roles.map((r) => {
+    const area = parents.get(r.id);
+    return `| ${cell(r.label)} | ${cell(r.person ?? '')} | ${cell(area ? nodes.get(area)!.label : '')} | ${cell(boss.has(r.id) ? nodes.get(boss.get(r.id)!)?.label ?? '' : '—')} | ${(r.attrs ?? []).map(cell).join('<br>')} |`;
+  });
+  return [`# ${doc.title}`, '', '| Rol | Persona | Área | Depende de | Responsabilidades |', '|---|---|---|---|---|', ...rows].join('\n');
+}
+
+function orgPuml(g: GraphData): string {
+  const roles = g.nodes.filter((n) => n.type === 'role');
+  const ids = new Map(roles.map((r, i) => [r.id, `R${i + 1}`]));
+  const out = ['@startuml', 'skinparam rectangle { RoundCorner 8 }'];
+  for (const r of roles) {
+    const body = [r.person ?? '', ...(r.attrs ?? []).map((a) => `· ${a}`)].filter(Boolean).join('\\n');
+    out.push(`rectangle "**${one(r.label)}**${body ? '\\n' + one(body) : ''}" as ${ids.get(r.id)}`);
+  }
+  for (const e of g.edges) {
+    if (!ids.has(e.from) || !ids.has(e.to)) continue;
+    out.push(e.type === 'reports' ? `${ids.get(e.to)} -down- ${ids.get(e.from)}` : `${ids.get(e.from)} .. ${ids.get(e.to)}`);
+  }
+  out.push('@enduml');
+  return out.join('\n');
+}
+
 /* ------------------------------------------------------------------ index */
 
 export function graphExports(doc: DiagramOf<GraphKind>): TextExport[] {
@@ -553,6 +590,8 @@ export function graphExports(doc: DiagramOf<GraphKind>): TextExport[] {
       return [md('Propositions', () => propositions(doc))];
     case 'communication':
       return [md('Messages in order', () => communicationMarkdown(doc as DiagramOf<'communication'>))];
+    case 'orgchart':
+      return [md('Roles and responsibilities', () => orgMarkdown(doc as DiagramOf<'orgchart'>)), puml(() => orgPuml(g))];
   }
 }
 

@@ -1,0 +1,50 @@
+@startuml
+hide empty members
+
+class "Socio" as C1 {
+  - numSocio: int
+  - nombre: String
+  - email: String
+  + puedePedir(): boolean
+}
+class "Prestamo" as C2 {
+  - fechaInicio: Date
+  - fechaFin: Date
+  - devuelto: boolean
+  + renovar(): void
+  + estaVencido(): boolean
+}
+class "Ejemplar" as C3 {
+  - codigo: String
+  - estado: EstadoEjemplar
+}
+class "Libro" as C4 {
+  - isbn: String
+  - titulo: String
+}
+enum "EstadoEjemplar" as C5 {
+  DISPONIBLE
+  PRESTADO
+  RESERVADO
+  BAJA
+}
+abstract class "Material" as C6 {
+  # titulo: String
+  + duracionPrestamo(): int {abstract}
+}
+class "Revista" as C7 {
+  - numero: int
+  + duracionPrestamo(): int
+}
+interface "Notificable" as C8 {
+  + notificar(msg: String): void
+}
+
+C1 "1" -- "0..3" C2 : realiza
+C2 "0..*" -- "1" C3
+C4 "1" *-- "1..*" C3
+C3 ..> C5
+C4 --|> C6
+C7 --|> C6
+C1 ..|> C8
+@enduml

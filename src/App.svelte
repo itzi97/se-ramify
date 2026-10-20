@@ -10,6 +10,7 @@
   import Panel from './lib/components/Panel.svelte';
   import DiagramList from './lib/components/DiagramList.svelte';
   import NewDiagram from './lib/components/NewDiagram.svelte';
+  import Deliverables from './lib/components/Deliverables.svelte';
   import Notices from './lib/components/Notices.svelte';
 
   type Menu = 'export' | 'more' | null;
@@ -18,6 +19,7 @@
   let menu = $state<Menu>(null);
   let side = $state<Side>(null);
   let newOpen = $state(false);
+  let handIns = $state<string | null>(null);
   let backups = $state<BackupMeta[]>([]);
 
   onMount(() => void app.init());
@@ -166,6 +168,7 @@
             {#if mod?.importText}
               <button class="menu-row" role="menuitem" onclick={importText}><Icon name="FileInput" size={16} /> {mod.importText.label}…</button>
             {/if}
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; handIns = app.doc?.project ?? ''; }}><Icon name="ClipboardCheck" size={16} /> Hand-in checklist…</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.duplicate(); }}><Icon name="Copy" size={16} /> Duplicate</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.toggleArchive(); }}><Icon name="Archive" size={16} /> {app.doc.archived ? 'Unarchive' : 'Archive'}</button>
             <button class="menu-row" role="menuitem" onclick={openVersions}><Icon name="History" size={16} /> Previous versions…</button>
@@ -198,7 +201,7 @@
       </div>
     </main>
   {:else if app.ready}
-    {#if app.listOpen}<DiagramList onNew={() => (newOpen = true)} />{/if}
+    {#if app.listOpen}<DiagramList onNew={() => (newOpen = true)} onHandIns={(p) => (handIns = p)} />{/if}
     <main class="editor-area" lang="es">
       {#if app.doc && Editor}
         {#key app.doc.id}
@@ -249,6 +252,9 @@
         <ul>
           <li><kbd>Tab</kbd> adds an idea under the selected one, <kbd>Enter</kbd> one beside it, <kbd>F2</kbd> renames.</li>
         </ul>
+        <div class="sect">Hand-ins</div>
+        <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in. "Load the example project" at the bottom of the list adds every hand-in done for an invented library app.</p>
+        <p><button class="secondary small" onclick={async () => { side = null; handIns = await app.loadExampleProject(); }}>Load the example project</button></p>
         <div class="sect">Exports</div>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into a document. The box icon next to a project in the list exports the whole project: every diagram as a PNG plus a Markdown memoria with the specifications and stories.</p>
         <p>PNG and SVG for every diagram (on white by default). UML diagrams also export PlantUML; the Gantt exports Mermaid; specifications, stories and maps export Markdown; stories export Gherkin <code>.feature</code> files.</p>
@@ -258,6 +264,7 @@
   {/if}
 
   {#if newOpen}<NewDiagram onClose={() => (newOpen = false)} />{/if}
+  {#if handIns !== null}<Deliverables project={handIns} onClose={() => (handIns = null)} />{/if}
   <Notices />
 </div>
 
