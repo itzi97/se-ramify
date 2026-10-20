@@ -68,7 +68,7 @@ await page.getByRole('button', { name: 'Export', exact: true }).click();
 await page.getByRole('menuitem', { name: /PNG/ }).click();
 const file = await dl;
 if (!file) fail('no png download');
-else { const p = await file.path(); const fs = await import('node:fs'); console.log('png bytes', fs.statSync(p).size); fs.copyFileSync(p, '/tmp/claude-0/export-class.png'); }
+else { const p = await file.path(); const fs = await import('node:fs'); console.log('png bytes', fs.statSync(p).size); fs.copyFileSync(p, (await import('node:path')).join((await import('node:os')).tmpdir(), 'se-ramify-export-class.png')); }
 
 // 6. mind map: Tab adds under, Enter beside
 await page.evaluate(() => window.__app.create('mindmap', 'MM', 'T'));
@@ -86,7 +86,7 @@ d = await data();
 const labels = d.nodes.map((n) => n.label);
 console.log('mindmap', labels.join(' | '));
 if (!labels.includes('Rama A') || !labels.includes('Rama B') || !labels.includes('Sub B1')) fail('mindmap keys');
-await page.screenshot({ path: '/tmp/claude-0/mm-interact.png' });
+await page.screenshot({ path: (await import('node:path')).join((await import('node:os')).tmpdir(), 'se-ramify-mm-interact.png') });
 if (errors.length) fail('page errors: ' + errors.join('\n'));
 await browser.close();
 console.log(process.exitCode ? 'FAILED' : 'all passed');
