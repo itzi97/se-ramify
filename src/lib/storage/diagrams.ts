@@ -40,6 +40,16 @@ export interface Storage {
   /** Raw text of a file in the folder, and writing it back (resolving git conflicts). */
   readRaw(path: string): Promise<string>;
   writeRaw(path: string, text: string): Promise<void>;
+  /**
+   * Small shared files next to the diagrams, in `se-ramify-config/` (hand-in
+   * checklist changes, who is editing what), so the whole team sees them.
+   * Names may contain one `/` for a subfolder ("presence/ana.json").
+   */
+  readConfig(name: string): Promise<string | null>;
+  writeConfig(name: string, text: string): Promise<void>;
+  /** Every config file under a subfolder ("presence"), with its text. */
+  listConfig(sub: string): Promise<{ name: string; text: string }[]>;
+  removeConfig(name: string): Promise<void>;
   /** Saves and returns the path the diagram now lives at. */
   save(d: Diagram, path?: string): Promise<string>;
   remove(path: string): Promise<void>;
@@ -106,6 +116,9 @@ function peekText(text: string): { updated: string; updatedBy?: string } {
   const b = /"updatedBy"\s*:\s*"([^"]*)"/.exec(text);
   return { updated: m?.[1] ?? '', updatedBy: b?.[1] };
 }
+
+/** Shared settings folder inside the diagrams folder. */
+export const CONFIG = 'se-ramify-config';
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -178,6 +191,46 @@ async function tauriStorage(): Promise<Storage> {
     async writeRaw(path, text) {
       await fs.writeTextFile(path, text);
       cache.delete(path);
+    },
+    async readConfig(name) {
+      const dir = await getDir();
+      if (!dir) return null;
+      const p = join(join(dir, CONFIG), name);
+      return (await fs.exists(p)) ? fs.readTextFile(p) : null;
+    },
+    async writeConfig(name, text) {
+      const dir = await getDir();
+      if (!dir) return;
+      const root = join(dir, CONFIG);
+      const sub = name.includes('/') ? join(root, name.slice(0, name.lastIndexOf('/'))) : root;
+      if (!(await fs.exists(sub))) {
+        await fs.mkdir(sub, { recursive: true });
+        // Presence is live state, not history: keep it out of a team's git repository.
+        if (sub.endsWith('presence')) await fs.writeTextFile(join(sub, '.gitignore'), '*\n');
+      }
+      await fs.writeTextFile(join(root, name), text);
+    },
+    async listConfig(sub) {
+      const dir = await getDir();
+      if (!dir) return [];
+      const d = join(join(dir, CONFIG), sub);
+      if (!(await fs.exists(d))) return [];
+      const out: { name: string; text: string }[] = [];
+      for (const e of await fs.readDir(d)) {
+        if (!e.isFile || !e.name.endsWith('.json')) continue;
+        try {
+          out.push({ name: e.name, text: await fs.readTextFile(join(d, e.name)) });
+        } catch {
+          /* half-synced: next time */
+        }
+      }
+      return out;
+    },
+    async removeConfig(name) {
+      const dir = await getDir();
+      if (!dir) return;
+      const p = join(join(dir, CONFIG), name);
+      if (await fs.exists(p)) await fs.remove(p);
     },
     async load(path) {
       return parse(await fs.readTextFile(path), path);
@@ -293,6 +346,7 @@ async function tauriStorage(): Promise<Storage> {
 
 function browserStorage(): Storage {
   let problems: FileProblem[] = [];
+  const CONF = 'se-ramify:config:';
   const PREFIX = 'se-ramify:diagram:';
   const BACKUP = 'se-ramify:backup:';
   const DIR = 'se-ramify:dir';
@@ -329,6 +383,20 @@ function browserStorage(): Storage {
     },
     async writeRaw(path, text) {
       localStorage.setItem(path, text);
+    },
+    async readConfig(name) {
+      return localStorage.getItem(CONF + name);
+    },
+    async writeConfig(name, text) {
+      localStorage.setItem(CONF + name, text);
+    },
+    async listConfig(sub) {
+      return Object.keys(localStorage)
+        .filter((k) => k.startsWith(`${CONF}${sub}/`))
+        .map((k) => ({ name: k.slice(CONF.length + sub.length + 1), text: localStorage.getItem(k) ?? '' }));
+    },
+    async removeConfig(name) {
+      localStorage.removeItem(CONF + name);
     },
     async load(path) {
       const text = localStorage.getItem(path);

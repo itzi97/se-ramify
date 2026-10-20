@@ -1,6 +1,6 @@
 [package]
 name = "se-ramify"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local-first desktop app for the diagrams of a Software Engineering course."
 edition = "2021"
 license = "MIT"
@@ -24,6 +24,7 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-persisted-scope = "2"
 # Remembers window size (and position where the compositor allows it).
 tauri-plugin-window-state = "2"
+tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 futures-util = "0.3"

@@ -206,6 +206,7 @@
           {/each}
         </div>
 
+        {#if data.epics.length}
         <div class="checks">
           <button class="inline check-head" onclick={() => (showAllChecks = !showAllChecks)} aria-expanded={showAllChecks}>
             <Icon name={problems.length ? (errors ? 'CircleX' : 'TriangleAlert') : 'CircleCheck'} size={14} />
@@ -222,6 +223,7 @@
             </ul>
           {/if}
         </div>
+        {/if}
       </aside>
 
       <section class="detail float" aria-label="Epic">
@@ -276,7 +278,7 @@
             {/each}
           </div>
         {:else}
-          <div class="detail-body"><p class="muted">Add an epic to start.</p></div>
+          <div class="detail-body"><p class="muted">Add your first epic with <strong>+ Epic</strong>: one big block of functionality (e.g. "Gestión de préstamos"). The checklist of what each story still needs appears once there is one.</p></div>
         {/if}
       </section>
     </div>

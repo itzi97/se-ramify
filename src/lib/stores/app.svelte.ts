@@ -9,8 +9,9 @@
 import { tick } from 'svelte';
 import { newDiagram, nowIso, uid } from '../model/diagram';
 import type { DataByKind, Diagram, DiagramKind, DiagramMeta, DiagramOf } from '../model/types';
-import { storage, type BackupMeta, type DeletedMeta, type FileKind, type FileProblem } from '../storage/diagrams';
+import { isTauri, storage, type BackupMeta, type DeletedMeta, type FileKind, type FileProblem } from '../storage/diagrams';
 import { splitConflict } from '../storage/team';
+import { CHECK_EVERY, isNewer, latestRelease } from '../desktop/update';
 import { validateDiagram, normalizeDiagram } from '../model/diagram';
 import { setThemePref, startAppearance, type ThemePref } from '../desktop/appearance';
 import type { ImageSource, TextExport } from '../editors/types';
@@ -25,6 +26,21 @@ const BACKUP_EVERY = 5 * 60 * 1000;
 const HISTORY = 150;
 /** Keystrokes in the same field within this window are one undo step. */
 const COALESCE_MS = 1200;
+
+/** Seconds a heartbeat counts as "here": a closed laptop drops out after this. */
+const PRESENCE_TTL = 60_000;
+const BEAT_EVERY = 15_000;
+/** An edit in the last two minutes makes "has it open" into "is editing". */
+const EDITING_WINDOW = 120_000;
+
+export interface Presence {
+  client: string;
+  name: string;
+  id: string;
+  title: string;
+  at: number;
+  editing: boolean;
+}
 
 export interface Notice {
   id: number;
@@ -51,6 +67,16 @@ class AppState {
   problems = $state<FileProblem[]>([]);
   /** The `updated` stamp of the open diagram's file as this app last read or wrote it. */
   private known: string | null = null;
+  /** A newer release on GitHub, if the daily check found one. */
+  update = $state<{ version: string; url: string } | null>(null);
+  checkUpdates = $state(true);
+  /** Other people with a diagram open right now, by diagram id (from their heartbeat files). */
+  presence = $state<Record<string, Presence[]>>({});
+  /** This install's id, so two people with the same name stay apart. */
+  private clientId = '';
+  private lastBeat = 0;
+  private beatKey = '';
+  private lastEditAt = 0;
   private watching = false;
   private syncing = false;
   showArchived = $state(false);
@@ -77,6 +103,9 @@ class AppState {
     this.lightExports = (await s.getSetting<boolean>('lightExports')) ?? true;
     this.listOpen = (await s.getSetting<boolean>('listOpen')) ?? true;
     this.userName = (await s.getSetting<string>('userName')) ?? '';
+    // One id per install on the desktop; in a browser every window counts as its own person (tabs share storage).
+    this.clientId = isTauri ? ((await s.getSetting<string>('clientId')) ?? '') : uid();
+    if (!this.clientId) await s.setSetting('clientId', (this.clientId = uid()));
     await startAppearance(this.theme);
     this.dir = await s.getDir();
     if (this.dir) {
@@ -90,8 +119,13 @@ class AppState {
       }
     }
     this.ready = true;
-    window.addEventListener('beforeunload', () => void this.flush());
+    window.addEventListener('beforeunload', () => {
+      void this.flush();
+      void this.leave();
+    });
     this.watch();
+    this.checkUpdates = (await s.getSetting<boolean>('checkUpdates')) ?? true;
+    void this.lookForUpdate();
   }
 
   async pickDir() {
@@ -135,6 +169,8 @@ class AppState {
       if (sig(next) !== sig(this.list)) this.list = next;
       const probs = s.problems();
       if (probs.map((p) => p.path).join() !== this.problems.map((p) => p.path).join()) this.problems = probs;
+      await this.beat();
+      await this.readPresence();
       if (!this.doc || !this.path) return;
       const mine = next.find((m) => m.path === this.path);
       // Someone else saved the open diagram and there's nothing of ours waiting: show theirs.
@@ -156,9 +192,92 @@ class AppState {
     }
   }
 
+  /** Once a day at most: is there a newer release than this one? */
+  async lookForUpdate(force = false) {
+    if (!this.checkUpdates && !force) return;
+    const s = await storage();
+    const last = (await s.getSetting<number>('updateCheckedAt')) ?? 0;
+    if (!force && Date.now() - last < CHECK_EVERY) {
+      // Between checks, remember what the last one found.
+      const known = await s.getSetting<{ version: string; url: string }>('updateFound');
+      if (known && isNewer(known.version, __APP_VERSION__)) this.update = known;
+      return;
+    }
+    const latest = await latestRelease();
+    await s.setSetting('updateCheckedAt', Date.now());
+    await s.setSetting('updateFound', latest);
+    this.update = latest && isNewer(latest.version, __APP_VERSION__) ? latest : null;
+    if (force) this.notify(this.update ? `se-ramify ${this.update.version} is available.` : latest ? `You have the latest version (${__APP_VERSION__}).` : "Couldn't reach GitHub to check.");
+  }
+
+  async setCheckUpdates(v: boolean) {
+    this.checkUpdates = v;
+    await (await storage()).setSetting('checkUpdates', v);
+    if (!v) this.update = null;
+  }
+
+  /** Tell the others which diagram is open here (and whether it's being edited). */
+  private async beat(force = false) {
+    if (!this.clientId) return;
+    const s = await storage();
+    const editing = Date.now() - this.lastEditAt < EDITING_WINDOW;
+    const key = `${this.doc?.id ?? ''}|${editing}|${this.userName}`;
+    if (!force && key === this.beatKey && Date.now() - this.lastBeat < BEAT_EVERY) return;
+    this.beatKey = key;
+    this.lastBeat = Date.now();
+    const name = `presence/${this.clientId}.json`;
+    try {
+      if (!this.doc) await s.removeConfig(name);
+      else {
+        const me: Presence = { client: this.clientId, name: this.userName || 'Someone', id: this.doc.id, title: this.doc.title, at: Date.now(), editing };
+        await s.writeConfig(name, JSON.stringify(me));
+      }
+    } catch (err) {
+      console.warn('presence', err);
+    }
+  }
+
+  private async leave() {
+    if (!this.clientId) return;
+    try {
+      await (await storage()).removeConfig(`presence/${this.clientId}.json`);
+    } catch {
+      /* the folder may be gone */
+    }
+  }
+
+  private async readPresence() {
+    const s = await storage();
+    const now = Date.now();
+    const next: Record<string, Presence[]> = {};
+    for (const f of await s.listConfig('presence')) {
+      try {
+        const p = JSON.parse(f.text) as Presence;
+        if (!p.client || p.client === this.clientId || !p.id || now - p.at > PRESENCE_TTL) continue;
+        (next[p.id] ??= []).push(p);
+      } catch {
+        /* half-synced */
+      }
+    }
+    if (JSON.stringify(next) !== JSON.stringify(this.presence)) this.presence = next;
+  }
+
+  /** Others on a diagram: "Bruno is editing", "Bruno and Carla have it open". */
+  presenceLine(id: string): string {
+    const ps = this.presence[id] ?? [];
+    if (!ps.length) return '';
+    const editing = ps.filter((p) => p.editing).map((p) => p.name);
+    const viewing = ps.filter((p) => !p.editing).map((p) => p.name);
+    const join = (n: string[]) => (n.length < 2 ? n.join('') : `${n.slice(0, -1).join(', ')} and ${n.at(-1)}`);
+    return [editing.length ? `${join(editing)} ${editing.length > 1 ? 'are' : 'is'} editing it` : '', viewing.length ? `${join(viewing)} ${viewing.length > 1 ? 'have' : 'has'} it open` : '']
+      .filter(Boolean)
+      .join('; ');
+  }
+
   async setUserName(name: string) {
     this.userName = name.trim();
     await (await storage()).setSetting('userName', this.userName);
+    void this.beat(true);
   }
 
   /** Save the open diagram as a single file to send to someone (chat, e-mail). */
@@ -271,6 +390,8 @@ class AppState {
       this.doc = d;
       this.path = path;
       this.known = d.updated;
+      this.lastEditAt = 0;
+      void this.beat(true);
       const h = this.histories.get(d.id);
       this.undoStack = h?.undo ?? [];
       this.redoStack = h?.redo ?? [];
@@ -296,6 +417,7 @@ class AppState {
 
   close() {
     void this.flush();
+    setTimeout(() => void this.beat(true));
     if (this.doc) this.histories.set(this.doc.id, { undo: this.undoStack, redo: this.redoStack });
     this.doc = null;
     this.path = null;
@@ -396,6 +518,10 @@ class AppState {
     this.lastKeyAt = now;
     fn(this.doc);
     this.touch();
+    // The first edit after a while tells the others right away.
+    const wasIdle = now - this.lastEditAt > EDITING_WINDOW;
+    this.lastEditAt = now;
+    if (wasIdle) void this.beat(true);
   }
 
   undo() {
@@ -441,18 +567,24 @@ class AppState {
       this.saveTimer = null;
     }
     if (!this.doc || !this.path || this.saving !== 'pending') return;
-    const s = await storage();
+    // Take the diagram and its path now: closing or switching may happen while this saves.
+    const path = this.path;
+    const known = this.known;
     const snap = $state.snapshot(this.doc) as Diagram;
     if (this.userName) snap.updatedBy = this.userName;
+    const s = await storage();
+    const still = () => this.path === path;
     try {
       // Someone else saved this file since we read it: never write over their work.
-      const disk = await s.peek(this.path);
-      if (disk && this.known !== null && disk.updated !== this.known) return await this.conflict(snap, disk.updatedBy);
-      await s.save(snap, this.path);
-      this.known = snap.updated;
-      if (this.doc && this.userName) this.doc.updatedBy = this.userName;
-      this.saving = 'saved';
-      const meta = this.list.find((m) => m.path === this.path);
+      const disk = await s.peek(path);
+      if (disk && known !== null && disk.updated !== known) return await this.conflict(snap, disk.updatedBy, path);
+      await s.save(snap, path);
+      if (still()) {
+        this.known = snap.updated;
+        if (this.doc && this.userName) this.doc.updatedBy = this.userName;
+        this.saving = 'saved';
+      }
+      const meta = this.list.find((m) => m.path === path);
       if (meta) Object.assign(meta, { title: snap.title, project: snap.project, updated: snap.updated, archived: snap.archived, updatedBy: snap.updatedBy });
       if (Date.now() - this.lastBackup > BACKUP_EVERY) {
         this.lastBackup = Date.now();
@@ -469,14 +601,18 @@ class AppState {
    * Both of us changed the same diagram: their version (already on disk)
    * opens, ours is saved next to it as a copy, and both names are said.
    */
-  private async conflict(mine: Diagram, by: string | undefined) {
+  private async conflict(mine: Diagram, by: string | undefined, path: string) {
     const s = await storage();
     const who = this.userName || 'tu versión';
     const copy = { ...mine, id: uid(), title: `${mine.title} (${this.userName ? `versión de ${who}` : who})`, created: nowIso() };
     await s.save(copy);
-    const path = this.path!;
-    this.saving = 'saved';
     const theirs = await s.load(path);
+    if (this.path !== path) {
+      // Closed or switched meanwhile: nothing to swap on screen.
+      await this.refresh();
+      return this.notify(`${by ?? 'Someone'} saved "${theirs.title}" while you were editing it; yours is kept as "${copy.title}".`, 'error');
+    }
+    this.saving = 'saved';
     this.doc = theirs;
     this.known = theirs.updated;
     this.undoStack = [];

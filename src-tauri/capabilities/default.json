@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: read/write diagram files in the chosen folder, pick folders and export targets, store settings, copy images and text to the clipboard. No network.",
+  "description": "Main window: read/write diagram files in the chosen folder, pick folders and export targets, store settings, copy images and text to the clipboard, open the release page in the browser.",
   "windows": [
     "main"
   ],
@@ -10,6 +10,14 @@
     "dialog:default",
     "store:default",
     "clipboard-manager:allow-write-text",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/itzi97/se-ramify/*"
+        }
+      ]
+    },
     "clipboard-manager:allow-write-image",
     "fs:default",
     "fs:allow-read-dir",

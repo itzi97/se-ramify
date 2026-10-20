@@ -864,3 +864,10 @@ input[type='range'] {
 .exporting .svelte-flow__edge.selected .mark.filled {
   fill: var(--edge-ink) !important;
 }
+
+/* Placeholders show an example: lighter than real text so nobody mistakes one for the other. */
+::placeholder {
+  /* Between muted and faint: readable in both themes, clearly lighter than typed text. */
+  color: color-mix(in srgb, var(--muted) 70%, var(--faint));
+  opacity: 1;
+}

@@ -81,6 +81,31 @@ await a.waitForTimeout(500);
 const resolved = await a.evaluate(() => window.__app.list.find((m) => m.id === 'gitconf')?.title);
 if (resolved !== 'Visión (suya)') fail(`resolved title ${resolved}`);
 
+// 6. Presence: Bruno has the diagram open and edits it; Ana's list says so.
+const domain = await b.evaluate(() => window.__app.list.find((m) => m.title === 'Modelo del dominio v2' && !m.dupOf));
+await b.evaluate((p) => window.__app.open(p), domain.path);
+await b.evaluate(() => window.__app.change((d) => (d.notes = 'nota de Bruno')));
+await a.waitForFunction((id) => window.__app.presence[id]?.some((p) => p.name === 'Bruno' && p.editing), domain.id, { timeout: 10000 }).catch(() => fail('Ana never saw Bruno editing'));
+const line = await a.evaluate((id) => window.__app.presenceLine(id), domain.id);
+if (line !== 'Bruno is editing it') fail(`presence line: ${line}`);
+await b.evaluate(() => window.__app.close());
+await a.waitForFunction((id) => !window.__app.presence[id], domain.id, { timeout: 10000 }).catch(() => fail('presence did not clear on close'));
+
+// 7. Checklist changes are shared: Ana asks for use cases in E1 too; Bruno sees it.
+await a.getByRole('button', { name: 'Hand-in checklist for Equipo' }).click();
+await a.getByRole('button', { name: /Edit checklist/ }).click();
+await a.waitForTimeout(400);
+await a.getByRole('tab', { name: /^E2/ }).click();
+await a.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim().startsWith('E2'), null, { timeout: 5000 }).catch(() => fail('E2 tab not selected'));
+await a.getByRole('combobox', { name: /Move or copy Casos de uso/ }).selectOption('copy:E1');
+await a.waitForTimeout(300);
+await a.keyboard.press('Escape');
+await b.getByRole('button', { name: 'Hand-in checklist for Equipo' }).click();
+await b.waitForTimeout(500);
+const e1 = await b.getByRole('dialog', { name: 'Hand-in checklist' }).textContent();
+if (!e1.includes('Añadido por el grupo') || !e1.includes('Casos de uso con especificaciones')) fail('shared checklist change not visible to B');
+await b.keyboard.press('Escape');
+
 if (errors.length) fail(errors.join('\n'));
 console.log(process.exitCode ? 'team: FAILED' : 'team: all good');
 await browser.close();

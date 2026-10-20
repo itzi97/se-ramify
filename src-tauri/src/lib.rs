@@ -113,6 +113,8 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
+        // Only to open the release page when a new version is out.
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![desktop_appearance])
         .setup(|app| {
             #[cfg(target_os = "linux")]

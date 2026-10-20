@@ -5,6 +5,7 @@
   import Icon from './Icon.svelte';
   import { exportProject } from '../export/project';
   import { editedLine } from '../storage/team';
+  import { openReleasePage } from '../desktop/update';
 
   let { onNew, onHandIns }: { onNew: () => void; onHandIns: (project: string) => void } = $props();
   let query = $state('');
@@ -45,11 +46,14 @@
             await app.open(m.path);
             // Hand the keyboard to the diagram (Del, arrows, Ctrl+A act on the canvas, not on this button).
             btn.blur();
-          }} title="{k.label} · {k.es}{m.dupOf ? ' · copy of another file (made by a sync app?)' : m.conflict ? ' · conflict copy from your sync app' : ''}&#10;{editedLine(m.updated, m.updatedBy)}">
+          }} title="{k.label} · {k.es}{m.dupOf ? ' · copy of another file (made by a sync app?)' : m.conflict ? ' · conflict copy from your sync app' : ''}&#10;{editedLine(m.updated, m.updatedBy)}{app.presence[m.id]?.length ? `\n${app.presenceLine(m.id)} now` : ''}">
           <Icon name={k.icon} size={15} />
           <span class="t">{m.title.trim() || 'Sin título'}</span>
           {#if m.dupOf || m.conflict}<span class="warn" aria-label="Copy"><Icon name="TriangleAlert" size={13} /></span>{/if}
-          {#if m.updatedBy && m.updatedBy !== app.userName}<span class="by" aria-hidden="true">{m.updatedBy.slice(0, 1).toUpperCase()}</span>{/if}
+          {#if app.presence[m.id]?.length}
+            {@const ps = app.presence[m.id]}
+            <span class="here" class:editing={ps.some((p) => p.editing)} aria-label={app.presenceLine(m.id)}>{ps.map((p) => p.name.slice(0, 1).toUpperCase()).join('')}</span>
+          {:else if m.updatedBy && m.updatedBy !== app.userName}<span class="by" aria-hidden="true">{m.updatedBy.slice(0, 1).toUpperCase()}</span>{/if}
         </button>
       {/each}
     {:else}
@@ -57,6 +61,13 @@
     {/each}
   </div>
   <div class="foot">
+    {#if app.update}
+      <div class="update">
+        <Icon name="Sparkles" size={14} />
+        <span class="small">se-ramify {app.update.version} is out</span>
+        <button class="primary small" onclick={() => openReleasePage(app.update!.url)}>Download</button>
+      </div>
+    {/if}
     {#if app.problems.length}
       <details class="trash problems" open>
         <summary class="small"><Icon name="TriangleAlert" size={13} /> Files that need attention ({app.problems.length})</summary>
@@ -217,6 +228,37 @@
     font-weight: 700;
     color: var(--muted);
   }
+  .update {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    width: 100%;
+    padding: var(--sp-2);
+    border-radius: var(--r-card);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .update span {
+    flex: 1;
+  }
+  .here {
+    margin-left: auto;
+    flex: none;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 9px;
+    display: inline-grid;
+    place-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ok);
+    border: 1.5px solid var(--ok);
+  }
+  .here.editing {
+    color: #fff;
+    background: var(--ok);
+  }
+  .warn + .here,
   .warn + .by {
     margin-left: 4px;
   }

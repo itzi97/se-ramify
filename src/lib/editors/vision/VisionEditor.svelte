@@ -29,7 +29,7 @@
       {#each VISION_FIELDS as f (f.key)}
         <label class="field">
           {f.label}
-          <textarea id="vision-{f.key}" rows="2" placeholder={f.hint} value={data[f.key]} oninput={(e) => set(f.key, e.currentTarget.value)}></textarea>
+          <textarea id="vision-{f.key}" rows="2" placeholder="e.g. {f.hint}" value={data[f.key]} oninput={(e) => set(f.key, e.currentTarget.value)}></textarea>
         </label>
       {/each}
       <p class="tiny muted">{filled} of {VISION_FIELDS.length} filled.</p>
@@ -69,15 +69,18 @@
     min-width: max-content;
   }
   .form {
-    width: 380px;
+    width: 340px;
     flex: none;
     padding: var(--sp-4);
   }
   .card-col {
-    flex: none;
+    flex: 0 1 660px;
+    min-width: 440px;
+    position: sticky;
+    top: var(--sp-5);
   }
   .card {
-    width: 660px;
+    width: 100%;
     padding: 36px 40px 32px;
     background: var(--d-fill);
     color: var(--d-ink);
@@ -145,14 +148,18 @@
   td.missing {
     color: var(--faint);
   }
-  /* Form above the card when the editor (not the window) is narrow, e.g. 1280 px with the list open. */
-  @container (max-width: 1130px) {
+  .wrap {
+    min-width: 0;
+  }
+  /* Form above the card only when the editor itself is narrow; at 1280 px with the list open they stay side by side. */
+  @container (max-width: 860px) {
     .wrap {
       flex-direction: column;
-      min-width: 0;
     }
-    .card {
+    .card-col {
+      position: static;
       width: min(660px, 100%);
+      min-width: 0;
     }
   }
 </style>

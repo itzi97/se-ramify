@@ -135,6 +135,12 @@
         oninput={(e) => app.change((d) => (d.project = e.currentTarget.value), 'project')}
       />
       <div class="spacer"></div>
+      {#if app.doc && app.presence[app.doc.id]?.length}
+        {@const editing = app.presence[app.doc.id].some((p) => p.editing)}
+        <span class="here-chip tiny" class:editing role="status" title={editing ? 'If you both change it, both versions are kept — agree who edits what.' : 'They have it open; nobody else is changing it right now.'}>
+          <Icon name="Users" size={13} /> {app.presenceLine(app.doc.id).replace(/^./, (c) => c.toUpperCase())}
+        </span>
+      {/if}
       <span class="status tiny muted" class:failed={app.saving === 'error'} aria-live="polite" title={app.doc ? editedLine(app.doc.updated, app.doc.updatedBy) : ''}>
         {app.saving === 'pending' ? 'Saving…' : app.saving === 'error' ? 'Not saved' : 'Saved'}
       </span>
@@ -279,13 +285,17 @@
         <div class="sect">Working as a team</div>
         <p>Everyone points the app at the same shared folder (Google Drive / OneDrive / Dropbox, or a git repo) and writes their name at the bottom of the list. Changes from others appear within a few seconds. Nobody's work is overwritten: if someone saved a diagram while you were editing it, theirs opens and yours is kept as a copy. ⋯ → <em>Save a copy to send…</em> and <em>Open a diagram file…</em> (bottom of the list) pass single diagrams around.</p>
         <div class="sect">Hand-ins</div>
-        <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in. "Load the example project" at the bottom of the list adds every hand-in done for an invented library app.</p>
+        <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in. <em>Edit checklist</em> adapts it when the teacher asks for something different (shared with your group). "Load the example project" at the bottom of the list adds every hand-in done for an invented library app.</p>
         <p><button class="secondary small" onclick={async () => { side = null; handIns = await app.loadExampleProject(); }}>Load the example project</button></p>
         <div class="sect">Exports</div>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into Word, Google Docs or PowerPoint. The Export menu also makes a Word document or a PowerPoint slide of the diagram, and copies a LaTeX figure for its PNG; <em>Image size</em> sets how sharp images are (they keep their on-screen size in documents).</p>
         <p>The box icon next to a project in the list exports the whole project — every diagram as a PNG plus the memoria with the specifications and stories, as Markdown and, if you tick them, Word, LaTeX and a PowerPoint deck for the presentation.</p>
         <p>PNG and SVG for every diagram (on white by default). UML diagrams also export PlantUML; the Gantt exports Mermaid; specifications, stories and maps export Markdown; stories export Gherkin <code>.feature</code> files.</p>
-        <p class="tiny muted">se-ramify {__APP_VERSION__}</p>
+        <div class="row upd">
+          <label class="check small"><input type="checkbox" checked={app.checkUpdates} onchange={(e) => app.setCheckUpdates(e.currentTarget.checked)} /> Tell me when a new version is out</label>
+          <button class="secondary small" onclick={() => app.lookForUpdate(true)}>Check now</button>
+        </div>
+        <p class="tiny muted">Asks GitHub once a day which version is the latest; nothing else is sent, nothing is installed. se-ramify {__APP_VERSION__}</p>
       </div>
     </Panel>
   {/if}
@@ -297,6 +307,26 @@
 </div>
 
 <style>
+  .upd {
+    gap: var(--sp-3);
+    flex-wrap: wrap;
+  }
+  .here-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--ok);
+    color: var(--ink-2);
+  }
+  .here-chip.editing {
+    background: color-mix(in srgb, var(--ok) 16%, transparent);
+  }
   .copy-banner {
     position: absolute;
     left: 50%;
@@ -411,6 +441,7 @@
   .size-row {
     justify-content: space-between;
     gap: var(--sp-3);
+    white-space: nowrap;
     padding-top: var(--sp-1);
     padding-bottom: var(--sp-1);
   }

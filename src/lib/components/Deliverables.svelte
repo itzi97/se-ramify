@@ -6,11 +6,11 @@
    */
   import { app } from '../stores/app.svelte';
   import { storage } from '../storage/diagrams';
-  import { kindInfo } from '../model/kinds';
-  import { slug } from '../model/diagram';
+  import { KINDS, kindInfo } from '../model/kinds';
+  import { slug, uid } from '../model/diagram';
   import { blankMinutes } from '../editors/minutes/model';
   import { moduleFor } from '../editors/registry';
-  import { DELIVERABLES, deliverableDocs, review, type DeliverableId, type Need, type NeedReview } from '../model/deliverables';
+  import { applyCustom, builtInNeeds, deliverableDocs, emptyCustom, isCustomised, parseCustom, review, type ChecklistCustom, type DeliverableId, type Need, type NeedReview } from '../model/deliverables';
   import type { DataByKind, Diagram, DiagramKind, DiagramMeta, MinutesType } from '../model/types';
   import { exportSet } from '../export/project';
   import Icon from './Icon.svelte';
@@ -28,6 +28,8 @@
     const s = await storage();
     const out: Diagram[] = [];
     for (const m of metas) {
+      // A sync app's copy of a diagram doesn't count twice.
+      if (m.dupOf || m.conflict) continue;
       // The open diagram may have edits not saved yet: use the live copy.
       if (app.doc && app.doc.id === m.id) out.push(JSON.parse(JSON.stringify(app.doc)) as Diagram);
       else {
@@ -47,7 +49,63 @@
     void load();
   });
 
-  const reviews = $derived(DELIVERABLES.map((d) => review(d, docs)));
+  /* The group's changes to the checklist, shared through the folder. */
+  const IDS: DeliverableId[] = ['E1', 'E2', 'E3', 'Final'];
+  const cfgName = $derived(`handins-${slug(project, 40) || 'sin-proyecto'}.json`);
+  let custom = $state<ChecklistCustom>(emptyCustom());
+  let editing = $state(false);
+  let draft = $state({ label: '', kind: 'text', min: 1, optional: false });
+  const builtIn = new Map(builtInNeeds().map((x) => [x.need.id, x]));
+
+  $effect(() => {
+    const name = cfgName;
+    void storage().then(async (s) => (custom = parseCustom(await s.readConfig(name))));
+  });
+
+  async function saveCustom(c: ChecklistCustom) {
+    custom = c;
+    await (await storage()).writeConfig(cfgName, JSON.stringify(c, null, 2) + '\n');
+  }
+
+  /** Where an item in the current tab came from: the brief here, the brief elsewhere (moved / copied), or the group. */
+  function origin(id: string): 'here' | 'placed' | 'added' {
+    const b = builtIn.get(id);
+    if (!b) return 'added';
+    return b.from === tab ? 'here' : 'placed';
+  }
+
+  const place = (need: string, to: DeliverableId, keep: boolean) =>
+    saveCustom({ ...custom, placements: [...custom.placements.filter((p) => !(p.need === need && p.to === to)), { need, to, keep }] });
+  const unplace = (need: string) => saveCustom({ ...custom, placements: custom.placements.filter((p) => !(p.need === need && p.to === tab)) });
+  const removeNeed = (id: string) =>
+    origin(id) === 'added' ? saveCustom({ ...custom, added: custom.added.filter((a) => a.id !== id) }) : saveCustom({ ...custom, removed: [...new Set([...custom.removed, id])] });
+  const restore = (id: string) => saveCustom({ ...custom, removed: custom.removed.filter((r) => r !== id) });
+
+  function addItem() {
+    const label = draft.label.trim();
+    if (!label) return;
+    const text = draft.kind === 'text';
+    void saveCustom({
+      ...custom,
+      added: [...custom.added, { id: `g-${uid()}`, to: tab, label, kinds: text ? [] : [draft.kind as DiagramKind], min: text || draft.min <= 1 ? undefined : draft.min, optional: draft.optional || undefined, text: text || undefined }]
+    });
+    draft = { label: '', kind: 'text', min: 1, optional: false };
+  }
+
+  async function resetCustom() {
+    const s = await storage();
+    if (await s.confirm("Go back to the brief's checklist? Your group's changes (added, moved and removed items) are dropped for everyone.", 'Reset checklist')) await saveCustom(emptyCustom());
+  }
+
+  function onMove(e: Event & { currentTarget: HTMLSelectElement }, need: string) {
+    const v = e.currentTarget.value;
+    e.currentTarget.value = '';
+    if (!v) return;
+    const [mode, to] = v.split(':') as ['move' | 'copy', DeliverableId];
+    void place(need, to, mode === 'copy');
+  }
+
+  const reviews = $derived(applyCustom(custom).map((d) => review(d, docs)));
   const current = $derived(reviews.find((r) => r.deliverable.id === tab)!);
 
   const metaOf = (id: string): DiagramMeta | undefined => app.list.find((m) => m.id === id);
@@ -118,7 +176,12 @@
       <strong>Hand-ins — {project || 'No project'}</strong>
       <span class="tiny muted">What each entrega of the course project asks for, and which of this project's diagrams cover it.</span>
     </div>
-    <button class="icon" aria-label="Close" onclick={onClose}><Icon name="X" /></button>
+    <div class="row hacts">
+      <button class="secondary small" class:editing aria-pressed={editing} onclick={() => (editing = !editing)} title="Add, move or remove items when the teacher asks for something different from the brief; shared with everyone using this folder">
+        <Icon name={editing ? 'Check' : 'Pencil'} size={14} /> {editing ? 'Done' : 'Edit checklist'}
+      </button>
+      <button class="icon" aria-label="Close" onclick={onClose}><Icon name="X" /></button>
+    </div>
   </header>
   <div class="tabs seg" role="tablist" aria-label="Hand-in">
     {#each reviews as r (r.deliverable.id)}
@@ -130,6 +193,12 @@
   </div>
   <div class="body">
     <p class="small"><strong>{current.deliverable.title}.</strong> {current.deliverable.blurb}</p>
+    {#if isCustomised(custom)}
+      <p class="tiny custom-note">
+        <Icon name="Users" size={13} /> Adjusted by your group ({custom.added.length} added, {custom.placements.length} moved or copied, {custom.removed.length} removed) — everyone sharing this folder sees the same checklist.
+        {#if editing}<button class="linklike" onclick={resetCustom}>Reset to the brief</button>{/if}
+      </p>
+    {/if}
     {#if loading && !docs.length}<p class="small muted">Reading the project…</p>{/if}
     {#each current.parts as p (p.part.label)}
       <section class="part">
@@ -143,7 +212,7 @@
             <div class="nbody">
               <div class="row wrap gap">
                 <span class="nlabel">{r.need.label}{#if r.need.optional}<span class="muted"> (optional)</span>{/if}</span>
-                {#each r.docs as d (d.id)}
+                {#each r.docs as d, i (d.id + i)}
                   <button class="chip" onclick={() => openDoc(d)} title="Open — {kindInfo(d.kind).es}"><Icon name={kindInfo(d.kind).icon} size={13} /> {d.title}</button>
                 {/each}
               </div>
@@ -156,13 +225,56 @@
                 </ul>
               {/if}
             </div>
-            {#if r.state !== 'text' && (r.state === 'missing' || r.docs.length < (r.need.min ?? 1))}
+            {#if editing}
+              <div class="row eacts">
+                {#if origin(r.need.id) === 'placed'}
+                  <button class="secondary small" onclick={() => unplace(r.need.id)} title="Take it back out of {tab}">Not here</button>
+                {:else}
+                  <select class="small" aria-label="Move or copy {r.need.label}" onchange={(e) => onMove(e, r.need.id)}>
+                    <option value="">Move / also in…</option>
+                    {#each IDS.filter((x) => x !== tab) as x (x)}
+                      <option value="copy:{x}">Also in {x}</option>
+                      {#if origin(r.need.id) === 'here'}<option value="move:{x}">Move to {x}</option>{/if}
+                    {/each}
+                  </select>
+                  <button class="icon small" aria-label="Remove {r.need.label}" title="Remove from the checklist" onclick={() => removeNeed(r.need.id)}><Icon name="Trash2" size={14} /></button>
+                {/if}
+              </div>
+            {:else if r.state !== 'text' && (r.state === 'missing' || r.docs.length < (r.need.min ?? 1))}
               <button class="secondary small" onclick={() => create(r.need, r.docs.length)}><Icon name="Plus" size={14} /> Create</button>
             {/if}
           </div>
         {/each}
       </section>
     {/each}
+    {#if editing}
+      <section class="part add">
+        <div class="ph plabel">Add an item to {tab}</div>
+        <div class="addrow">
+          <input type="text" placeholder="What the teacher asked for, e.g. Diagrama de actividad de cada caso de uso" bind:value={draft.label} onkeydown={(e) => e.key === 'Enter' && addItem()} aria-label="Item" />
+          <select bind:value={draft.kind} aria-label="Made with">
+            <option value="text">Written part (no diagram)</option>
+            {#each KINDS as k (k.kind)}<option value={k.kind}>{k.es}</option>{/each}
+          </select>
+          {#if draft.kind !== 'text'}
+            <label class="tiny muted mini">How many <input type="number" min="1" max="20" bind:value={draft.min} /></label>
+          {/if}
+          <label class="check tiny"><input type="checkbox" bind:checked={draft.optional} /> Optional</label>
+          <button class="primary small" onclick={addItem} disabled={!draft.label.trim()}><Icon name="Plus" size={14} /> Add</button>
+        </div>
+      </section>
+      {#if custom.removed.length}
+        <details class="removed">
+          <summary class="small muted">Removed from the checklist ({custom.removed.length})</summary>
+          {#each custom.removed as id (id)}
+            {@const b = builtIn.get(id)}
+            {#if b}
+              <div class="row between rrow"><span class="small">{b.from} · {b.need.label}</span><button class="secondary small" onclick={() => restore(id)}>Restore</button></div>
+            {/if}
+          {/each}
+        </details>
+      {/if}
+    {/if}
   </div>
   <footer class="row between">
     <span class="tiny muted">The rubric fails a hand-in with anything missing ("completitud"). Text parts are yours to write in the report.</span>
@@ -191,6 +303,73 @@
   }
   .tight {
     gap: 2px;
+  }
+  .hacts {
+    gap: var(--sp-2);
+    flex: none;
+  }
+  .hacts .editing {
+    border-color: var(--accent);
+  }
+  .custom-note {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: var(--sp-2) var(--sp-3);
+    border-radius: var(--r-card);
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  .linklike {
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent);
+    text-decoration: underline;
+    font-size: inherit;
+  }
+  .eacts {
+    gap: 4px;
+    flex: none;
+  }
+  .eacts select {
+    height: 28px;
+    font-size: var(--fs-sm, 12px);
+  }
+  .add .ph {
+    display: block;
+  }
+  .addrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-3);
+  }
+  .addrow input[type='text'] {
+    flex: 1 1 320px;
+  }
+  .addrow select {
+    flex: 0 1 260px;
+  }
+  .mini {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .mini input {
+    width: 56px;
+  }
+  .removed {
+    margin-top: var(--sp-3);
+  }
+  .removed summary {
+    cursor: pointer;
+  }
+  .rrow {
+    padding: 4px 0;
+    gap: var(--sp-3);
   }
   .tabs {
     margin: var(--sp-3) var(--sp-4) 0;

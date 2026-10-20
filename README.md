@@ -39,11 +39,17 @@ Three ways to share the folder — use whichever your group already has:
 
 **Nobody's work is overwritten.** Before saving, the app checks whether the file changed since you opened it. If a teammate saved the same diagram while you were editing it, their version opens and yours is kept next to it as "*… (versión de Itziar)*" — compare the two and keep what you need. Copies that a sync app makes when two people save at once (and files copied by hand) are marked with ⚠ in the list, with buttons to open the original, keep the copy as its own diagram, or delete it. Deleted files keep a backup in *Recently deleted*.
 
+**See who's on what.** While someone has a diagram open, the list shows their initial next to it (filled in when they're changing it) and the top bar says "Bruno is editing it" — a cue to agree who edits what before two versions happen. (The app writes a tiny file per person in `se-ramify-config/presence/`; it's kept out of git automatically.)
+
+**New versions.** Once a day the app asks GitHub whether there's a newer release and shows a *Download* button at the bottom of the list; nothing is installed for you, and Help has a switch to turn the check off.
+
 Tip: split the work by diagram (one person per use case diagram, another on the TCO…) and use the hand-in checklist together to see what's left.
 
 ## Hand-ins
 
 The checklist icon next to a project in the list (or ⋯ → *Hand-in checklist*) shows, for E1, E2, E3 and the final hand-in of the course project, every part the brief asks for with its weight, which of the project's diagrams cover it, and what is still missing inside them — a use case without its specification, fewer than six stakeholders, a TCO line without a price or a source, a story without Gherkin, an acta with nothing about the methodology. *Create* makes a missing diagram in the project; *Export* writes just that hand-in (the final one includes E1–E3) with its own memoria. Parts that are prose (the brand, your model's pros and cons, the agile report) are listed as reminders.
+
+When the teacher asks for something different from the brief, *Edit checklist* changes it for your group: *Also in E1* (use cases already in the first hand-in), *Move to…*, remove an item, or add your own (a diagram kind and how many, or a written part). The changes live in `se-ramify-config/` in the shared folder, so everyone sees the same checklist; *Reset to the brief* undoes them.
 
 *Load the example project* (bottom of the list, or Help) adds every hand-in done for an invented product — BiblioYa, a library loans app by an invented company, Faro Software — to see what a complete one looks like. [`examples/`](examples/) has its exports: the images, PlantUML, Gherkin, AI pack and a PDF memoria per hand-in.
 

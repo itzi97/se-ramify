@@ -12,7 +12,8 @@
     onAdd,
     onDrop,
     onTidy,
-    onFit
+    onFit,
+    panelOpen = false
   }: {
     kind: GraphKind;
     palette: Palette;
@@ -22,6 +23,8 @@
     onDrop: (t: NodeTypeInfo, x: number, y: number) => boolean;
     onTidy: () => void;
     onFit: () => void;
+    /** The inspector is showing: keep clear of it (otherwise the toolbar may use the whole width). */
+    panelOpen?: boolean;
   } = $props();
 
   const shown = $derived(palette.nodes.filter((n) => !n.hidden));
@@ -66,7 +69,7 @@
   }
 </script>
 
-<div class="toolbar float" role="toolbar" aria-label="Shapes" data-no-export>
+<div class="toolbar float" class:wide={!panelOpen} role="toolbar" aria-label="Shapes" data-no-export>
   {#if grid}
     <div class="anchor">
       <button class:active={open} onclick={() => (open = !open)} aria-expanded={open}><Icon name="Plus" size={16} /> Add</button>
@@ -165,5 +168,8 @@
   }
   .toolbar button {
     touch-action: none;
+  }
+  .toolbar.wide {
+    max-width: calc(100% - 2 * var(--edge));
   }
 </style>

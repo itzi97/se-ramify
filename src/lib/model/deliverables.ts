@@ -415,3 +415,67 @@ export function deliverableDocs(r: DeliverableReview): Diagram[] {
   for (const p of r.parts) for (const n of p.needs) for (const d of n.docs) if (!seen.has(d.id)) (seen.add(d.id), out.push(d));
   return out;
 }
+
+/* ------------------------------------------------------------ team edits */
+
+/**
+ * A group's changes to the brief's checklist, shared through the folder
+ * (se-ramify-config/handins-<project>.json): what the teacher asked for
+ * differently from the PDF (use cases already in E1, an extra document…).
+ */
+export interface ChecklistCustom {
+  /** Built-in items taken out. */
+  removed: string[];
+  /** Built-in items moved (keep: false) or also asked (keep: true) in another hand-in. */
+  placements: { need: string; to: DeliverableId; keep: boolean }[];
+  /** Items the group added. `kinds` empty + `text` = a written part. */
+  added: { id: string; to: DeliverableId; label: string; kinds: DiagramKind[]; min?: number; optional?: boolean; text?: boolean }[];
+}
+
+export const emptyCustom = (): ChecklistCustom => ({ removed: [], placements: [], added: [] });
+
+export function isCustomised(c: ChecklistCustom): boolean {
+  return c.removed.length + c.placements.length + c.added.length > 0;
+}
+
+/** Read a stored customisation, tolerating anything missing or wrong. */
+export function parseCustom(text: string | null): ChecklistCustom {
+  try {
+    const raw = text ? JSON.parse(text) : {};
+    return {
+      removed: Array.isArray(raw.removed) ? raw.removed.filter((x: unknown) => typeof x === 'string') : [],
+      placements: Array.isArray(raw.placements) ? raw.placements.filter((p: { need?: unknown; to?: unknown }) => typeof p?.need === 'string' && typeof p?.to === 'string') : [],
+      added: Array.isArray(raw.added) ? raw.added.filter((a: { id?: unknown; label?: unknown }) => typeof a?.id === 'string' && typeof a?.label === 'string').map((a: ChecklistCustom['added'][number]) => ({ ...a, kinds: Array.isArray(a.kinds) ? a.kinds : [] })) : []
+    };
+  } catch {
+    return emptyCustom();
+  }
+}
+
+/** Title of the part where a hand-in's moved and added items go. */
+export const GROUP_PART = 'Añadido por el grupo (lo que pidió el profesor)';
+
+/** Every built-in item with the hand-in it belongs to in the brief. */
+export function builtInNeeds(base = DELIVERABLES): { need: Need; from: DeliverableId }[] {
+  return base.flatMap((d) => d.parts.flatMap((p) => p.needs.map((need) => ({ need, from: d.id }))));
+}
+
+/** The checklist with a group's changes applied. Pure: the brief's catalogue is never modified. */
+export function applyCustom(c: ChecklistCustom, base = DELIVERABLES): Deliverable[] {
+  const removed = new Set(c.removed);
+  const movedAway = new Set(c.placements.filter((p) => !p.keep).map((p) => p.need));
+  const all = new Map(builtInNeeds(base).map((x) => [x.need.id, x]));
+  return base.map((d) => {
+    const parts: Part[] = d.parts
+      .map((p) => ({ ...p, needs: p.needs.filter((n) => !removed.has(n.id) && !movedAway.has(n.id)) }))
+      .filter((p) => p.needs.length);
+    const extra: Need[] = [
+      ...c.placements.filter((p) => p.to === d.id && all.has(p.need) && !removed.has(p.need) && all.get(p.need)!.from !== d.id).map((p) => all.get(p.need)!.need),
+      ...c.added
+        .filter((a) => a.to === d.id)
+        .map((a) => ({ id: a.id, label: a.label, kinds: a.text ? [] : a.kinds, min: a.min, optional: a.optional, text: a.text || a.kinds.length === 0, title: a.label }))
+    ];
+    if (extra.length) parts.push({ label: GROUP_PART, weight: '', needs: extra });
+    return { ...d, parts };
+  });
+}

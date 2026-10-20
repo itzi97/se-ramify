@@ -374,7 +374,7 @@
     min-width: max-content;
   }
   .form {
-    width: 400px;
+    width: 360px;
     flex: none;
     padding: var(--sp-4);
     gap: var(--sp-5);
@@ -470,9 +470,9 @@
   }
   .acta {
     /* A4 proportions at 96 dpi, narrower when the window is (still side by side with the form). */
-    width: clamp(640px, calc(100cqw - 472px), 794px);
+    width: clamp(540px, calc(100cqw - 432px), 794px);
     min-height: 600px;
-    padding: 52px 60px 48px;
+    padding: 52px clamp(36px, 5cqw, 60px) 48px;
     background: var(--d-fill);
     color: var(--d-ink);
     border: 1px solid var(--line);
@@ -613,7 +613,13 @@
   .cols:has(> :only-child) .people li + li {
     margin-top: 0;
   }
-  @container (max-width: 1112px) {
+  /* Exports always at A4 width, whatever the window. */
+  :global(html.exporting) .acta {
+    width: 794px !important;
+    padding: 52px 60px 48px !important;
+  }
+  /* Form above the document only when the editor is really narrow (at 1280 px with the list open they fit side by side). */
+  @container (max-width: 960px) {
     .wrap {
       flex-direction: column;
       min-width: 0;

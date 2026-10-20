@@ -1,7 +1,25 @@
 <script lang="ts" module>
-  import type { GEdge as ClipEdge, GNode as ClipNode } from '../../model/types';
+  import type { GEdge as ClipEdge, GNode as ClipNode, GraphKind as Kind } from '../../model/types';
   /** Shapes copied with Ctrl+C / Ctrl+X: shared between diagrams of the same kind. */
   let shapeClipboard: { kind: string; nodes: ClipNode[]; edges: ClipEdge[]; pastes: number } | null = null;
+
+  /** What to do first on a blank canvas, per kind. */
+  const FIRST_STEP: Partial<Record<Kind, string>> = {
+    usecase: 'Start with the system boundary, put the use cases inside it and the actors outside, then connect each actor to its use cases.',
+    class: 'Add a class, double-click its compartments to type attributes and operations, then drag from its dot to another class.',
+    activity: 'Start with an initial node, then the actions and decisions in order; swimlanes split the work by who does it.',
+    state: 'Add the initial state and the states, then connect them and write "evento [guarda] / acción" on each transition.',
+    communication: 'Add an actor and the objects (":Clase"), link them, then number the messages on each link in the side panel.',
+    deployment: 'Add the nodes (devices, servers), then drop the execution environments and artifacts inside them.',
+    architecture: 'Use + Add to pick each machine and service, and group them in zones (the building, the cloud).',
+    flowchart: 'Start with a terminator, then the steps and decisions in order; a feedback line shows a loop back.',
+    er: 'Add the entities, their attributes (the key underlined) and the relationships, with the cardinalities on the lines.',
+    dfd: 'Start with the context: one process in the middle and the external entities around it; then the data stores and named flows.',
+    screenflow: 'Add a screen per step (first line is its title; "[Botón]" and "Campo:" lines draw controls), then connect them.',
+    traceability: 'Add the requirements on the left, then criteria, design elements, components and test cases, each linked to the next column.',
+    conceptmap: 'Add the main concept and the related ones, and label each arrow with a linking phrase ("es un", "tiene", "causa").',
+    orgchart: 'Add a role per member of the group (their name goes in the side panel), then connect each role to the one it reports to.'
+  };
 </script>
 
 <script lang="ts">
@@ -752,11 +770,12 @@
     {/if}
   </SvelteFlow>
 
-  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onTidy={runTidy} onFit={fitNow} routing={data.routing} />
+  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onTidy={runTidy} onFit={fitNow} routing={data.routing} panelOpen={selNodes.length + selEdges.length > 0} />
 
   {#if empty}
     <div class="empty-hint"><div class="stack">
       <p><strong>{kindInfo(kind).es}</strong></p>
+      {#if FIRST_STEP[kind]}<p class="small first">{FIRST_STEP[kind]}</p>{/if}
       <p class="small">Add shapes from the toolbar (or double-click the canvas), then drag from the dot on a shape to another one to connect them.</p>
     </div></div>
   {/if}
@@ -765,6 +784,11 @@
 </div>
 
 <style>
+  .first {
+    max-width: 460px;
+    margin-inline: auto;
+    color: var(--ink-2);
+  }
   .canvas {
     position: absolute;
     inset: 0;

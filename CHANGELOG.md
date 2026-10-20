@@ -2,6 +2,14 @@
 
 Each section below is the release note for that version: short bullets, user-facing changes only.
 
+## 0.4.0
+
+- Edit the hand-in checklist when the teacher asks for something different (use cases also in E1, an extra document…): add, move, copy or remove items; shared with your group through the folder
+- See who's on what: the list and the top bar show when a teammate has a diagram open or is changing it
+- Tells you when a new version is out, with a link to download it (once a day; can be turned off in Help)
+- Every blank diagram says what to do first; toolbars, vision, actas and the Unified Process chart fit at 1280 px; example text in empty fields is clearly an example
+- Fixes: closing a diagram while it was saving could fail; a sync app's copy counted twice in the checklist
+
 ## 0.3.0
 
 - Installers for Windows, macOS (Intel and Apple Silicon) and Linux

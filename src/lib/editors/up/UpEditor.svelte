@@ -49,6 +49,10 @@
   const doc = $derived(app.docOf('up'));
   const data = $derived(normalize(doc.data));
   const L = $derived(chartLayout(data));
+  /** The chart shrinks (down to 65 %) to fit beside the panel instead of hiding under it; the export stays full size. */
+  let canvasW = $state(0);
+  let planH = $state(0);
+  const fit = $derived(canvasW ? Math.min(1, Math.max(0.65, (canvasW - 32) / L.width)) : 1);
 
   function normalize(d: UpData): UpData {
     const blank = blankUp();
@@ -210,8 +214,9 @@
     <span class="small muted prog">{total.done} done · {total.draft} in progress · {total.todo} to do</span>
   </div>
 
-  <div class="canvas">
-    <div class="plan" data-export-root style:width="{L.width}px">
+  <div class="canvas" bind:clientWidth={canvasW}>
+    <div class="fit" style:width="{L.width * fit}px" style:height={planH ? `${planH * fit}px` : undefined}>
+    <div class="plan" data-export-root style:width="{L.width}px" bind:offsetHeight={planH} style:transform={fit < 1 ? `scale(${fit})` : undefined}>
       <svg bind:this={svgEl} width={L.width} height={L.height} viewBox="0 0 {L.width} {L.height}" role="img" aria-label="Proceso Unificado: fases, iteraciones, disciplinas e hitos">
         <!-- phase headers -->
         <text x={CHART.pad} y={CHART.headH / 2 + 5} class="corner">Disciplinas</text>
@@ -320,6 +325,7 @@
       <div class="legend">
         {#each STATUSES as s (s.status)}<span class="row"><span class="chip" style:background={s.color}></span>{s.label}</span>{/each}
       </div>
+    </div>
     </div>
   </div>
 
@@ -481,6 +487,13 @@
   .prog {
     padding: 0 6px;
     white-space: nowrap;
+  }
+  .fit > .plan {
+    transform-origin: 0 0;
+  }
+  /* Exports are captured at full size, never shrunk to the window. */
+  :global(html.exporting) .fit > .plan {
+    transform: none !important;
   }
   .canvas {
     position: absolute;

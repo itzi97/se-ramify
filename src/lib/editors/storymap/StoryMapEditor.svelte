@@ -167,7 +167,7 @@
       <input
         class="ghost-input persona-in"
         type="text"
-        placeholder="Who is this map about? (p. ej. socio de la biblioteca)"
+        placeholder="Who is this map about? (e.g. socio de la biblioteca)"
         value={data.persona}
         oninput={(e) => edit((m) => (m.persona = e.currentTarget.value), 'persona')}
       />
