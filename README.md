@@ -47,7 +47,7 @@ Tip: split the work by diagram (one person per use case diagram, another on the 
 
 ## Hand-ins
 
-The checklist icon next to a project in the list (or ⋯ → *Hand-in checklist*) shows, for E1, E2, E3 and the final hand-in of the course project, every part the brief asks for with its weight, which of the project's diagrams cover it, and what is still missing inside them — a use case without its specification, fewer than six stakeholders, a TCO line without a price or a source, a story without Gherkin, an acta with nothing about the methodology. *Create* makes a missing diagram in the project; *Export* writes just that hand-in (the final one includes E1–E3) with its own memoria. Parts that are prose (the brand, your model's pros and cons, the agile report) are listed as reminders.
+The checklist icon above the list (or a folder's ⋯ → *Hand-in checklist*) shows, for E1, E2, E3 and the final hand-in of the course project, every part the brief asks for with its weight, which of the project's diagrams cover it, and what is still missing inside them — a use case without its specification, fewer than six stakeholders, a TCO line without a price or a source, a story without Gherkin, an acta with nothing about the methodology. *Create* makes a missing diagram in the project; *Export* writes just that hand-in (the final one includes E1–E3) with its own memoria. Parts that are prose (the brand, your model's pros and cons, the agile report) are listed as reminders.
 
 When the teacher asks for something different from the brief, *Edit checklist* changes it for your group: *Also in E1* (use cases already in the first hand-in), *Move to…*, remove an item, or add your own (a diagram kind and how many, or a written part). The changes live in `se-ramify-config/` in the shared folder, so everyone sees the same checklist; *Reset to the brief* undoes them.
 
@@ -61,7 +61,7 @@ When the teacher asks for something different from the brief, *Edit checklist* c
 
 **Sharp at the right size:** *Image size* in the Export menu picks 2× (normal), 3× (high) or 4× (print) the screen resolution. Exported PNGs carry their resolution, so Word, PowerPoint and LaTeX insert them at their on-screen size however sharp they are, instead of two to four times too big.
 
-**For a hand-in or the whole project:** the box icon next to a project (or *Export* in the hand-in checklist) asks which documents to write, then exports into a folder you pick: every diagram as a numbered PNG, the PlantUML and Gherkin files, the memoria as Markdown and, as ticked:
+**For a hand-in or the whole project:** the box icon above the list, for the folder you are in (or *Export* in the hand-in checklist) asks which documents to write, then exports into a folder you pick: every diagram as a numbered PNG, the PlantUML and Gherkin files, the memoria as Markdown and, as ticked:
 
 * **Word** `…-memoria.docx`: headings with Word's styles (navigation pane, table of contents), real tables, every image with a numbered caption
 * **LaTeX** `…-memoria.tex`, a complete document for `pdflatex` / `latexmk -pdf`, and `…-memoria-cuerpo.tex`, the same body to `\input{}` into your group's template (needs graphicx, float, longtable, booktabs, xcolor and fvextra)
@@ -78,11 +78,17 @@ The sequence diagram also *imports* PlantUML (⋯ → Import), and has a text ta
 
 ## Using it
 
-First run: pick a folder for your diagrams. *New diagram* (Ctrl+N) shows every kind with where it appears in the course; give it a project name ("Proyecto final", "Ejercicios T3") and the list on the left groups by it.
+First run: pick a folder for your diagrams. *New diagram* (Ctrl+N) shows every kind with where it appears in the course; it goes in the folder you are looking at, or type another ("Neuranet/E2").
 
 **Home** (the house in the top bar, or whenever no diagram is open) has the six diagrams changed last, how far each project's hand-ins are (click E1, E2, E3 or Final to open that checklist) and every kind of diagram, one click from a new one.
 
-**The list** colours each diagram by family — company, UML, requirements, design thinking, planning, infrastructure — and the numbers at the top filter by one (hover to preview). Right-click a diagram, or its ⋯, to rename, duplicate, move to another project, archive or delete it; each comes with *Undo*. Drag a diagram onto another project to move it there. `F2` renames the focused row, the arrows move between rows, a project's name folds it, and the sort button next to the filter orders by date, title or kind and shows archived diagrams. A teammate's initial in their colour marks what they changed in the last days, and a ring what they have open now (amber while they edit it).
+**The list** is a file browser, like Jupyter's: each folder is a project, with its diagrams and every other file you keep there (the brief, slides, images). Click a folder to go in; the path bar, `..` or Backspace go back up. Diagrams open in the app, in tabs above the canvas (Ctrl+Tab, Ctrl+W); other files open in the app your computer uses for them. Make folders with the button next to *New diagram*, and drag a file onto a folder, `..` or the path bar to move it. Searching and filtering look in the folder you are in and every folder inside it.
+
+The list colours each diagram by family — company, UML, requirements, design thinking, planning, infrastructure — and the numbers at the top filter by one (hover to preview). Right-click a diagram, or its ⋯, to rename, duplicate, move to another folder, archive or delete it; each comes with *Undo*. `F2` renames the focused row, the arrows move between rows, and the sort button next to the search orders by date, title or kind and shows archived diagrams. A teammate's initial in their colour marks what they changed in the last days, and a ring what they have open now (amber while they edit it).
+
+**One model across diagrams.** The diagrams in a folder are read together, the way StarUML or Visual Paradigm do it: a sequence diagram knows the classes and operations of the folder's class diagrams, suggests them as you type, adds a class or an actor as a participant in one click, and marks a message the class can't receive, with a fix (use the operation it meant, or add it to the class). Use case, class, activity, state and communication diagrams are also checked for what a teacher marks down: an actor with no use case, a use case nobody starts, a step that leads nowhere, a state you can't reach, an operation that isn't written as one. Class and use case diagrams can be typed as PlantUML (*Text* in the toolbar); the drawing follows and keeps what already exists where it is.
+
+**Company colours.** Each folder can have its own palette, from a preset, the hex codes of the brand guide or the colours of the logo. Every colour picker offers it, *Colour by kind* (right-click on the canvas) paints each kind of shape in its colour, and it is saved in the folder for the whole group.
 
 **Ctrl+K** finds any diagram (by title, project, kind or who changed it) or action (exports, checklists, themes, a new diagram of any kind) by typing.
 

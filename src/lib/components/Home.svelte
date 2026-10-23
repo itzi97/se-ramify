@@ -63,7 +63,7 @@
       <div class="stack tight">
         <h1><Icon name="FolderOpen" size={22} /> {folder}</h1>
         <p class="muted">
-          {#if live.length}{live.length} diagram{live.length === 1 ? '' : 's'} in {projects.length} project{projects.length === 1 ? '' : 's'}{:else}An empty folder, ready for your group's diagrams{/if}
+          {#if live.length}{live.length} diagram{live.length === 1 ? '' : 's'} in {projects.length} project{projects.length === 1 ? '' : 's'}{:else if app.entries.some((e) => e.type === 'folder')}No diagrams yet; new ones go in the folder the list shows{:else}An empty folder, ready for your group's diagrams{/if}
           · <button class="inline" onclick={() => app.pickDir()}>Use another folder</button>
         </p>
       </div>
@@ -146,7 +146,7 @@
     {/if}
 
     <section>
-      <h2>Start a new diagram</h2>
+      <h2>Start a new diagram{#if app.cwd} <span class="in">in <Icon name="Folder" size={16} /> {app.cwd.split('/').pop()}</span>{/if}</h2>
       <div class="families">
         {#each GROUP_ORDER as g (g)}
           <div class="famrow" style:--fam={FAMILIES[g].color}>
@@ -174,6 +174,14 @@
 </div>
 
 <style>
+  .in {
+    font-weight: 400;
+    color: var(--muted);
+  }
+  .in :global(.lucide) {
+    color: var(--fam-company);
+    vertical-align: -0.15em;
+  }
   .home {
     position: absolute;
     inset: 0;

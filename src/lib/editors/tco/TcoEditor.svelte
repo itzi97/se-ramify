@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '../../stores/app.svelte';
+  import { palettes } from '../../stores/palette.svelte';
   import { storage } from '../../storage/diagrams';
   import type { TcoAlternative, TcoData, TcoLine } from '../../model/types';
   import Icon from '../../components/Icon.svelte';
@@ -44,6 +45,8 @@
    */
 
   const data = $derived(app.docOf('tco').data);
+  /** An alternative's colour: its own, or the next of the project's palette. */
+  const ac = (a: TcoAlternative) => altColor(data, a, palettes.custom ? palettes.hexes : undefined);
   const title = $derived(app.docOf('tco').title);
   const years = $derived(horizon(data));
   const yearIdx = $derived(Array.from({ length: years }, (_, i) => i));
@@ -208,7 +211,7 @@
           <div class="seg tabs" role="tablist" aria-label="Alternatives">
             {#each data.alternatives as a, i (a.id)}
               <button role="tab" class:active={tab === a.id} aria-selected={tab === a.id} onclick={() => (tab = a.id)}>
-                <span class="dot" style:background={altColor(data, a)}></span>{a.name || `Alternativa ${i + 1}`}
+                <span class="dot" style:background={ac(a)}></span>{a.name || `Alternativa ${i + 1}`}
               </button>
             {/each}
             <button role="tab" class:active={tab === 'compare'} aria-selected={tab === 'compare'} onclick={() => (tab = 'compare')}><Icon name="Scale" size={14} /> Comparison</button>
@@ -241,7 +244,7 @@
         {@const a = alt}
         <div class="alt-head row">
           <input type="text" class="ghost-input alt-name" value={a.name} aria-label="Alternative name" oninput={(e) => setAlt(a.id, { name: e.currentTarget.value }, `alt-name:${a.id}`)} />
-          <Swatches value={altColor(data, a)} allowNone={false} onPick={(hex) => setAlt(a.id, { color: hex })} />
+          <Swatches value={ac(a)} allowNone={false} onPick={(hex) => setAlt(a.id, { color: hex })} />
           <span class="spacer"></span>
           <button class="icon small" title="Move left" aria-label="Move left" disabled={altIndex <= 0} onclick={() => moveAlternative(-1)}><Icon name="ChevronLeft" size={14} /></button>
           <button class="icon small" title="Move right" aria-label="Move right" disabled={altIndex >= data.alternatives.length - 1} onclick={() => moveAlternative(1)}><Icon name="ChevronRight" size={14} /></button>
@@ -345,7 +348,7 @@
                 <tr>
                   <th>Criterio</th>
                   <th class="num">Peso</th>
-                  {#each data.alternatives as a (a.id)}<th class="num"><span class="dot" style:background={altColor(data, a)}></span>{a.name}</th>{/each}
+                  {#each data.alternatives as a (a.id)}<th class="num"><span class="dot" style:background={ac(a)}></span>{a.name}</th>{/each}
                   <th></th>
                 </tr>
               </thead>
@@ -360,7 +363,7 @@
                     {#each data.alternatives as a (a.id)}
                       {@const v = scoreOf(data, c.id, a.id)}
                       <td class="num">
-                        <div class="seg scores" role="radiogroup" aria-label="{c.name} — {a.name}" style:--alt={altColor(data, a)} style:--alt-ink={inkOn(altColor(data, a))}>
+                        <div class="seg scores" role="radiogroup" aria-label="{c.name} — {a.name}" style:--alt={ac(a)} style:--alt-ink={inkOn(ac(a))}>
                           {#each [1, 2, 3, 4, 5] as n (n)}
                             <button class:active={v === n} role="radio" aria-checked={v === n} onclick={() => setScore(c.id, a.id, v === n ? 0 : n)}>{n}</button>
                           {/each}
@@ -518,7 +521,7 @@
           <div class="arch-grid" style:grid-template-columns="repeat({Math.min(2, data.alternatives.length)}, 1fr)">
             {#each data.alternatives as a (a.id)}
               <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-              <div class="arch pick" class:hot={hoverAlt === a.id} style:border-top-color={altColor(data, a)} title="Open {a.name}" onclick={() => pickAlt(a.id)} onpointerenter={over(a.id)} onpointerleave={out(a.id)}>
+              <div class="arch pick" class:hot={hoverAlt === a.id} style:border-top-color={ac(a)} title="Open {a.name}" onclick={() => pickAlt(a.id)} onpointerenter={over(a.id)} onpointerleave={out(a.id)}>
                 <strong>{a.name}</strong>
                 <p>{a.description.trim() || '—'}</p>
               </div>
@@ -541,7 +544,7 @@
                   <td class="num">{Math.round(weightShare(data, c) * 100)} %</td>
                   {#each data.alternatives as a (a.id)}
                     {@const v = scoreOf(data, c.id, a.id)}
-                    <td class="num"><span class="pips" aria-label="{v} de 5">{#each [1, 2, 3, 4, 5] as n (n)}<span class="pip" class:on={n <= v} style:--c={altColor(data, a)}></span>{/each}</span></td>
+                    <td class="num"><span class="pips" aria-label="{v} de 5">{#each [1, 2, 3, 4, 5] as n (n)}<span class="pip" class:on={n <= v} style:--c={ac(a)}></span>{/each}</span></td>
                   {/each}
                 </tr>
               {/each}

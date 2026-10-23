@@ -11,6 +11,9 @@
   import Icon from './lib/components/Icon.svelte';
   import Panel from './lib/components/Panel.svelte';
   import DiagramList from './lib/components/DiagramList.svelte';
+  import Tabs from './lib/components/Tabs.svelte';
+  import PaletteDialog from './lib/components/PaletteDialog.svelte';
+  import { palettes } from './lib/stores/palette.svelte';
   import NewDiagram from './lib/components/NewDiagram.svelte';
   import Deliverables from './lib/components/Deliverables.svelte';
   import { editedLine } from './lib/storage/team';
@@ -64,6 +67,11 @@
   }
 
   const projects = $derived([...new Set(app.list.map((m) => m.project))].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'es'))));
+  // The colours of the project in front (the open diagram's folder, else the one the list shows).
+  $effect(() => {
+    for (const p of new Set([palettes.project, app.cwd])) if (app.dir && !(p in palettes.byProject)) void palettes.load(p);
+  });
+  const topName = $derived(app.dir?.split(/[\\/]/).pop() || 'Top folder');
   const showHandIns = (project: string, tab?: DeliverableId) => (handIns = { project, tab });
 
   /** Everything the palette (Ctrl+K) can do, besides opening diagrams. */
@@ -89,10 +97,12 @@
       );
       if (mod?.importText) out.push({ id: 'import-text', label: `${mod.importText.label}…`, section: 'Actions', icon: 'FileInput', keywords: 'importar', run: importText });
     }
+    for (const f of app.entries.filter((e) => e.type === 'folder'))
+      out.push({ id: `cd:${f.rel}`, label: f.rel, section: 'Folders', icon: 'Folder', keywords: 'carpeta ir go folder proyecto', run: () => app.showFolder(f.rel) });
     for (const p of projects) {
       out.push(
-        { id: `hi:${p}`, label: `Hand-in checklist: ${p || 'No project'}`, section: 'Hand-ins', icon: 'ClipboardCheck', keywords: 'entregas entrega e1 e2 e3 final checklist rubric', run: () => showHandIns(p) },
-        { id: `ex:${p}`, label: `Export project: ${p || 'No project'}`, section: 'Hand-ins', icon: 'PackageOpen', keywords: 'memoria exportar zip', run: () => exportProject(p) }
+        { id: `hi:${p}`, label: `Hand-in checklist: ${p || topName}`, section: 'Hand-ins', icon: 'ClipboardCheck', keywords: 'entregas entrega e1 e2 e3 final checklist rubric', run: () => showHandIns(p) },
+        { id: `ex:${p}`, label: `Export project: ${p || topName}`, section: 'Hand-ins', icon: 'PackageOpen', keywords: 'memoria exportar zip', run: () => exportProject(p) }
       );
     }
     for (const g of GROUP_ORDER)
@@ -100,6 +110,8 @@
         out.push({ id: `new:${k.kind}`, label: k.es, section: 'New diagram', kind: k.kind, hint: 'New', keywords: `${k.label} ${shortName(k.kind)} nuevo new crear`, run: () => (newOpen = { kind: k.kind }) });
     out.push(
       { id: 'example', label: 'Load the example project', section: 'Actions', icon: 'GraduationCap', keywords: 'ejemplo biblioya sample', run: async () => showHandIns(await app.loadExampleProject()) },
+      { id: 'palette', label: 'Colours of this folder (company palette)…', section: 'Actions', icon: 'Palette', keywords: 'colores paleta marca empresa brand logo', run: () => (palettes.editing = palettes.project) },
+      { id: 'mkdir', label: 'New folder…', section: 'Actions', icon: 'FolderPlus', keywords: 'carpeta nueva crear proyecto mkdir', run: async () => { if (!app.listOpen) await app.toggleList(); app.folderPrompt++; } },
       { id: 'import', label: 'Open a diagram file…', section: 'Actions', icon: 'FileInput', keywords: 'importar abrir json', run: () => app.importDiagramFile() },
       { id: 'folder', label: 'Use another folder…', section: 'Actions', icon: 'FolderOpen', keywords: 'carpeta directorio', run: () => app.pickDir() },
       { id: 'update', label: 'Check for a new version', section: 'Actions', icon: 'Sparkles', keywords: 'actualizar update', run: () => app.lookForUpdate(true) },
@@ -185,7 +197,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="shell" class:has-list={app.listOpen && !!app.dir}>
+<div class="shell" class:has-list={app.listOpen && !!app.dir} class:has-tabs={!!app.dir && app.tabs.some((p) => app.list.some((m) => m.path === p))}>
   <header class="top">
     <button class="icon" onclick={() => app.toggleList()} aria-label="Diagram list" title="Diagram list" aria-pressed={app.listOpen} disabled={!app.dir}>
       <Icon name="PanelLeft" />
@@ -207,22 +219,10 @@
         }}
         lang="es"
       />
-      <span class="proj-pill" title="Project: its diagrams share one hand-in checklist">
-        <Icon name="Folder" size={14} />
-        <input
-          class="project"
-          type="text"
-          aria-label="Project"
-          placeholder="No project"
-          list="top-projects"
-          value={app.doc.project}
-          oninput={(e) => app.change((d) => (d.project = e.currentTarget.value), 'project')}
-          onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-          lang="es"
-        />
-        <button class="icon small" aria-label="Hand-in checklist for this project" title="Hand-in checklist: what E1, E2, E3 and the final ask for" onclick={() => app.doc && showHandIns(app.doc.project)}><Icon name="ClipboardCheck" size={15} /></button>
+      <span class="proj-pill" title="The folder this diagram is in: its diagrams share one hand-in checklist">
+        <button class="folder-go small" onclick={() => app.showFolder(app.doc?.project ?? '')} title="Show this folder in the file list"><Icon name="Folder" size={14} /><span class="t" lang="es">{app.doc.project ? app.doc.project.split('/').pop() : (app.dir?.split(/[\\/]/).pop() ?? 'Top folder')}</span></button>
+        <button class="icon small" aria-label="Hand-in checklist for this folder" title="Hand-in checklist: what E1, E2, E3 and the final ask for" onclick={() => app.doc && showHandIns(app.doc.project)}><Icon name="ClipboardCheck" size={15} /></button>
       </span>
-      <datalist id="top-projects">{#each projects.filter(Boolean) as p (p)}<option value={p}></option>{/each}</datalist>
       <div class="spacer"></div>
       {#if app.doc && app.presence[app.doc.id]?.length}
         {@const ps = app.presence[app.doc.id]}
@@ -333,6 +333,7 @@
     </main>
   {:else if app.ready}
     {#if app.listOpen}<DiagramList onNew={() => (newOpen = {})} onHandIns={(p) => showHandIns(p)} />{/if}
+    <Tabs />
     <main class="editor-area" lang="es">
       {#if app.doc && Editor}
         {#key app.doc.id}
@@ -382,13 +383,24 @@
     <Panel title="Help" onClose={() => (side = null)}>
       <div class="stack small help">
         <p>Every change saves itself within half a second. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes, <kbd>Ctrl</kbd>+<kbd>N</kbd> starts a new diagram and <kbd>Ctrl</kbd>+<kbd>K</kbd> finds any diagram or action by typing. Inside a text box <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes your typing there; click outside it to undo whole steps.</p>
-        <div class="sect">The list</div>
+        <div class="sect">Files and folders</div>
         <ul>
+          <li>The list works like a file browser: each folder is a project, with its diagrams and any other files (PDFs, slides, images). Click a folder to go in; the path above the list, <kbd>..</kbd> or <kbd>Backspace</kbd> go back up. Diagrams open here; other files open in the app your computer uses for them.</li>
+          <li>The folder button next to <em>New diagram</em> makes a folder; new diagrams go in the folder you are looking at. Drag a file onto a folder, <kbd>..</kbd> or a folder in the path to move it there.</li>
+          <li>Every diagram you open gets a tab above the canvas. <kbd>Ctrl</kbd>+<kbd>Tab</kbd> goes to the next one, <kbd>Ctrl</kbd>+<kbd>W</kbd> or a middle-click closes it. The folder pill in the top bar shows the open diagram's folder in the list.</li>
           <li>The coloured numbers at the top show one family of diagrams (company, UML, requirements, design thinking, planning, infrastructure); the badge of each diagram has its family's colour.</li>
-          <li>Right-click a diagram (or its <kbd>⋯</kbd>) to rename, duplicate, move it to another project, archive or delete it. <kbd>F2</kbd> renames the focused one, the arrows move between them.</li>
-          <li>Click a project's name to fold it. The sort button next to the filter orders by date, title or kind, and shows archived diagrams.</li>
+          <li>Right-click a diagram (or its <kbd>⋯</kbd>) to rename, duplicate, move it to another folder, archive or delete it. <kbd>F2</kbd> renames the focused one, the arrows move between them.</li>
+          <li>Searching or filtering looks in the folder you are in and every folder inside it. The sort button next to the search orders by date, title or kind, and shows archived diagrams.</li>
           <li>The house in the top bar goes back home: recent diagrams, how far each hand-in is, and every kind of diagram.</li>
         </ul>
+        <div class="sect">One model across diagrams</div>
+        <ul>
+          <li>The diagrams in a folder are one project: a sequence diagram knows the classes and operations of the folder's class diagrams. It suggests them as you type, adds a class or actor as a participant in one click, and marks a message the class can't receive, with a fix (use the operation it meant, or add it to the class).</li>
+          <li>Use case, class, activity, state and communication diagrams are checked for what a teacher marks down (the pill at the bottom left of the canvas). Click a check to go to the shape.</li>
+          <li>Class and use case diagrams can be typed as PlantUML: <em>Text</em> in the toolbar. The drawing follows; shapes that already exist keep their place.</li>
+        </ul>
+        <div class="sect">Colours</div>
+        <p>Each folder can have its own colours: the palette button above the list (or a folder's <kbd>⋯</kbd> → Colours) starts from a preset, the hex codes of the company's brand guide or its logo. Every colour picker offers them, and right-click on the canvas → <em>Colour by kind</em> paints each kind of shape in its colour. They are saved in the folder, so the whole group uses the same ones.</p>
         <div class="sect">Canvas diagrams (UML, maps, DFD, E/R…)</div>
         <ul>
           <li>Click a shape in the toolbar to drop it in the middle, or drag it onto the canvas.</li>
@@ -407,11 +419,11 @@
         <div class="sect">Working as a team</div>
         <p>Everyone points the app at the same shared folder (Google Drive / OneDrive / Dropbox, or a git repo) and writes their name at the bottom of the list. Changes from others appear within a few seconds. Nobody's work is overwritten: if someone saved a diagram while you were editing it, theirs opens and yours is kept as a copy. ⋯ → <em>Save a copy to send…</em> and the file button next to <em>New diagram</em> pass single diagrams around.</p>
         <div class="sect">Hand-ins</div>
-        <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in; the home screen shows how far each one is. <em>Edit checklist</em> adapts it when the teacher asks for something different (shared with your group). The example project has every hand-in done for an invented library app.</p>
+        <p>The checklist icon above the list (or a folder's ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in; the home screen shows how far each one is. <em>Edit checklist</em> adapts it when the teacher asks for something different (shared with your group). The example project has every hand-in done for an invented library app.</p>
         <p><button class="secondary small" onclick={async () => { side = null; showHandIns(await app.loadExampleProject()); }}><Icon name="GraduationCap" size={14} /> Load the example project</button></p>
         <div class="sect">Exports</div>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into Word, Google Docs or PowerPoint. The Export menu also makes a Word document or a PowerPoint slide of the diagram, and copies a LaTeX figure for its PNG; <em>Image size</em> sets how sharp images are (they keep their on-screen size in documents).</p>
-        <p>The box icon next to a project in the list exports the whole project — every diagram as a PNG plus the memoria with the specifications and stories, as Markdown and, if you tick them, Word, LaTeX and a PowerPoint deck for the presentation.</p>
+        <p>The box icon above the list exports the folder you are in as a project — every diagram as a PNG plus the memoria with the specifications and stories, as Markdown and, if you tick them, Word, LaTeX and a PowerPoint deck for the presentation.</p>
         <p>PNG and SVG for every diagram (on white by default). UML diagrams also export PlantUML; the Gantt exports Mermaid; specifications, stories and maps export Markdown; stories export Gherkin <code>.feature</code> files.</p>
         <div class="row upd">
           <label class="check small"><input type="checkbox" checked={app.checkUpdates} onchange={(e) => app.setCheckUpdates(e.currentTarget.checked)} /> Tell me when a new version is out</label>
@@ -428,6 +440,7 @@
   {/if}
   {#if paletteOpen}<CommandPalette {commands} onClose={() => (paletteOpen = false)} />{/if}
   <ExportFormats />
+  {#if palettes.editing !== null}<PaletteDialog />{/if}
   <Notices />
 </div>
 
@@ -518,14 +531,14 @@
     field-sizing: content;
     text-overflow: ellipsis;
   }
-  /* The project, as a pill: type to move the diagram, pick from the others, open its checklist. */
+  /* The folder, as a pill: shows it in the file list; the checklist beside it. */
   .proj-pill {
     display: inline-flex;
     align-items: center;
     gap: 2px;
     height: 30px;
     margin-left: var(--sp-1);
-    padding: 0 3px 0 10px;
+    padding: 0 3px;
     border-radius: var(--r-pill);
     background: var(--panel-2);
     color: var(--muted);
@@ -533,27 +546,22 @@
   .proj-pill:hover {
     box-shadow: inset 0 0 0 1px var(--line);
   }
-  .proj-pill:has(input:focus) {
-    box-shadow: inset 0 0 0 1px var(--accent);
-    background: var(--panel);
-  }
-  .project {
-    width: auto;
-    min-width: 72px;
+  .folder-go {
+    height: 26px;
     max-width: 220px;
-    height: 28px;
-    padding: 0 4px;
-    border: 0 !important;
-    background: transparent !important;
+    padding: 0 8px;
+    gap: 5px;
     color: var(--ink-2);
-    font-size: var(--fs-sm);
-    field-sizing: content;
-    text-overflow: ellipsis;
-    outline: none;
+    font-weight: 400;
   }
-  /* The suggestions still drop down while typing; the arrow only took room. */
-  .project::-webkit-calendar-picker-indicator {
-    display: none !important;
+  .folder-go :global(.lucide) {
+    flex: none;
+    color: var(--fam-company);
+  }
+  .folder-go .t {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .proj-pill button {
     border-radius: var(--r-pill);

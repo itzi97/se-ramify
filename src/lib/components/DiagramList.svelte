@@ -1,14 +1,24 @@
 <script lang="ts">
+  /**
+   * The file browser, like Jupyter's: the diagrams folder and its subfolders
+   * (each folder is a project), with every file in them. Diagrams open in a
+   * tab; other files open in their own app.
+   */
   import { tick } from 'svelte';
   import { app } from '../stores/app.svelte';
   import { FAMILIES, GROUP_ORDER, KINDS, kindInfo, shortName, type KindInfo } from '../model/kinds';
   import type { DiagramMeta } from '../model/types';
+  import type { Entry } from '../storage/diagrams';
+  import { baseName, crumbs, fileIcon, joinRel, parentOf, within } from '../storage/paths';
+  import { isTauri } from '../storage/diagrams';
+  import { palettes } from '../stores/palette.svelte';
   import Icon from './Icon.svelte';
   import KindBadge from './KindBadge.svelte';
   import Avatar from './Avatar.svelte';
   import { exportProject } from '../export/project';
   import { editedLine } from '../storage/team';
   import { openReleasePage } from '../desktop/update';
+  import { ago } from '../model/people';
   import { focusIn } from './focus';
 
   /** The name field takes the keyboard only when opened from the name chip, not when it shows as a prompt. */
@@ -18,29 +28,37 @@
 
   type Group = KindInfo['group'];
   type Sort = 'recent' | 'az' | 'kind';
+  type Row = { e: Entry; m?: DiagramMeta };
 
   let { onNew, onHandIns }: { onNew: () => void; onHandIns: (project: string) => void } = $props();
 
-  /* How this person likes the list (sort, folded projects): remembered in this window only. */
+  /* How this person likes the list: remembered in this window only. */
   const PREF = 'se-ramify:ui:list';
-  function readPref(): { sort?: Sort; collapsed?: string[] } {
+  function readPref(): { sort?: Sort } {
     try {
       return JSON.parse(localStorage.getItem(PREF) ?? '{}') ?? {};
     } catch {
       return {};
     }
   }
-  const pref = readPref();
   let query = $state('');
   let family = $state<Group | null>(null);
   /** The family under the pointer in the filter: its rows stay bright, the rest dim, before any click. */
   let peek = $state<Group | null>(null);
-  let sort = $state<Sort>(pref.sort ?? 'recent');
-  let collapsed = $state<string[]>(pref.collapsed ?? []);
+  let sort = $state<Sort>(readPref().sort ?? 'recent');
   let viewOpen = $state(false);
   let nameOpen = $state(false);
+  let newFolder = $state<string | null>(null);
+  // The palette's "New folder" lands here.
+  let seenPrompt = app.folderPrompt;
   $effect(() => {
-    const v = JSON.stringify({ sort, collapsed });
+    if (app.folderPrompt !== seenPrompt) {
+      seenPrompt = app.folderPrompt;
+      newFolder = '';
+    }
+  });
+  $effect(() => {
+    const v = JSON.stringify({ sort });
     try {
       localStorage.setItem(PREF, v);
     } catch {
@@ -51,43 +69,47 @@
   const KIND_ORDER = new Map(GROUP_ORDER.flatMap((g) => KINDS.filter((k) => k.group === g)).map((k, i) => [k.kind, i]));
   /** Lower case, no accents: "comunicacion" finds "Comunicación". */
   const fold = (t: string) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const metaByPath = $derived(new Map(app.list.map((m) => [m.path, m])));
+  const rootName = $derived(app.dir?.split(/[\\/]/).pop() || 'Diagrams');
 
-  const base = $derived.by(() => {
-    const words = fold(query.trim()).split(/\s+/).filter(Boolean);
-    return app.list.filter((m) => {
-      if (m.archived && !app.showArchived) return false;
-      if (!words.length) return true;
-      const k = kindInfo(m.kind);
-      const hay = fold(`${m.title} ${m.project} ${k.label} ${k.es} ${shortName(m.kind)} ${m.updatedBy ?? ''}`);
-      return words.every((w) => hay.includes(w));
-    });
-  });
+  /** Searching or filtering looks through the current folder and every folder inside it. */
+  const searching = $derived(!!query.trim() || !!family);
+  const words = $derived(fold(query.trim()).split(/\s+/).filter(Boolean));
+  const hit = (text: string) => words.every((w) => fold(text).includes(w));
+  const visibleDiagram = (m: DiagramMeta) => !m.archived || app.showArchived;
+
+  /** Diagrams in view (for the family counts): this folder, or this folder and below while searching. */
+  const inView = $derived(
+    app.list.filter((m) => visibleDiagram(m) && (searching ? within(m.project, app.cwd) : m.project === app.cwd) && (!words.length || hit(`${m.title} ${m.project} ${kindInfo(m.kind).label} ${kindInfo(m.kind).es} ${shortName(m.kind)} ${m.updatedBy ?? ''}`)))
+  );
   const counts = $derived.by(() => {
     const c = new Map<Group, number>();
-    for (const m of base) c.set(kindInfo(m.kind).group, (c.get(kindInfo(m.kind).group) ?? 0) + 1);
+    for (const m of inView) c.set(kindInfo(m.kind).group, (c.get(kindInfo(m.kind).group) ?? 0) + 1);
     return c;
   });
-  const shown = $derived(family ? base.filter((m) => kindInfo(m.kind).group === family) : base);
 
   const byTitle = (a: DiagramMeta, b: DiagramMeta) => a.title.localeCompare(b.title, 'es', { numeric: true, sensitivity: 'base' });
-  /** Diagrams grouped by project (A–Z, "No project" last), sorted inside each as chosen. */
-  const groups = $derived.by(() => {
-    const cmp =
-      sort === 'az' ? byTitle : sort === 'kind' ? (a: DiagramMeta, b: DiagramMeta) => (KIND_ORDER.get(a.kind) ?? 0) - (KIND_ORDER.get(b.kind) ?? 0) || byTitle(a, b) : (a: DiagramMeta, b: DiagramMeta) => b.updated.localeCompare(a.updated);
-    const map = new Map<string, DiagramMeta[]>();
-    for (const m of shown) {
-      const key = m.project || '';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(m);
-    }
-    return [...map.entries()].map(([p, items]) => [p, items.sort(cmp)] as const).sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'es')));
-  });
-  const projects = $derived([...new Set(app.list.map((m) => m.project).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')));
-  const archivedCount = $derived(app.list.filter((m) => m.archived).length);
-  const folded = (p: string) => !query.trim() && collapsed.includes(p);
-  const toggleGroup = (p: string) => (collapsed = collapsed.includes(p) ? collapsed.filter((x) => x !== p) : [...collapsed, p]);
+  const cmp = $derived(sort === 'az' ? byTitle : sort === 'kind' ? (a: DiagramMeta, b: DiagramMeta) => (KIND_ORDER.get(a.kind) ?? 0) - (KIND_ORDER.get(b.kind) ?? 0) || byTitle(a, b) : (a: DiagramMeta, b: DiagramMeta) => b.updated.localeCompare(a.updated));
+  const byName = (a: Entry, b: Entry) => a.name.localeCompare(b.name, 'es', { numeric: true, sensitivity: 'base' });
 
-  // The open diagram's row stays in sight, however it was opened (home, search, a link in a plan).
+  /** Folders first, then diagrams (sorted as chosen), then the other files. */
+  const rows = $derived.by((): Row[] => {
+    const diagrams = inView.filter((m) => !family || kindInfo(m.kind).group === family).sort(cmp);
+    const diagramRows = diagrams.map((m): Row => ({ e: app.entries.find((e) => e.path === m.path) ?? { type: 'diagram', rel: m.path, name: m.title, folder: m.project, path: m.path }, m }));
+    if (searching) {
+      const others = family ? [] : app.entries.filter((e) => e.type !== 'diagram' && within(e.folder, app.cwd) && e.rel !== app.cwd && hit(e.name)).sort(byName);
+      return [...others.filter((e) => e.type === 'folder').map((e) => ({ e })), ...diagramRows, ...others.filter((e) => e.type === 'file').map((e) => ({ e }))];
+    }
+    const here = app.entries.filter((e) => e.folder === app.cwd && e.type !== 'diagram');
+    return [...here.filter((e) => e.type === 'folder').sort(byName).map((e) => ({ e })), ...diagramRows, ...here.filter((e) => e.type === 'file').sort(byName).map((e) => ({ e }))];
+  });
+  /** How many diagrams a folder holds, its subfolders included. */
+  const countIn = (rel: string) => app.list.filter((m) => within(m.project, rel) && visibleDiagram(m)).length;
+  const folders = $derived(app.entries.filter((e) => e.type === 'folder').map((e) => e.rel).sort((a, b) => a.localeCompare(b, 'es')));
+  const archivedCount = $derived(app.list.filter((m) => m.archived).length);
+  const cwdHasDiagrams = $derived(app.list.some((m) => within(m.project, app.cwd)));
+
+  // The open diagram's row stays in sight, however it was opened (home, search, a tab).
   $effect(() => {
     if (app.path) requestAnimationFrame(() => document.querySelector('.list .item.on')?.scrollIntoView({ block: 'nearest' }));
   });
@@ -95,14 +117,16 @@
   /** Someone else changed it in the last three days: their colour on the row says so. */
   const fresh = (m: DiagramMeta) => !!m.updatedBy && m.updatedBy !== app.userName && Date.now() - Date.parse(m.updated) < 3 * 86_400_000;
 
-  /* ---------------------------------------------- drag a row to another project */
+  /* --------------------------------------------- drag a row onto a folder */
 
-  let drag = $state<{ m: DiagramMeta; x: number; y: number; over: string | null } | null>(null);
+  let drag = $state<{ r: Row; x: number; y: number; over: string | null } | null>(null);
   /** A drag ends in a click on the row it started from; that click must not open it. */
   let dragged = false;
+  const label = (r: Row) => (r.m ? r.m.title.trim() || 'Sin título' : r.e.name);
+  const folderOf = (r: Row) => (r.m ? r.m.project : r.e.folder);
 
-  function dragStart(e: PointerEvent, m: DiagramMeta) {
-    if (e.button !== 0 || renaming) return;
+  function dragStart(e: PointerEvent, r: Row) {
+    if (e.button !== 0 || renaming || r.e.type === 'folder') return;
     const sx = e.clientX;
     const sy = e.clientY;
     let started = false;
@@ -112,8 +136,8 @@
         started = true;
         document.body.classList.add('dragging-row');
       }
-      const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>('.list [data-project]');
-      drag = { m, x: ev.clientX, y: ev.clientY, over: target ? (target.dataset.project ?? null) : null };
+      const target = document.elementFromPoint(ev.clientX, ev.clientY)?.closest<HTMLElement>('.list [data-folder]');
+      drag = { r, x: ev.clientX, y: ev.clientY, over: target ? (target.dataset.folder ?? null) : null };
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
@@ -125,42 +149,55 @@
       drag = null;
       dragged = true;
       setTimeout(() => (dragged = false));
-      if (to !== null && to !== (m.project || '')) void app.moveToProject(m.path, to);
+      if (to !== null && to !== folderOf(r)) void app.moveEntry(r.e, to);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', up);
   }
-  const dropOn = (p: string) => drag !== null && drag.over === p && (drag.m.project || '') !== p;
+  const dropOn = (rel: string) => drag !== null && drag.over === rel && folderOf(drag.r) !== rel;
 
-  async function open(m: DiagramMeta, btn?: HTMLElement) {
+  async function activate(r: Row, btn?: HTMLElement) {
     if (dragged) return;
-    await app.open(m.path);
+    if (r.e.type === 'folder') {
+      query = '';
+      family = null;
+      await app.cd(r.e.rel);
+      await tick();
+      document.querySelector<HTMLElement>('.list .item .main')?.focus();
+      return;
+    }
+    await app.openEntry(r.e);
     // Hand the keyboard to the diagram (Del, arrows, Ctrl+A act on the canvas, not on this button).
-    btn?.blur();
+    if (r.e.type === 'diagram') btn?.blur();
+  }
+
+  async function addFolder(name: string | null) {
+    newFolder = null;
+    if (name?.trim()) await app.mkdir(name);
   }
 
   /* ------------------------------------------------------------ row menu */
 
-  let menu = $state<{ m: DiagramMeta; x: number; y: number; move: boolean } | null>(null);
+  let menu = $state<{ r: Row; x: number; y: number; move: boolean } | null>(null);
   let renaming = $state<string | null>(null);
   let newProject = $state('');
 
-  function openMenu(m: DiagramMeta, x: number, y: number) {
-    menu = { m, x, y, move: false };
+  function openMenu(r: Row, x: number, y: number) {
+    menu = { r, x, y, move: false };
     newProject = '';
   }
-  function fromButton(e: MouseEvent & { currentTarget: HTMLElement }, m: DiagramMeta) {
-    if (menu?.m.path === m.path) return void (menu = null);
-    const r = e.currentTarget.getBoundingClientRect();
-    openMenu(m, r.left, r.bottom + 4);
+  function fromButton(e: MouseEvent & { currentTarget: HTMLElement }, r: Row) {
+    if (menu?.r.e.path === r.e.path) return void (menu = null);
+    const b = e.currentTarget.getBoundingClientRect();
+    openMenu(r, b.left, b.bottom + 4);
   }
   /** Keep the menu inside the window and put the keyboard on its first item. */
   function placed(node: HTMLElement, at: { x: number; y: number; move: boolean }) {
     const fit = (p: { x: number; y: number }) => {
-      const r = node.getBoundingClientRect();
-      node.style.left = `${Math.max(8, Math.min(p.x, window.innerWidth - r.width - 8))}px`;
-      node.style.top = `${Math.max(8, Math.min(p.y, window.innerHeight - r.height - 8))}px`;
+      const b = node.getBoundingClientRect();
+      node.style.left = `${Math.max(8, Math.min(p.x, window.innerWidth - b.width - 8))}px`;
+      node.style.top = `${Math.max(8, Math.min(p.y, window.innerHeight - b.height - 8))}px`;
     };
     fit(at);
     node.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
@@ -195,34 +232,39 @@
     void started;
   }
 
-  async function startRename(m: DiagramMeta) {
+  async function startRename(r: Row) {
     menu = null;
-    renaming = m.path;
+    renaming = r.e.path;
     await tick();
     const input = document.querySelector<HTMLInputElement>('.rename');
     input?.focus();
     input?.select();
   }
-  function endRename(m: DiagramMeta, value: string | null) {
-    if (renaming !== m.path) return;
+  function endRename(r: Row, value: string | null) {
+    if (renaming !== r.e.path) return;
     renaming = null;
-    if (value !== null) void app.renameFile(m.path, value);
+    if (value === null) return;
+    if (r.m) void app.renameFile(r.m.path, value);
+    else void app.renameEntry(r.e, value);
   }
 
-  /** Up and down move between rows; F2 renames the focused one. */
-  function rowKeys(e: KeyboardEvent, m: DiagramMeta) {
+  /** Up and down move between rows; Backspace goes up a folder; F2 renames the focused one. */
+  function rowKeys(e: KeyboardEvent, r: Row) {
     if (e.key === 'F2') {
       e.preventDefault();
-      void startRename(m);
+      void startRename(r);
     } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      const rows = [...document.querySelectorAll<HTMLElement>('.list .item .main')];
-      const i = rows.indexOf(e.currentTarget as HTMLElement);
-      rows[i + (e.key === 'ArrowDown' ? 1 : -1)]?.focus();
+      const all = [...document.querySelectorAll<HTMLElement>('.list .item .main')];
+      const i = all.indexOf(e.currentTarget as HTMLElement);
+      all[i + (e.key === 'ArrowDown' ? 1 : -1)]?.focus();
+    } else if (e.key === 'Backspace' && app.cwd) {
+      e.preventDefault();
+      void app.cd(parentOf(app.cwd));
     } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
       e.preventDefault();
-      const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      openMenu(m, r.left + 24, r.bottom);
+      const b = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      openMenu(r, b.left + 24, b.bottom);
     }
   }
 </script>
@@ -237,21 +279,22 @@
   }}
 />
 
-<nav class="list" aria-label="Diagrams">
+<nav class="list" aria-label="Files">
   <div class="head">
     <div class="row new-row">
-      <button class="primary new" onclick={onNew} title="New diagram (Ctrl+N)"><Icon name="Plus" size={16} /> New diagram</button>
-      <button class="icon secondary" onclick={() => app.importDiagramFile()} aria-label="Open a diagram file" title="Open a diagram file someone sent you (.json)"><Icon name="FileInput" size={16} /></button>
+      <button class="primary new" onclick={onNew} title="New diagram in this folder (Ctrl+N)"><Icon name="Plus" size={16} /> New diagram</button>
+      <button class="icon secondary" onclick={() => (newFolder = '')} aria-label="New folder" title="New folder here"><Icon name="FolderPlus" size={16} /></button>
+      <button class="icon secondary" onclick={() => app.importDiagramFile()} aria-label="Open a diagram file" title="Add a diagram file someone sent you (.json) to this folder"><Icon name="FileInput" size={16} /></button>
     </div>
     <div class="row find">
       <span class="search">
         <Icon name="Search" size={14} />
-        <input type="search" placeholder={family ? `Filter ${FAMILIES[family].label}` : 'Filter'} bind:value={query} aria-label="Filter diagrams" onkeydown={(e) => e.key === 'Escape' && query && (e.stopPropagation(), (query = ''))} />
+        <input type="search" placeholder={family ? `Find ${FAMILIES[family].label} here and below` : 'Find here and below'} bind:value={query} aria-label="Find files" onkeydown={(e) => e.key === 'Escape' && query && (e.stopPropagation(), (query = ''))} />
       </span>
       <button class="icon small view-btn" class:active={viewOpen} aria-label="Sort and show" aria-expanded={viewOpen} title="Sort, show archived" onclick={() => (viewOpen = !viewOpen)}><Icon name="ArrowDownWideNarrow" size={15} /></button>
       {#if viewOpen}
         <div class="view-pop float arrive" role="dialog" aria-label="Sort and show">
-          <div class="sect" id="sort-label">Sort</div>
+          <div class="sect" id="sort-label">Sort diagrams</div>
           <div role="radiogroup" aria-labelledby="sort-label" class="sorts">
             {#each [['recent', 'Recently changed', 'Clock'], ['az', 'Title A–Z', 'ArrowDownAZ'], ['kind', 'Kind of diagram', 'Shapes']] as [v, l, ic] (v)}
               <button class="menu-row" class:picked={sort === v} role="radio" aria-checked={sort === v} onclick={() => (sort = v as Sort)}>
@@ -265,16 +308,16 @@
     </div>
     {#if app.list.length}
       <div class="fams" role="group" aria-label="Show one family of diagrams">
-        <button class="fam all" class:on={!family} aria-pressed={!family} onclick={() => (family = null)} title="Every kind">All <span class="n">{base.length}</span></button>
+        <button class="fam all" class:on={!family} aria-pressed={!family} onclick={() => (family = null)} title="Every kind">All</button>
         {#each GROUP_ORDER as g (g)}
-          {@const n = counts.get(g) ?? 0}
+          {@const n = family || query.trim() ? (counts.get(g) ?? 0) : app.list.filter((m) => visibleDiagram(m) && within(m.project, app.cwd) && kindInfo(m.kind).group === g).length}
           <button
             class="fam"
             class:on={family === g}
             style:--fam={FAMILIES[g].color}
             aria-pressed={family === g}
             aria-label="{FAMILIES[g].label}: {n}"
-            title="{FAMILIES[g].label} · {n} diagram{n === 1 ? '' : 's'}"
+            title="{FAMILIES[g].label} · {n} diagram{n === 1 ? '' : 's'} here and below"
             disabled={!n && family !== g}
             onpointerenter={() => (peek = g)}
             onpointerleave={() => (peek = null)}
@@ -285,53 +328,115 @@
     {/if}
   </div>
 
-  <div class="scroll">
-    {#each groups as [project, items] (project)}
-      {@const shut = folded(project)}
-      {@const visible = shut ? items.filter((m) => m.path === app.path) : items}
-      <div class="ghead" class:shut class:drop={dropOn(project)} data-project={project}>
-        <button class="gtoggle" aria-expanded={!shut} onclick={() => toggleGroup(project)} title={shut ? 'Show its diagrams' : 'Fold'}>
-          <span class="chev"><Icon name="ChevronDown" size={14} /></span>
-          <span class="gname">{project || 'No project'}</span>
-          <span class="gcount">{items.length}</span>
+  <!-- Where you are: every folder on the way is a button, and a place to drop files. -->
+  <div class="crumbs" aria-label="Folder">
+    <div class="trail">
+      {#each crumbs(app.cwd) as c, i (c)}
+        {#if i}<Icon name="ChevronRight" size={12} />{/if}
+        <button class="crumb" class:here={c === app.cwd} class:drop={dropOn(c)} data-folder={c} aria-current={c === app.cwd ? 'location' : undefined} onclick={() => app.cd(c)} title={c ? c : `The top folder: ${app.dir ?? ''}`}>
+          {#if !i}<Icon name="House" size={13} />{/if}<span>{i ? baseName(c) : rootName}</span>
         </button>
-        <span class="gacts">
-          <button class="icon small" title="Hand-ins: what E1, E2, E3 and the final ask for, and what's missing" aria-label="Hand-in checklist for {project || 'No project'}" onclick={() => onHandIns(project)}><Icon name="ClipboardCheck" size={15} /></button>
-          <button class="icon small" title="Export this project: every diagram as PNG plus the memoria" aria-label="Export project {project || 'No project'}" onclick={() => exportProject(project)}><Icon name="PackageOpen" size={15} /></button>
+      {/each}
+    </div>
+    {#if cwdHasDiagrams}
+      <span class="cacts">
+        <button class="icon small" title="Hand-ins: what E1, E2, E3 and the final ask for, and what's missing" aria-label="Hand-in checklist for {app.cwd || 'the top folder'}" onclick={() => onHandIns(app.cwd)}><Icon name="ClipboardCheck" size={15} /></button>
+        <button class="icon small" title="Export this folder as a project: every diagram as PNG plus the memoria" aria-label="Export {app.cwd || 'the top folder'}" onclick={() => exportProject(app.cwd)}><Icon name="PackageOpen" size={15} /></button>
+      </span>
+    {/if}
+    <button class="icon small pal" title="Colours of this folder{palettes.byProject[app.cwd] ? `: ${palettes.byProject[app.cwd]!.name}` : ''} (the company's, a preset…)" aria-label="Colours of {app.cwd || 'the top folder'}" onclick={() => (palettes.editing = app.cwd)}>
+      {#if palettes.byProject[app.cwd]}<span class="mini-strip">{#each palettes.byProject[app.cwd]!.colors.slice(0, 4) as s (s.hex)}<span style:background={s.hex}></span>{/each}</span>{:else}<Icon name="Palette" size={15} />{/if}
+    </button>
+  </div>
+
+  <div class="scroll">
+    {#if app.cwd && !searching}
+      <div class="item up" class:drop={dropOn(parentOf(app.cwd))} data-folder={parentOf(app.cwd)}>
+        <button class="main" onclick={() => app.cd(parentOf(app.cwd))} title="Up to {parentOf(app.cwd) ? baseName(parentOf(app.cwd)) : rootName}" aria-label="Up one folder">
+          <span class="ficon"><Icon name="CornerLeftUp" size={15} /></span>
+          <span class="t muted">..</span>
+        </button>
+      </div>
+    {/if}
+    {#if newFolder !== null}
+      <div class="item">
+        <span class="main editing-row">
+          <span class="ficon folder-ic"><Icon name="Folder" size={15} /></span>
+          <input
+            class="rename"
+            type="text"
+            placeholder="Folder name"
+            aria-label="New folder name"
+            use:focusIn
+            onkeydown={(e) => {
+              if (e.key === 'Enter') void addFolder(e.currentTarget.value);
+              else if (e.key === 'Escape') (e.stopPropagation(), (newFolder = null));
+            }}
+            onblur={(e) => void addFolder(e.currentTarget.value)}
+          />
         </span>
       </div>
-      {#each visible as m (m.path)}
-        {@const ps = app.presence[m.id] ?? []}
-        <div class="item" class:on={m.path === app.path} class:archived={m.archived} class:dim={peek !== null && kindInfo(m.kind).group !== peek} class:menu-open={menu?.m.path === m.path} class:drop={dropOn(project)} class:lifted={drag?.m.path === m.path} data-project={project} oncontextmenu={(e) => (e.preventDefault(), openMenu(m, e.clientX, e.clientY))} role="presentation">
-          {#if renaming === m.path}
-            <span class="main editing-row">
+    {/if}
+    {#each rows as r (r.e.path)}
+      {@const m = r.m}
+      {@const ps = m ? (app.presence[m.id] ?? []) : []}
+      {@const isFolder = r.e.type === 'folder'}
+      <div
+        class="item"
+        class:on={!!m && m.path === app.path}
+        class:open-tab={!!m && m.path !== app.path && app.tabs.includes(m.path)}
+        class:archived={m?.archived}
+        class:dim={peek !== null && (!m || kindInfo(m.kind).group !== peek)}
+        class:menu-open={menu?.r.e.path === r.e.path}
+        class:drop={isFolder && dropOn(r.e.rel)}
+        class:lifted={drag?.r.e.path === r.e.path}
+        data-folder={isFolder ? r.e.rel : undefined}
+        oncontextmenu={(e) => (e.preventDefault(), openMenu(r, e.clientX, e.clientY))}
+        role="presentation"
+      >
+        {#if renaming === r.e.path}
+          <span class="main editing-row">
+            {#if m}<KindBadge kind={m.kind} size="sm" />{:else}<span class="ficon"><Icon name={isFolder ? 'Folder' : fileIcon(r.e.name)} size={15} /></span>{/if}
+            <input
+              class="rename"
+              type="text"
+              value={label(r)}
+              aria-label="New name"
+              lang="es"
+              onkeydown={(e) => {
+                if (e.key === 'Enter') endRename(r, e.currentTarget.value);
+                else if (e.key === 'Escape') (e.stopPropagation(), endRename(r, null));
+              }}
+              onblur={(e) => endRename(r, e.currentTarget.value)}
+            />
+          </span>
+        {:else}
+          <button
+            class="main"
+            onpointerdown={(e) => dragStart(e, r)}
+            onclick={(e) => activate(r, e.currentTarget)}
+            onkeydown={(e) => rowKeys(e, r)}
+            aria-current={m && m.path === app.path ? 'page' : undefined}
+            title={m
+              ? `${kindInfo(m.kind).es} · ${kindInfo(m.kind).label}${m.dupOf ? ' · copy of another file (made by a sync app?)' : m.conflict ? ' · conflict copy from your sync app' : ''}${m.archived ? ' · archived' : ''}\n${editedLine(m.updated, m.updatedBy)}${ps.length ? `\n${app.presenceLine(m.id)} now` : ''}`
+              : isFolder
+                ? `Folder ${r.e.rel}`
+                : `${r.e.rel}\nOpens in the app your computer uses for it`}
+          >
+            {#if m}
               <KindBadge kind={m.kind} size="sm" />
-              <!-- svelte-ignore a11y_autofocus -->
-              <input
-                class="rename"
-                type="text"
-                value={m.title}
-                aria-label="New title"
-                lang="es"
-                onkeydown={(e) => {
-                  if (e.key === 'Enter') endRename(m, e.currentTarget.value);
-                  else if (e.key === 'Escape') (e.stopPropagation(), endRename(m, null));
-                }}
-                onblur={(e) => endRename(m, e.currentTarget.value)}
-              />
+            {:else}
+              <span class="ficon" class:folder-ic={isFolder}><Icon name={isFolder ? 'Folder' : fileIcon(r.e.name)} size={15} /></span>
+            {/if}
+            <span class="names">
+              <span class="t" lang="es">{label(r)}</span>
+              {#if searching && folderOf(r) !== app.cwd}<span class="where tiny">{folderOf(r) || rootName}</span>{/if}
             </span>
-          {:else}
-            <button
-              class="main"
-              onpointerdown={(e) => dragStart(e, m)}
-              onclick={(e) => open(m, e.currentTarget)}
-              onkeydown={(e) => rowKeys(e, m)}
-              aria-current={m.path === app.path ? 'page' : undefined}
-              title="{kindInfo(m.kind).es} · {kindInfo(m.kind).label}{m.dupOf ? ' · copy of another file (made by a sync app?)' : m.conflict ? ' · conflict copy from your sync app' : ''}{m.archived ? ' · archived' : ''}&#10;{editedLine(m.updated, m.updatedBy)}{ps.length ? `\n${app.presenceLine(m.id)} now` : ''}"
-            >
-              <KindBadge kind={m.kind} size="sm" />
-              <span class="t" lang="es">{m.title.trim() || 'Sin título'}</span>
-              <span class="meta">
+            <span class="meta">
+              {#if isFolder}
+                {@const n = countIn(r.e.rel)}
+                {#if n}<span class="count tiny">{n}</span>{/if}
+              {:else if m}
                 {#if m.dupOf || m.conflict}<span class="warn" aria-label="Copy"><Icon name="TriangleAlert" size={13} /></span>{/if}
                 {#if m.archived}<Icon name="Archive" size={13} />{/if}
                 {#if ps.length}
@@ -341,26 +446,31 @@
                   </span>
                 {:else if fresh(m)}
                   <Avatar name={m.updatedBy!} size={16} title={editedLine(m.updated, m.updatedBy)} />
+                {:else}
+                  <span class="when tiny">{ago(m.updated)}</span>
                 {/if}
-              </span>
-            </button>
-            <button class="icon small more" aria-label="Actions for {m.title}" aria-haspopup="menu" tabindex="-1" onclick={(e) => fromButton(e, m)}><Icon name="Ellipsis" size={15} /></button>
-          {/if}
-        </div>
-      {/each}
-    {:else}
-      <div class="empty">
-        {#if app.list.length}
-          <p class="small muted">Nothing matches{query ? ` "${query}"` : ''}{family ? ` in ${FAMILIES[family].label}` : ''}.</p>
-          <button class="secondary small" onclick={() => ((query = ''), (family = null))}>Show everything</button>
-        {:else}
-          <p class="small muted">No diagrams in this folder yet.</p>
-          <button class="secondary small" onclick={async () => onHandIns(await app.loadExampleProject())}><Icon name="GraduationCap" size={14} /> Load the example project</button>
+              {/if}
+            </span>
+          </button>
+          <button class="icon small more" aria-label="Actions for {label(r)}" aria-haspopup="menu" tabindex="-1" onclick={(e) => fromButton(e, r)}><Icon name="Ellipsis" size={15} /></button>
         {/if}
       </div>
+    {:else}
+      {#if newFolder === null}
+        <div class="empty">
+          {#if searching}
+            <p class="small muted">Nothing matches{query ? ` "${query}"` : ''}{family ? ` in ${FAMILIES[family].label}` : ''} in {app.cwd ? baseName(app.cwd) : rootName} or its folders.</p>
+            <button class="secondary small" onclick={() => ((query = ''), (family = null))}><Icon name="X" size={14} /> Clear the search</button>
+          {:else if app.cwd}
+            <p class="small muted">An empty folder. New diagrams you make here go in it.</p>
+          {:else}
+            <p class="small muted">No diagrams in this folder yet.</p>
+            <button class="secondary small" onclick={async () => onHandIns(await app.loadExampleProject())}><Icon name="GraduationCap" size={14} /> Load the example project</button>
+          {/if}
+        </div>
+      {/if}
     {/each}
   </div>
-
   <div class="foot">
     {#if app.update}
       <div class="update">
@@ -433,37 +543,59 @@
 
 {#if drag}
   <div class="ghost float" style:left="{drag.x + 14}px" style:top="{drag.y + 10}px" aria-hidden="true">
-    <KindBadge kind={drag.m.kind} size="sm" />
-    <span class="t">{drag.m.title}</span>
-    {#if drag.over !== null && drag.over !== (drag.m.project || '')}<span class="to tiny">→ {drag.over || 'No project'}</span>{/if}
+    {#if drag.r.m}<KindBadge kind={drag.r.m.kind} size="sm" />{:else}<Icon name={fileIcon(drag.r.e.name)} size={15} />{/if}
+    <span class="t">{label(drag.r)}</span>
+    {#if drag.over !== null && drag.over !== folderOf(drag.r)}<span class="to tiny">→ {drag.over ? baseName(drag.over) : rootName}</span>{/if}
   </div>
 {/if}
 
 {#if menu}
-  {@const m = menu.m}
-  <div class="row-menu float arrive" role="menu" tabindex="-1" aria-label="Actions for {m.title}" use:placed={{ x: menu.x, y: menu.y, move: menu.move }} onkeydown={menuKeys}>
-    <div class="mhead"><KindBadge kind={m.kind} size="sm" /><span class="t small">{m.title}</span></div>
-    {#if !menu.move}
+  {@const r = menu.r}
+  {@const m = r.m}
+  {@const isFolder = r.e.type === 'folder'}
+  <div class="row-menu float arrive" role="menu" tabindex="-1" aria-label="Actions for {label(r)}" use:placed={{ x: menu.x, y: menu.y, move: menu.move }} onkeydown={menuKeys}>
+    <div class="mhead">
+      {#if m}<KindBadge kind={m.kind} size="sm" />{:else}<span class="ficon" class:folder-ic={isFolder}><Icon name={isFolder ? 'Folder' : fileIcon(r.e.name)} size={15} /></span>{/if}
+      <span class="t small">{label(r)}</span>
+    </div>
+    {#if menu.move}
+      <button class="menu-row" role="menuitem" onclick={() => menu && (menu.move = false)}><Icon name="ChevronLeft" size={15} /> <span class="muted">Move to…</span></button>
+      <div class="sep"></div>
+      {#if folderOf(r)}<button class="menu-row" role="menuitem" onclick={() => run(() => app.moveEntry(r.e, ''))}><Icon name="House" size={15} /> <span class="t">{rootName}</span></button>{/if}
+      {#each folders.filter((f) => f !== folderOf(r)) as f (f)}
+        <button class="menu-row" role="menuitem" onclick={() => run(() => app.moveEntry(r.e, f))}><Icon name="Folder" size={15} /> <span class="t">{f}</span></button>
+      {/each}
+      <form class="newp" onsubmit={(e) => (e.preventDefault(), newProject.trim() && run(() => app.moveEntry(r.e, joinRel(app.cwd, newProject))))}>
+        <input type="text" placeholder="New folder here…" bind:value={newProject} aria-label="New folder" />
+        <button class="primary small" disabled={!newProject.trim()}>Move</button>
+      </form>
+    {:else if isFolder}
+      <button class="menu-row" role="menuitem" onclick={() => run(() => activate(r))}><Icon name="FolderOpen" size={15} /> Open</button>
+      <button class="menu-row" role="menuitem" onclick={() => startRename(r)}><Icon name="PencilLine" size={15} /> <span class="grow">Rename</span><kbd class="quiet">F2</kbd></button>
+      <button class="menu-row" role="menuitem" onclick={() => run(async () => (await app.cd(r.e.rel), onNew()))}><Icon name="Plus" size={15} /> New diagram here</button>
+      {#if countIn(r.e.rel)}
+        <button class="menu-row" role="menuitem" onclick={() => run(() => onHandIns(r.e.rel))}><Icon name="ClipboardCheck" size={15} /> Hand-in checklist</button>
+        <button class="menu-row" role="menuitem" onclick={() => run(() => exportProject(r.e.rel))}><Icon name="PackageOpen" size={15} /> Export as a project…</button>
+      {/if}
+      <button class="menu-row" role="menuitem" onclick={() => run(() => (palettes.editing = r.e.rel))}><Icon name="Palette" size={15} /> Colours…</button>
+      {#if isTauri}<button class="menu-row" role="menuitem" onclick={() => run(() => app.reveal(r.e.path))}><Icon name="FolderSearch" size={15} /> Show in file manager</button>{/if}
+      <div class="sep"></div>
+      <button class="menu-row danger" role="menuitem" disabled={app.entries.some((e) => e.folder === r.e.rel)} title={app.entries.some((e) => e.folder === r.e.rel) ? 'Only empty folders can be deleted here' : ''} onclick={() => run(() => app.removeFolder(r.e))}><Icon name="Trash2" size={15} /> Delete folder</button>
+    {:else if m}
       {#if m.path !== app.path}<button class="menu-row" role="menuitem" onclick={() => run(() => app.open(m.path))}><Icon name="SquareArrowOutUpRight" size={15} /> Open</button>{/if}
-      <button class="menu-row" role="menuitem" onclick={() => startRename(m)}><Icon name="PencilLine" size={15} /> <span class="grow">Rename</span><kbd class="quiet">F2</kbd></button>
+      <button class="menu-row" role="menuitem" onclick={() => startRename(r)}><Icon name="PencilLine" size={15} /> <span class="grow">Rename</span><kbd class="quiet">F2</kbd></button>
       <button class="menu-row" role="menuitem" onclick={() => run(() => app.duplicateFile(m.path))}><Icon name="Copy" size={15} /> Duplicate</button>
-      <button class="menu-row" role="menuitem" onclick={() => menu && (menu.move = true)}><Icon name="FolderInput" size={15} /> <span class="grow">Move to project</span><Icon name="ChevronRight" size={14} /></button>
+      <button class="menu-row" role="menuitem" onclick={() => menu && (menu.move = true)}><Icon name="FolderInput" size={15} /> <span class="grow">Move to folder</span><Icon name="ChevronRight" size={14} /></button>
       <button class="menu-row" role="menuitem" onclick={() => run(() => onHandIns(m.project))}><Icon name="ClipboardCheck" size={15} /> Hand-in checklist</button>
       <button class="menu-row" role="menuitem" onclick={() => run(() => app.exportDiagramFile(m.path))}><Icon name="Send" size={15} /> Save a copy to send…</button>
       <button class="menu-row" role="menuitem" onclick={() => run(() => app.setArchived(m.path, !m.archived))}><Icon name={m.archived ? 'ArchiveRestore' : 'Archive'} size={15} /> {m.archived ? 'Unarchive' : 'Archive'}</button>
       <div class="sep"></div>
       <button class="menu-row danger" role="menuitem" onclick={() => run(() => app.deleteFile(m.path))}><Icon name="Trash2" size={15} /> Delete…</button>
     {:else}
-      <button class="menu-row" role="menuitem" onclick={() => menu && (menu.move = false)}><Icon name="ChevronLeft" size={15} /> <span class="muted">Move to…</span></button>
-      <div class="sep"></div>
-      {#each projects.filter((p) => p !== m.project) as p (p)}
-        <button class="menu-row" role="menuitem" onclick={() => run(() => app.moveToProject(m.path, p))}><Icon name="Folder" size={15} /> <span class="t">{p}</span></button>
-      {/each}
-      {#if m.project}<button class="menu-row" role="menuitem" onclick={() => run(() => app.moveToProject(m.path, ''))}><Icon name="FolderX" size={15} /> <span class="muted">No project</span></button>{/if}
-      <form class="newp" onsubmit={(e) => (e.preventDefault(), newProject.trim() && run(() => app.moveToProject(m.path, newProject)))}>
-        <input type="text" placeholder="New project…" bind:value={newProject} aria-label="New project" />
-        <button class="primary small" disabled={!newProject.trim()}>Move</button>
-      </form>
+      <button class="menu-row" role="menuitem" onclick={() => run(() => app.openEntry(r.e))}><Icon name="SquareArrowOutUpRight" size={15} /> Open in its app</button>
+      <button class="menu-row" role="menuitem" onclick={() => run(() => app.reveal(r.e.path))}><Icon name="FolderSearch" size={15} /> Show in file manager</button>
+      <button class="menu-row" role="menuitem" onclick={() => startRename(r)}><Icon name="PencilLine" size={15} /> <span class="grow">Rename</span><kbd class="quiet">F2</kbd></button>
+      <button class="menu-row" role="menuitem" onclick={() => menu && (menu.move = true)}><Icon name="FolderInput" size={15} /> <span class="grow">Move to folder</span><Icon name="ChevronRight" size={14} /></button>
     {/if}
   </div>
 {/if}
@@ -585,9 +717,6 @@
     font-weight: 400;
     margin-right: 2px;
   }
-  .fam.all .n {
-    font-weight: 700;
-  }
   .fam.all.on {
     color: var(--panel);
     background: var(--ink-2);
@@ -597,63 +726,6 @@
     flex: 1;
     overflow: auto;
     padding: 0 var(--sp-2) var(--sp-3);
-  }
-
-  /* Project headers fold their diagrams away. */
-  .ghead {
-    display: flex;
-    align-items: center;
-    margin-top: var(--sp-2);
-    padding-right: 2px;
-  }
-  .gtoggle {
-    flex: 1;
-    min-width: 0;
-    height: 28px;
-    padding: 0 6px 0 4px;
-    gap: 4px;
-    border-radius: var(--r-control);
-    font-size: var(--fs-sm);
-    font-weight: 700;
-    color: var(--muted);
-  }
-  .gtoggle:hover {
-    color: var(--ink);
-  }
-  .chev {
-    display: inline-flex;
-    transition: transform var(--t);
-  }
-  .shut .chev {
-    transform: rotate(-90deg);
-  }
-  .gname {
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .gcount {
-    flex: none;
-    margin-left: 2px;
-    padding: 0 6px;
-    border-radius: var(--r-pill);
-    background: var(--panel-2);
-    font-size: var(--fs-xs);
-    font-variant-numeric: tabular-nums;
-  }
-  .gacts {
-    display: flex;
-    gap: 1px;
-  }
-  .gacts button {
-    color: var(--faint);
-  }
-  .ghead:hover .gacts button,
-  .gacts button:focus-visible {
-    color: var(--muted);
-  }
-  .gacts button:hover {
-    color: var(--accent);
-    background: var(--selected);
   }
 
   /* Rows: the kind's badge, the title, who is in it. */
@@ -668,18 +740,124 @@
   .item.lifted {
     opacity: 0.4;
   }
-  .ghead.drop {
+  /* A folder under a dragged file lights up: drop it there to move the file in. */
+  .item.drop,
+  .crumb.drop {
     border-radius: var(--r-control);
     background: var(--selected);
     box-shadow: inset 0 0 0 1.5px var(--accent);
   }
-  .ghead.drop .gtoggle,
-  .ghead.drop .gtoggle:hover {
+  .item.drop .main,
+  .crumb.drop {
     color: var(--accent);
-    background: transparent;
   }
-  .item.drop {
-    background: color-mix(in srgb, var(--accent) 6%, transparent);
+
+  /* Where you are: the folders on the way, each a button. */
+  .crumbs {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    margin: 0 var(--sp-2) var(--sp-1);
+    padding: 2px 0 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .trail {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 1px;
+    overflow: hidden;
+    color: var(--faint);
+  }
+  .crumb {
+    min-width: 0;
+    flex: 0 1 auto;
+    height: 26px;
+    padding: 0 5px;
+    gap: 4px;
+    border-radius: var(--r-control);
+    font-size: var(--fs-sm);
+    color: var(--muted);
+  }
+  .crumb span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crumb:hover {
+    color: var(--ink);
+  }
+  .crumb.here {
+    flex-shrink: 0;
+    max-width: 60%;
+    color: var(--ink);
+    font-weight: 700;
+  }
+  .pal {
+    flex: none;
+    color: var(--muted);
+  }
+  .mini-strip {
+    display: flex;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    overflow: hidden;
+    transform: rotate(45deg);
+  }
+  .mini-strip span {
+    flex: 1;
+  }
+  .cacts {
+    flex: none;
+    display: flex;
+    gap: 1px;
+    color: var(--muted);
+  }
+
+  /* Folders and other files: an icon where diagrams have their badge. */
+  .ficon {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    color: var(--muted);
+  }
+  .folder-ic {
+    color: var(--fam-company);
+  }
+  .names {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+  }
+  .where {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--faint);
+    font-weight: 400;
+  }
+  .count {
+    padding: 0 6px;
+    border-radius: var(--r-pill);
+    background: var(--panel-2);
+    font-variant-numeric: tabular-nums;
+  }
+  /* Open in a tab, not the one in front: a quiet dot. */
+  .item.open-tab::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 13px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.6;
   }
   .ghost {
     position: fixed;
@@ -704,7 +882,8 @@
   }
   .main {
     width: 100%;
-    height: 32px;
+    min-height: 32px;
+    height: auto;
     padding: 0 6px;
     gap: var(--sp-2);
     justify-content: flex-start;

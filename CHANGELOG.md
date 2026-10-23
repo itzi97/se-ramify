@@ -2,8 +2,19 @@
 
 Each section below is the release note for that version: short bullets, user-facing changes only.
 
-## 0.5.1
+## 0.6.0
 
+- The list is a file browser, like Jupyter's: each folder is a project, with its diagrams and every other file in it (PDFs, slides, images); diagrams open in the app, other files in their own app
+- Make folders, go in and out with the path bar, `..` or Backspace, drag files onto a folder to move them, rename folders, show a file in your file manager
+- Tabs: every diagram you open stays one click away above the canvas; Ctrl+Tab and Ctrl+W
+- New diagrams go in the folder you are looking at; searching and filtering look inside its subfolders too
+- Diagrams from older versions can move into a folder named after their project (asked once; teammates need 0.6)
+- The diagrams of a folder work as one model, like in StarUML or Visual Paradigm: a sequence diagram knows the class diagram's classes and operations, suggests them as you type, marks a message the class can't receive and fixes it in one click (use the operation it meant, or add it to the class)
+- Checks on use case, class, activity, state and communication diagrams, the kind a teacher marks down: an actor with no use case, a use case nobody starts, a step that leads nowhere, a state you can't reach, an operation written wrong; click one to go to it
+- Class and use case diagrams can be written as PlantUML (Text in the toolbar): the drawing follows, and shapes that already exist keep their place
+- Company colours: each folder can have its own palette (from a preset, the brand guide's hex codes or the logo), shared with the group; it is what every colour picker offers, and *Colour by kind* paints each kind of shape in its colour
+- Diagrams fill the window: a canvas diagram zooms to fit and keeps fitting as the window, the list or the panels change size (until you zoom yourself); sequence diagrams grow to the width
+- A self-message with a long label no longer runs out of its sequence fragment
 - A home screen: the diagrams you changed last, how far each project's hand-ins are (click one to open its checklist) and every kind of diagram one click away
 - Colours by family — company, UML, requirements, design thinking, planning, infrastructure — on every diagram's badge in the list, the new-diagram window, the checklist and the home screen; filter the list by family
 - In the list: right-click (or ⋯) to rename, duplicate, move to another project, archive or delete, each with Undo; drag a diagram onto another project; F2 renames; fold projects; sort by date, title or kind

@@ -12,15 +12,12 @@
   // svelte-ignore state_referenced_locally
   let kind = $state<DiagramKind>(initialKind ?? 'usecase');
   let title = $state('');
-  let project = $state(app.doc?.project ?? lastProject());
+  let project = $state(app.cwd);
   let start = $state<'blank' | 'example'>('blank');
   let query = $state('');
 
-  function lastProject(): string {
-    return app.list.find((m) => m.project)?.project ?? '';
-  }
 
-  const projects = $derived([...new Set(app.list.map((m) => m.project).filter(Boolean))].sort());
+  const projects = $derived(app.entries.filter((e) => e.type === 'folder').map((e) => e.rel).sort((a, b) => a.localeCompare(b, 'es')));
   /** Lower case, no accents: "comunicacion" finds "comunicación". */
   const fold = (t: string) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   /** Other names people search by. */
@@ -119,8 +116,8 @@
       </div>
       <label class="field">Title <input type="text" bind:value={title} placeholder={info.es} /></label>
       <label class="field">
-        Project
-        <input type="text" list="projects" bind:value={project} placeholder="e.g. Proyecto final, Ejercicios T3" />
+        Folder
+        <input type="text" list="projects" bind:value={project} placeholder="Top folder · or type a new one, e.g. Neuranet/E2" />
         <datalist id="projects">{#each projects as p (p)}<option value={p}></option>{/each}</datalist>
       </label>
       <div class="seg" role="radiogroup" aria-label="Start from">

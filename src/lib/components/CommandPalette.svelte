@@ -4,7 +4,7 @@
   export interface Command {
     id: string;
     label: string;
-    section: 'Actions' | 'New diagram' | 'Hand-ins' | 'View';
+    section: 'Actions' | 'New diagram' | 'Hand-ins' | 'Folders' | 'View';
     icon?: string;
     /** Show this kind's badge instead of an icon. */
     kind?: DiagramKind;
@@ -49,11 +49,11 @@
       }))
   );
 
-  const ORDER = ['Diagrams', 'Actions', 'Hand-ins', 'New diagram', 'View'];
+  const ORDER = ['Diagrams', 'Folders', 'Actions', 'Hand-ins', 'New diagram', 'View'];
 
   const results = $derived.by((): Item[] => {
     const q = fold(query.trim());
-    if (!q) return [...diagrams.slice(0, 6), ...commands.filter((c) => c.section !== 'New diagram')];
+    if (!q) return [...diagrams.slice(0, 6), ...commands.filter((c) => c.section !== 'New diagram' && c.section !== 'Folders')];
     const words = q.split(/\s+/);
     const scored: { item: Item; score: number }[] = [];
     for (const item of [...diagrams, ...commands] as Item[]) {

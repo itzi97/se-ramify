@@ -32,10 +32,10 @@ export function blockInfo(b: TcoBlock) {
   return BLOCKS.find((x) => x.key === b) ?? BLOCKS[1];
 }
 
-export function altColor(data: TcoData, alt: TcoAlternative): string {
+export function altColor(data: TcoData, alt: TcoAlternative, colors: string[] = ALT_COLORS): string {
   if (alt.color) return alt.color;
   const i = data.alternatives.findIndex((a) => a.id === alt.id);
-  return ALT_COLORS[Math.max(0, i) % ALT_COLORS.length];
+  return colors[Math.max(0, i) % colors.length];
 }
 
 /* -------------------------------------------------------------- numbers */

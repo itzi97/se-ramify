@@ -3,6 +3,7 @@
   import { app } from '../../stores/app.svelte';
   import { uid } from '../../model/diagram';
   import { BRANCH_COLORS, inkOn } from '../../model/colors';
+  import { palettes } from '../../stores/palette.svelte';
   import { storyTitle, totalPoints } from '../../model/stories';
   import { storage } from '../../storage/diagrams';
   import type { StoryMapData, UserStory } from '../../model/types';
@@ -33,7 +34,8 @@
   }
 
   function colorOf(ai: number): string {
-    return BRANCH_COLORS[ai % BRANCH_COLORS.length];
+    const cs = palettes.cycle(BRANCH_COLORS);
+    return cs[ai % cs.length];
   }
 
   async function confirm(msg: string): Promise<boolean> {

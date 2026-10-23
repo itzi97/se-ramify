@@ -1,5 +1,6 @@
 <script lang="ts">
   import { app } from '../../stores/app.svelte';
+  import { palettes } from '../../stores/palette.svelte';
   import { blankUp } from '../../model/diagram';
   import { kindInfo } from '../../model/kinds';
   import type { DiagramMeta, UpArtifact, UpData } from '../../model/types';
@@ -104,7 +105,10 @@
   const current = $derived(data.artifacts.find((a) => a.id === selected) ?? null);
 
   const COLORS = ['#4a7fc1', '#3a9e9a', '#58a55c', '#8a63c4', '#e8873a', '#d9534f', '#b0864a', '#6c8aa0', '#c25b9a'];
-  const colorOf = (i: number) => COLORS[i % COLORS.length];
+  const colorOf = (i: number) => {
+    const cs = palettes.cycle(COLORS);
+    return cs[i % cs.length];
+  };
 
   /* -------------------------------------------------- project diagrams */
 

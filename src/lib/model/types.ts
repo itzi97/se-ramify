@@ -568,4 +568,6 @@ export interface DiagramMeta {
   dupOf?: string;
   /** A sync app's conflict copy ("… (conflicted copy …)", "….sync-conflict-…"). */
   conflict?: boolean;
+  /** A diagram from before projects were folders: in the top folder, with this project written inside it. */
+  legacyProject?: string;
 }

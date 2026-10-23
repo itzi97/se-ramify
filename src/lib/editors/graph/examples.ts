@@ -72,7 +72,8 @@ export function graphExample(kind: GraphKind): GraphData {
           n('estado', 'enum', 940, 20, 'EstadoEjemplar', { attrs: ['DISPONIBLE', 'PRESTADO', 'RESERVADO', 'BAJA'], ops: [] }),
           n('material', 'class', 320, 220, 'Material', { abstract: true, attrs: ['# titulo: String'], ops: ['+ duracionPrestamo(): int {abstract}'] }),
           n('revista', 'class', 320, 420, 'Revista', { attrs: ['- numero: int'], ops: ['+ duracionPrestamo(): int'] }),
-          n('notif', 'interface', 0, 220, 'Notificable', { attrs: [], ops: ['+ notificar(msg: String): void'] })
+          n('notif', 'interface', 0, 220, 'Notificable', { attrs: [], ops: ['+ notificar(msg: String): void'] }),
+          n('catalogo', 'class', 640, 420, 'Catálogo', { attrs: [], ops: ['+ disponible(isbn: String): Ejemplar'] })
         ],
         [
           e('socio', 'prestamo', 'association', { fromLabel: '1', toLabel: '0..3', label: 'realiza' }),
@@ -81,7 +82,8 @@ export function graphExample(kind: GraphKind): GraphData {
           e('ejemplar', 'estado', 'dependency'),
           e('libro', 'material', 'generalization'),
           e('revista', 'material', 'generalization'),
-          e('socio', 'notif', 'realization')
+          e('socio', 'notif', 'realization'),
+          e('catalogo', 'libro', 'association', { fromLabel: '1', toLabel: '*' })
         ]
       );
     case 'activity':

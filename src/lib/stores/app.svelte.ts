@@ -9,7 +9,8 @@
 import { tick } from 'svelte';
 import { newDiagram, nowIso, uid } from '../model/diagram';
 import type { DataByKind, Diagram, DiagramKind, DiagramMeta, DiagramOf } from '../model/types';
-import { isTauri, storage, type BackupMeta, type DeletedMeta, type FileKind, type FileProblem } from '../storage/diagrams';
+import { isTauri, storage, type BackupMeta, type DeletedMeta, type Entry, type FileKind, type FileProblem } from '../storage/diagrams';
+import { joinRel, parentOf, safeFolder, safeName, within } from '../storage/paths';
 import { splitConflict } from '../storage/team';
 import { CHECK_EVERY, isNewer, latestRelease } from '../desktop/update';
 import { validateDiagram, normalizeDiagram } from '../model/diagram';
@@ -56,6 +57,16 @@ class AppState {
   ready = $state(false);
   dir = $state<string | null>(null);
   list = $state<DiagramMeta[]>([]);
+  /** Every folder and file in the diagrams folder, for the file browser. */
+  entries = $state<Entry[]>([]);
+  /** The folder the browser is showing ("" is the top one). New diagrams and files go here. */
+  cwd = $state('');
+  /** Bumped by anything that moves, renames or adds files: a folder listing started before it is stale. */
+  private gen = 0;
+  /** Bumped to ask the file list for a new-folder name (from the palette). */
+  folderPrompt = $state(0);
+  /** Open diagrams, as tabs; `path` is the active one. */
+  tabs = $state<string[]>([]);
   doc = $state<Diagram | null>(null);
   path = $state<string | null>(null);
   saving = $state<'saved' | 'pending' | 'error'>('saved');
@@ -118,7 +129,13 @@ class AppState {
     if (this.dir) {
       try {
         await this.refresh();
-        const last = await s.getSetting<string>('lastPath');
+        await this.moveIntoFolders();
+        this.cwd = (await s.getSetting<string>('cwd')) ?? '';
+        if (this.cwd && !this.entries.some((e) => e.type === 'folder' && e.rel === this.cwd)) this.cwd = '';
+        const follow = (p: string) => this.moved.get(p) ?? p;
+        this.tabs = ((await s.getSetting<string[]>('tabs')) ?? []).map(follow).filter((p) => this.list.some((m) => m.path === p));
+        const saved = await s.getSetting<string>('lastPath');
+        const last = saved ? follow(saved) : saved;
         if (last && this.list.some((m) => m.path === last)) await this.open(last);
       } catch (err) {
         // A folder the app may no longer read (moved, unmounted, outside the allowed scope): say so, let them pick again.
@@ -148,7 +165,14 @@ class AppState {
 
   async refresh() {
     const s = await storage();
-    this.list = await s.list();
+    const g = ++this.gen;
+    const next = await s.list();
+    // A later refresh (after another move) already has a newer picture.
+    if (g !== this.gen) return;
+    const prev = this.list;
+    this.list = next;
+    this.entries = s.entries();
+    this.fixTabs(prev);
     this.problems = s.problems();
     void this.refreshDeleted().catch(() => {});
   }
@@ -171,9 +195,16 @@ class AppState {
     this.syncing = true;
     try {
       const s = await storage();
+      const g = this.gen;
       const next = await s.list();
-      const sig = (l: DiagramMeta[]) => l.map((m) => `${m.path}|${m.updated}|${m.dupOf ?? ''}`).join('\n');
+      // Something here moved, renamed or added files while the folder was read: this picture is stale, the next sync will do.
+      if (g !== this.gen) return;
+      const sig = (l: DiagramMeta[]) => l.map((m) => `${m.path}|${m.updated}|${m.project}|${m.dupOf ?? ''}`).join('\n');
+      const prev = this.list;
       if (sig(next) !== sig(this.list)) this.list = next;
+      const ents = s.entries();
+      if (ents.map((e) => e.path).join('\n') !== this.entries.map((e) => e.path).join('\n')) this.entries = ents;
+      this.fixTabs(prev);
       const probs = s.problems();
       if (probs.map((p) => p.path).join() !== this.problems.map((p) => p.path).join()) this.problems = probs;
       await this.beat();
@@ -183,6 +214,7 @@ class AppState {
       // Someone else saved the open diagram and there's nothing of ours waiting: show theirs.
       if (mine && this.known !== null && mine.updated !== this.known && this.saving !== 'pending') {
         const fresh = await s.load(this.path);
+        fresh.project = mine.project;
         // An edit may have started while the file was being read: then the save will sort it out.
         if ((this.saving as string) === 'pending') return;
         this.doc = fresh;
@@ -327,8 +359,8 @@ class AppState {
         await s.backup(await s.load(same.path));
         path = await s.save(d, same.path);
         if (this.path === same.path) this.path = null;
-      } else path = await s.save({ ...d, id: uid(), title: `${d.title} (copia)` });
-    } else path = await s.save(d);
+      } else path = await s.save({ ...d, id: uid(), title: `${d.title} (copia)`, project: this.cwd });
+    } else path = await s.save({ ...d, project: this.cwd });
     await this.refresh();
     await this.open(path);
     this.notify(`Added "${d.title}"${d.project ? ` to ${d.project}` : ''}.`, 'ok');
@@ -395,6 +427,9 @@ class AppState {
     const s = await storage();
     try {
       const d = await s.load(path);
+      // Its folder is its project, whatever an older version wrote inside the file.
+      const meta = this.list.find((m) => m.path === path);
+      if (meta) d.project = meta.project;
       if (this.doc) this.histories.set(this.doc.id, { undo: this.undoStack, redo: this.redoStack });
       this.imageSource = null;
       this.doc = d;
@@ -408,6 +443,12 @@ class AppState {
       this.lastKey = null;
       // The first save after opening keeps a copy (once per session), then every five minutes.
       this.lastBackup = this.backedUp.has(d.id) ? Date.now() : 0;
+      if (!this.tabs.includes(path)) {
+        const at = this.tabs.indexOf(this.prevPath ?? '');
+        this.tabs.splice(at < 0 ? this.tabs.length : at + 1, 0, path);
+      }
+      this.prevPath = path;
+      void this.saveTabs();
       await s.setSetting('lastPath', path);
     } catch (err) {
       this.notify(`Couldn't open that diagram: ${err instanceof Error ? err.message : err}`, 'error');
@@ -416,11 +457,14 @@ class AppState {
 
   async create<K extends DiagramKind>(kind: K, title: string, project: string, data?: DataByKind[K]) {
     await this.flush();
-    const d = newDiagram(kind, title, project, data);
+    const folder = safeFolder(project);
+    const d = newDiagram(kind, title, folder, data);
     if (this.userName) d.createdBy = d.updatedBy = this.userName;
     const s = await storage();
     const path = await s.save(d);
     await this.refresh();
+    // The file list follows it into its folder, so you see where it went.
+    if (folder !== this.cwd) await this.cd(folder);
     this.path = null;
     await this.open(path);
   }
@@ -533,13 +577,197 @@ class AppState {
   }
 
   /** `undoing`: putting it back from the notice's Undo, which needs no notice of its own. */
+  /** Move a diagram into another folder (its project). */
   async moveToProject(path: string, project: string, undoing = false) {
-    const p = project.trim();
+    const p = safeFolder(project);
     const meta = this.list.find((m) => m.path === path);
     if (!meta || meta.project === p) return;
     const from = meta.project;
-    await this.patchFile(path, (d) => (d.project = p));
-    if (!undoing) this.notify(`Moved "${meta.title}" to ${p || 'No project'}.`, 'ok', { label: 'Undo', run: () => this.moveToProject(path, from, true) });
+    if (path === this.path) await this.flush();
+    this.gen++;
+    try {
+      const s = await storage();
+      const to = await s.move(path, p);
+      this.repath(path, to);
+      if (this.path === to && this.doc) this.doc.project = p;
+      await this.refresh();
+      if (!undoing) this.notify(`Moved "${meta.title}" to ${p || 'the top folder'}.`, 'ok', { label: 'Undo', run: () => this.moveToProject(to, from, true) });
+    } catch (err) {
+      this.notify(`Couldn't move it: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  /* --------------------------------------------------------- files and tabs */
+
+  /** The browser goes into a folder. */
+  async cd(rel: string) {
+    this.cwd = rel;
+    await (await storage()).setSetting('cwd', rel);
+  }
+
+  /** Go to a folder in the file list, opening the list if it was hidden. */
+  async showFolder(rel: string) {
+    if (!this.listOpen) await this.toggleList();
+    await this.cd(rel);
+  }
+
+  async mkdir(name: string, inside = this.cwd) {
+    const rel = joinRel(inside, safeName(name));
+    try {
+      await (await storage()).mkdir(rel);
+      await this.refresh();
+      return rel;
+    } catch (err) {
+      this.notify(`Couldn't make the folder: ${err instanceof Error ? err.message : err}`, 'error');
+      return null;
+    }
+  }
+
+  /** Move any file (a diagram or not) into a folder. */
+  async moveEntry(e: Entry, to: string) {
+    if (e.type === 'diagram') return this.moveToProject(e.path, to);
+    if (e.type === 'folder') return this.notify('Folders move with your file manager; here you can rename them.', 'info');
+    this.gen++;
+    try {
+      await (await storage()).move(e.path, to);
+      await this.refresh();
+      this.notify(`Moved "${e.name}" to ${to || 'the top folder'}.`, 'ok');
+    } catch (err) {
+      this.notify(`Couldn't move it: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  /** Rename a folder or another file (diagrams are renamed by their title). */
+  async renameEntry(e: Entry, name: string) {
+    if (!name.trim() || name.trim() === e.name) return;
+    await this.flush();
+    this.gen++;
+    try {
+      const s = await storage();
+      const to = await s.rename(e, name);
+      if (e.type === 'folder') {
+        // Open diagrams inside it now live under the new name; so does the browser if it was in there.
+        const swap = (p: string) => (p.startsWith(e.path + '/') || p.startsWith(e.path + '\\') ? to + p.slice(e.path.length) : p);
+        this.tabs = this.tabs.map(swap);
+        if (this.path) this.path = swap(this.path);
+        if (this.prevPath) this.prevPath = swap(this.prevPath);
+        void this.saveTabs();
+        const newRel = joinRel(e.folder, safeName(name));
+        if (within(this.cwd, e.rel)) await this.cd(newRel + this.cwd.slice(e.rel.length));
+        if (this.doc && within(this.doc.project, e.rel)) this.doc.project = newRel + this.doc.project.slice(e.rel.length);
+      }
+      await this.refresh();
+    } catch (err) {
+      this.notify(`Couldn't rename it: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  async removeFolder(e: Entry) {
+    this.gen++;
+    try {
+      await (await storage()).removeFolder(e);
+      if (within(this.cwd, e.rel)) await this.cd(e.folder);
+      await this.refresh();
+    } catch (err) {
+      this.notify(`${err instanceof Error ? err.message : err}. Move or delete what's inside first.`, 'error');
+    }
+  }
+
+  /** Open anything in the browser: a folder goes in, a diagram opens in a tab, other files in their own app. */
+  async openEntry(e: Entry) {
+    if (e.type === 'folder') return this.cd(e.rel);
+    if (e.type === 'diagram') return this.open(e.path);
+    try {
+      await (await storage()).openExternal(e.path);
+    } catch (err) {
+      this.notify(`Couldn't open ${e.name}: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  async reveal(path: string) {
+    try {
+      await (await storage()).reveal(path);
+    } catch (err) {
+      this.notify(`Couldn't show it: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  private prevPath: string | null = null;
+  /** Files the folder migration moved, old path → new: saved tabs and the last open diagram follow them. */
+  private moved = new Map<string, string>();
+
+  private saveTabs() {
+    return storage().then((s) => s.setSetting('tabs', $state.snapshot(this.tabs)));
+  }
+
+  /** A file moved (here or by a teammate): its tab and, if open, the diagram follow it. */
+  private repath(from: string, to: string) {
+    if (from === to) return;
+    this.tabs = this.tabs.map((p) => (p === from ? to : p));
+    if (this.path === from) this.path = to;
+    if (this.prevPath === from) this.prevPath = to;
+    void this.saveTabs();
+  }
+
+  /** Tabs of files that are gone close; files that moved (here, or by a teammate) keep their tab, found by id. */
+  private fixTabs(prev: DiagramMeta[] = []) {
+    const paths = new Set(this.list.map((m) => m.path));
+    const ids = new Map(this.list.filter((m) => !m.dupOf).map((m) => [m.id, m.path]));
+    const idWas = new Map(prev.map((m) => [m.path, m.id]));
+    if (this.doc && this.path && !paths.has(this.path)) {
+      const now = ids.get(this.doc.id);
+      if (now) this.repath(this.path, now);
+    }
+    for (const t of this.tabs) {
+      if (paths.has(t) || t === this.path) continue;
+      const now = idWas.has(t) ? ids.get(idWas.get(t)!) : undefined;
+      if (now && !this.tabs.includes(now)) this.repath(t, now);
+    }
+    const kept = this.tabs.filter((p) => paths.has(p) || p === this.path);
+    if (kept.length !== this.tabs.length) {
+      this.tabs = kept;
+      void this.saveTabs();
+    }
+  }
+
+  async closeTab(path: string) {
+    const i = this.tabs.indexOf(path);
+    if (i < 0) return;
+    this.tabs.splice(i, 1);
+    void this.saveTabs();
+    if (path !== this.path) return;
+    const next = this.tabs[i] ?? this.tabs[i - 1];
+    if (next) await this.open(next);
+    else this.close();
+  }
+
+  /**
+   * Projects are folders now. Diagrams saved by older versions sit in the top
+   * folder with their project written inside: offer, once, to move each into
+   * a folder of that name.
+   */
+  private async moveIntoFolders() {
+    const s = await storage();
+    const old = this.list.filter((m) => m.legacyProject && !m.dupOf);
+    if (!old.length || (await s.getSetting<boolean>('foldersAsked'))) return;
+    await s.setSetting('foldersAsked', true);
+    const names = [...new Set(old.map((m) => safeFolder(m.legacyProject!)))];
+    const ok = await s.confirm(
+      `se-ramify now keeps each project in its own folder, like a file browser. Move ${old.length} diagram${old.length === 1 ? '' : 's'} into ${names.length === 1 ? 'the folder' : 'the folders'} ${names.map((n) => `"${n}"`).join(', ')}?\n\nTeammates need se-ramify 0.6 or newer to see them there. Choose No to leave them in the top folder.`,
+      'Projects become folders'
+    );
+    if (!ok) return;
+    this.gen++;
+    for (const m of old) {
+      try {
+        const to = await s.move(m.path, safeFolder(m.legacyProject!));
+        this.moved.set(m.path, to);
+      } catch (err) {
+        this.notify(`Couldn't move "${m.title}": ${err instanceof Error ? err.message : err}`, 'error');
+      }
+    }
+    await this.refresh();
+    this.notify(`Moved ${old.length} diagram${old.length === 1 ? '' : 's'} into project folders.`, 'ok');
   }
 
   /** A copy of any diagram in the list, opened. */
@@ -548,6 +776,8 @@ class AppState {
     await this.flush();
     const s = await storage();
     const d = await s.load(path);
+    // The copy goes next to the original: its folder, not whatever older versions wrote inside the file.
+    d.project = this.list.find((m) => m.path === path)?.project ?? this.cwd;
     const copy = { ...d, id: uid(), title: `${d.title} (copia)`, created: nowIso(), updated: nowIso(), updatedBy: this.userName || undefined } as Diagram;
     const p = await s.save(copy);
     await this.refresh();
@@ -652,8 +882,15 @@ class AppState {
     this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY);
   }
 
+  /** Saves run one after another: two at once could see each other's write as someone else's (a false conflict copy). */
+  private flushChain: Promise<void> = Promise.resolve();
   /** Write any pending change now. */
-  async flush() {
+  flush(): Promise<void> {
+    const next = this.flushChain.then(() => this.flushNow());
+    this.flushChain = next.catch(() => {});
+    return next;
+  }
+  private async flushNow() {
     if (this.saveTimer) {
       clearTimeout(this.saveTimer);
       this.saveTimer = null;
@@ -677,7 +914,7 @@ class AppState {
         this.saving = 'saved';
       }
       const meta = this.list.find((m) => m.path === path);
-      if (meta) Object.assign(meta, { title: snap.title, project: snap.project, updated: snap.updated, archived: snap.archived, updatedBy: snap.updatedBy });
+      if (meta) Object.assign(meta, { title: snap.title, updated: snap.updated, archived: snap.archived, updatedBy: snap.updatedBy });
       if (Date.now() - this.lastBackup > BACKUP_EVERY) {
         this.lastBackup = Date.now();
         this.backedUp.add(snap.id);

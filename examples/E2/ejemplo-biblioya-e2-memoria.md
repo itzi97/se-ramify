@@ -1,6 +1,6 @@
 # Ejemplo — BiblioYa — Entrega 2 — UML, stakeholders y visión
 
-_Exportado con se-ramify el 20/10/2026._
+_Exportado con se-ramify el 23/10/2026._
 
 ## Contenido de la entrega
 

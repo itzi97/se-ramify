@@ -200,7 +200,7 @@ export function layoutSequence(data: SequenceData): Layout {
   };
 
   // Fragments: a stack of open ones; extents are filled in when they close.
-  type OpenFrag = FragmentBox & { lo: number; hi: number; selfRight: boolean; nested: number; children: OpenFrag[]; depths: Map<string, number> };
+  type OpenFrag = FragmentBox & { lo: number; hi: number; selfRight: boolean; reach: number; nested: number; children: OpenFrag[]; depths: Map<string, number> };
   const fragStack: OpenFrag[] = [];
   const fragments: OpenFrag[] = [];
   const touch = (lo: number, hi: number, selfRight = false) => {
@@ -239,6 +239,9 @@ export function layoutSequence(data: SequenceData): Layout {
           const xb = data.activations && it.style === 'sync' ? edgeX(it.from, 1) : x;
           messages.push({ itemId: it.id, index: i, num: n, text: it.text, style: it.style, x1: x, x2: xb, y, self: true, labelX: x + SELF_W + 6, labelY: y - 5, labelAnchor: 'start' });
           touch(a, a, true);
+          // A long label on a self call runs past the loop: the fragments around it widen to hold it.
+          const end = x + SELF_W + 6 + textWidth(messageLabel(it.text, it.style, n), FONT);
+          for (const f of fragStack) f.reach = Math.max(f.reach, end);
           y += SELF_H;
           if (data.activations && it.style === 'sync') close(it.from, y + 10);
           y += ROW;
@@ -268,7 +271,7 @@ export function layoutSequence(data: SequenceData): Layout {
       }
       case 'open': {
         y += 6;
-        const f: OpenFrag = { itemId: it.id, closeId: null, op: it.op, guard: it.guard, x1: 0, x2: 0, y1: y, y2: y, elses: [], lo: Infinity, hi: -Infinity, selfRight: false, nested: 0, children: [], depths: new Map(parts.map((p) => [p.id, stacks.get(p.id)!.length])) };
+        const f: OpenFrag = { itemId: it.id, closeId: null, op: it.op, guard: it.guard, x1: 0, x2: 0, y1: y, y2: y, elses: [], lo: Infinity, hi: -Infinity, selfRight: false, reach: -Infinity, nested: 0, children: [], depths: new Map(parts.map((p) => [p.id, stacks.get(p.id)!.length])) };
         if (fragStack.length) fragStack[fragStack.length - 1].children.push(f);
         fragStack.push(f);
         fragments.push(f);
@@ -371,7 +374,7 @@ export function layoutSequence(data: SequenceData): Layout {
     const right = xs[f.hi] ?? 0;
     const minW = textWidth(`${f.op} [${f.guard}]`, SMALL) + 40;
     f.x1 = left - Math.max(pad + 34, f.op.length * 7.5 + 18 + 8 + 16);
-    f.x2 = Math.max(right + pad + 34 + (f.selfRight ? SELF_W + 20 : 0), f.x1 + minW);
+    f.x2 = Math.max(right + pad + 34 + (f.selfRight ? SELF_W + 20 : 0), f.x1 + minW, f.reach + 14 + depthOf(f) * 12);
   }
 
   // Heads and lifelines.
@@ -425,7 +428,7 @@ export function layoutSequence(data: SequenceData): Layout {
     lifelines,
     activations,
     messages,
-    fragments: fragments.map(({ lo: _lo, hi: _hi, selfRight: _s, nested: _n, children: _c, depths: _d, ...f }) => f),
+    fragments: fragments.map(({ lo: _lo, hi: _hi, selfRight: _s, reach: _r, nested: _n, children: _c, depths: _d, ...f }) => f),
     notes,
     rows,
     crosses,

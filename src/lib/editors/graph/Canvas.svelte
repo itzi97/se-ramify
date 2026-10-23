@@ -53,18 +53,33 @@
   import { descendantsOf, parentsOf, type Rect } from './geometry';
   import { estimateSize, traceColumnX } from './sizing';
   import { bringToFront, canPaint, commonColor, dropTarget, paint, reverseEdge, sendToBack } from './ops';
+  import { lintGraph, type LintIssue } from '../../model/lint';
+  import { TEXT_KINDS, mergeGraph, parseGraphPuml } from './plantuml';
+  import { graphExports } from './export';
+  import { buildModel, type UmlModel } from '../../model/uml-model';
+  import { folderModel, modelKey } from '../../stores/model';
+  import { palettes } from '../../stores/palette.svelte';
+  import { colourByKind } from '../../model/palette';
+  import { BRANCH_COLORS } from '../../model/colors';
 
   const flow = useSvelteFlow();
-  /** Fit leaves room for the toolbar (top) and the properties panel (right), and never blows a small diagram up. */
-  const fitOptions = { padding: { top: '80px' as const, right: '40px' as const, bottom: '40px' as const, left: '40px' as const }, maxZoom: 1.1, minZoom: 0.15 };
+  /**
+   * Fit leaves room for the toolbar (top) and the properties panel (right).
+   * A small diagram grows to use the window, up to 1.6× so a lone box doesn't
+   * turn into a poster.
+   */
+  const fitOptions = { padding: { top: '80px' as const, right: '40px' as const, bottom: '40px' as const, left: '40px' as const }, maxZoom: 1.6, minZoom: 0.15 };
+  /** Until you pan or zoom yourself, the diagram keeps filling the window as it changes size (list, tabs, panel, window). */
+  let follow = true;
   /** Fit the diagram; with something selected, leave room for the inspector on the right so nothing ends up under it. */
-  function fitNow() {
+  function fitNow(animate = true) {
+    follow = true;
     let right = fitOptions.padding.right as string;
-    if (selNodes.length || selEdges.length) {
+    if (textOpen || selNodes.length || selEdges.length) {
       const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 320;
       right = `${Math.round(panel + 40)}px`;
     }
-    void flow.fitView({ ...fitOptions, padding: { ...fitOptions.padding, right: right as `${number}px` }, duration: 300 });
+    void flow.fitView({ ...fitOptions, padding: { ...fitOptions.padding, right: right as `${number}px` }, duration: animate ? 300 : 0 });
   }
   const kind = app.doc!.kind as GraphKind;
   const palette = PALETTES[kind];
@@ -100,9 +115,136 @@
     return true;
   }
 
+  /* ----------------------------------------------------- text (PlantUML) */
+
+  const canText = TEXT_KINDS.includes(kind);
+  let textOpen = $state(false);
+  // Opening or closing the text panel changes the free space: refit, unless you moved the view.
+  let textSeen = false;
+  $effect(() => {
+    void textOpen;
+    if (!textSeen) return void (textSeen = true);
+    if (untrack(() => follow && data.nodes.length)) untrack(() => setTimeout(() => fitNow(), 30));
+  });
+  /** What the drawing says as PlantUML, unless you are typing (then your text stays as typed). */
+  const asText = $derived(canText ? (graphExports(app.doc as never).find((x) => x.ext === 'puml')?.build() ?? '') : '');
+  let typed = $state<string | null>(null);
+  let textWarnings = $state<{ line: number; message: string }[]>([]);
+  let textTimer: ReturnType<typeof setTimeout> | undefined;
+  function onTextInput(v: string) {
+    typed = v;
+    clearTimeout(textTimer);
+    textTimer = setTimeout(() => void applyText(v), 450);
+  }
+  async function applyText(v: string) {
+    const parsed = parseGraphPuml(kind, v);
+    textWarnings = parsed.warnings;
+    const before = $state.snapshot(data) as GraphData;
+    const { data: next, fresh, parentOf } = mergeGraph(before, parsed);
+    if (fresh.size) await placeFresh(next, fresh, parentOf, before.nodes.filter((n) => n.type !== 'note').length === 0 || fresh.size === next.nodes.length);
+    if (JSON.stringify(next) === JSON.stringify(before)) return;
+    app.change((d) => {
+      (d.data as GraphData).nodes = next.nodes;
+      (d.data as GraphData).edges = next.edges;
+    }, 'puml-text');
+    if (fresh.size && follow) setTimeout(() => fitNow(), 80);
+  }
+  /** New shapes from the text: lay out everything when it's all new, otherwise put the new ones beside the rest (Tidy tidies). */
+  async function placeFresh(g: GraphData, fresh: Set<string>, parentOf: Map<string, string>, all: boolean) {
+    const sizeOfNode = (n: GNode) => estimateSize(kind, n, nodeTypeInfo(kind, n.type, n.icon));
+    if (all) {
+      const laid = await tidy(
+        kind,
+        g.nodes.map((n) => ({ id: n.id, type: n.type, x: n.x, y: n.y, ...((s) => ({ w: s.w, h: s.h }))(sizeOfNode(n)), container: !!nodeTypeInfo(kind, n.type, n.icon).container, parent: parentOf.get(n.id) ?? null })),
+        g.edges
+      );
+      for (const n of g.nodes) {
+        const p = laid.get(n.id);
+        if (!p) continue;
+        n.x = Math.round(p.x);
+        n.y = Math.round(p.y);
+        if (nodeTypeInfo(kind, n.type, n.icon).container && p.w && p.h) {
+          n.w = Math.round(p.w);
+          n.h = Math.round(p.h);
+        }
+      }
+      return;
+    }
+    const old = g.nodes.filter((n) => !fresh.has(n.id));
+    const right = Math.max(...old.map((n) => n.x + (n.w ?? sizeOfNode(n).w)));
+    const top = Math.min(...old.map((n) => n.y));
+    let y = top;
+    for (const n of g.nodes.filter((x) => fresh.has(x.id))) {
+      const container = parentOf.get(n.id) ? g.nodes.find((c) => c.id === parentOf.get(n.id) && !fresh.has(c.id)) : undefined;
+      const s = sizeOfNode(n);
+      if (container) {
+        // Inside its boundary or package: at the bottom of it, which grows to hold it.
+        const ch = container.h ?? 300;
+        n.x = container.x + 40;
+        n.y = container.y + ch - 20;
+        container.h = ch + s.h + 30;
+      } else {
+        n.x = Math.round(right + 80);
+        n.y = Math.round(y);
+        y += s.h + 40;
+      }
+    }
+  }
+
+  /* ----------------------------------------------------- colours */
+
+  /** Each kind of shape in its own colour of the palette (actors one, use cases another…). Undo brings the old ones back. */
+  function colourByKindNow() {
+    const map = colourByKind(
+      palette.nodes.map((t) => t.type),
+      data.nodes,
+      palettes.hexes
+    );
+    app.change((d) => {
+      for (const n of (d.data as GraphData).nodes) if (map.has(n.id)) n.color = map.get(n.id);
+    });
+    app.notify(`Coloured by kind with "${palettes.palette.name}". Undo (Ctrl+Z) takes it back.`, 'ok');
+  }
+  function clearColours() {
+    app.change((d) => {
+      for (const n of (d.data as GraphData).nodes) delete n.color;
+      for (const e of (d.data as GraphData).edges) delete e.color;
+    });
+  }
+
+  /* ----------------------------------------------------- checks */
+
+  /** The folder's model, for diagrams checked against the class diagrams (communication). */
+  let model = $state<UmlModel>(buildModel([]));
+  const modelSrc = $derived(kind === 'communication' ? modelKey(app.doc?.project || '') : '');
+  $effect(() => {
+    if (!modelSrc) return;
+    let gone = false;
+    void folderModel(app.doc?.project || '').then((m) => !gone && (model = m));
+    return () => (gone = true);
+  });
+  const issues = $derived(lintGraph(kind, data, model));
+  const warnIds = $derived(new Set(issues.filter((i) => i.level === 'warn').flatMap((i) => [i.nodeId, i.edgeId].filter(Boolean) as string[])));
+  let checksOpen = $state(false);
+  /** The kinds the checks know about; the others show no pill. */
+  const CHECKED = new Set<GraphKind>(['usecase', 'class', 'activity', 'state', 'communication']);
+  function showIssue(i: LintIssue) {
+    const id = i.nodeId ?? i.edgeId;
+    if (!id) return;
+    select(i.nodeId ? [i.nodeId] : [], i.edgeId ? [i.edgeId] : []);
+    const n = i.nodeId ? nodes.find((x) => x.id === i.nodeId) : nodes.find((x) => x.id === edges.find((e) => e.id === i.edgeId)?.source);
+    if (n) {
+      follow = false;
+      // Centre it in the part of the canvas the side panel (which opens on select) leaves free.
+      const zoom = Math.max(flow.getViewport().zoom, 0.9);
+      const panel = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-w')) || 320;
+      void flow.setCenter(n.position.x + (n.measured?.width ?? 0) / 2 + (panel / 2 + 12) / zoom, n.position.y + (n.measured?.height ?? 0) / 2, { zoom, duration: 300 });
+    }
+  }
+
   function nodeClass(info: NodeTypeInfo, n: GNode): string | undefined {
     const from = connectFrom ? data.nodes.find((x) => x.id === connectFrom) : undefined;
-    const cls = [info.container ? 'is-container' : '', from && canEnd(from, n) ? 'can-target' : ''].filter(Boolean).join(' ');
+    const cls = [info.container ? 'is-container' : '', from && canEnd(from, n) ? 'can-target' : '', warnIds.has(n.id) ? 'flagged' : ''].filter(Boolean).join(' ');
     return cls || undefined;
   }
 
@@ -117,7 +259,7 @@
   function rebuild() {
     const d = $state.snapshot(data) as GraphData;
     const prev = new Map(nodes.map((n) => [n.id, n]));
-    const placed = auto ? mindmapLayout(d.nodes, sizeOf) : null;
+    const placed = auto ? mindmapLayout(d.nodes, sizeOf, palettes.cycle(BRANCH_COLORS)) : null;
     const kids = auto ? childrenMap(d.nodes) : null;
     nodes = d.nodes.map((n) => {
       const info = nodeTypeInfo(kind, n.type, n.icon);
@@ -179,6 +321,7 @@
         target: e.to,
         type: 'uml',
         zIndex: 1,
+        class: warnIds.has(e.id) ? 'flagged' : undefined,
         selected: prevEdges.get(e.id)?.selected ?? false,
         data: {
           edge: e,
@@ -227,6 +370,8 @@
   $effect(() => {
     JSON.stringify(data);
     editing;
+    [...warnIds].join();
+    if (auto) palettes.hexes.join();
     untrack(rebuild);
   });
 
@@ -925,6 +1070,12 @@
     if (!auto) entries.push({ label: 'Tidy', icon: 'WandSparkles', disabled: !data.nodes.length, run: () => void runTidy() });
     entries.push({ label: 'Fit to window', icon: 'Maximize', run: fitNow });
     entries.push({ label: 'Mini map', checked: mini, checkbox: true, run: toggleMini });
+    if (!auto) {
+      entries.push({ kind: 'sep' });
+      entries.push({ label: `Colour by kind (${palettes.palette.name})`, icon: 'Paintbrush', disabled: !data.nodes.length, run: colourByKindNow });
+      entries.push({ label: 'Remove colours', icon: 'Eraser', disabled: !data.nodes.some((n) => n.color) && !data.edges.some((e) => e.color), run: clearColours });
+      entries.push({ label: 'Colours of this folder…', icon: 'Palette', run: () => (palettes.editing = palettes.project) });
+    }
     openMenu(x, y, 'Canvas', entries);
   }
 
@@ -988,6 +1139,29 @@
 
   /* ----------------------------------------------------- export */
 
+  onMount(() => {
+    // Refit when the space changes, unless you moved the view yourself.
+    let frame = 0;
+    let last = '';
+    const ro = new ResizeObserver(([e]) => {
+      const size = `${Math.round(e.contentRect.width)}x${Math.round(e.contentRect.height)}`;
+      if (size === last) return;
+      const first = !last;
+      last = size;
+      if (first || !follow || !data.nodes.length) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => fitNow(false));
+    });
+    if (wrapper) ro.observe(wrapper);
+    // The zoom buttons move the view too; the fit button hands it back.
+    const onControls = (e: PointerEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('.svelte-flow__controls-fitview')) follow = true;
+      else if (t.closest('.svelte-flow__controls-zoomin, .svelte-flow__controls-zoomout')) follow = false;
+    };
+    wrapper?.addEventListener('pointerdown', onControls, true);
+    return () => (ro.disconnect(), cancelAnimationFrame(frame), wrapper?.removeEventListener('pointerdown', onControls, true));
+  });
   onMount(() => {
     app.setImageSource(() => {
       const el = wrapper!.querySelector<HTMLElement>('.svelte-flow__viewport')!;
@@ -1070,7 +1244,11 @@
       event.preventDefault();
       paneMenu(event.clientX, event.clientY);
     }}
-    onmovestart={() => menu && closeMenu(false)}
+    onmovestart={(e) => {
+      if (menu) closeMenu(false);
+      // A wheel, a drag or a pinch: you took over the view.
+      if (e) follow = false;
+    }}
   >
     <Background gap={20} size={1.2} />
     <Controls showLock={false} position="bottom-left">
@@ -1109,7 +1287,7 @@
     {/if}
   </SvelteFlow>
 
-  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onDragOver={previewDrop} onTidy={runTidy} onFit={fitNow} routing={data.routing} panelOpen={selNodes.length + selEdges.length > 0} />
+  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onDragOver={previewDrop} onTidy={runTidy} onFit={fitNow} onText={canText ? () => ((textOpen = !textOpen), (typed = null), (textWarnings = [])) : undefined} {textOpen} routing={data.routing} panelOpen={textOpen || selNodes.length + selEdges.length > 0} />
 
   {#if empty}
     <div class="empty-hint"><div class="stack">
@@ -1119,7 +1297,58 @@
     </div></div>
   {/if}
 
+  {#if !empty && CHECKED.has(kind) && (issues.length > 0 || data.nodes.length > 1)}
+    <div class="checks-anchor">
+      <button class="checks-pill" class:warn={issues.some((i) => i.level === 'warn')} class:clean={!issues.length} aria-expanded={checksOpen} onclick={() => (checksOpen = !checksOpen)} title={issues.length ? 'What a teacher would mark down: click to see' : 'Checked: no UML mistakes found'}>
+        <Icon name={issues.length ? 'TriangleAlert' : 'CircleCheck'} size={14} />
+        {issues.length ? `${issues.length} to check` : 'Checked'}
+      </button>
+      {#if checksOpen && issues.length}
+        <div class="checks-pop float arrive" role="dialog" aria-label="Checks">
+          <div class="row between"><span class="sect">Checks</span><button class="icon small" aria-label="Close" onclick={() => (checksOpen = false)}><Icon name="X" size={14} /></button></div>
+          <ul>
+            {#each issues as i, k (k)}
+              <li class:info={i.level === 'info'}>
+                <Icon name={i.level === 'warn' ? 'TriangleAlert' : 'Info'} size={13} />
+                <button class="link-like small" disabled={!i.nodeId && !i.edgeId} onclick={() => showIssue(i)}>{i.text}</button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if textOpen}
+    <aside class="inspector float text-panel" aria-label="PlantUML text">
+      <div class="inspector-head">
+        <Icon name="Code" size={16} /> <strong class="small">PlantUML</strong>
+        <div class="spacer"></div>
+        <button class="icon" aria-label="Close the text" title="Close" onclick={() => ((textOpen = false), (typed = null))}><Icon name="X" /></button>
+      </div>
+      <p class="tiny muted pad-text">Type here and the drawing follows; shapes that already exist keep their place. For example: <code>{kind === 'class' ? 'Socio "1" -- "0..3" Prestamo' : 'Socio -- (Prestar libro)'}</code></p>
+      <textarea
+        class="puml"
+        spellcheck="false"
+        aria-label="PlantUML"
+        value={typed ?? asText}
+        oninput={(e) => onTextInput(e.currentTarget.value)}
+        onblur={() => {
+          if (typed !== null) {
+            clearTimeout(textTimer);
+            void applyText(typed).then(() => (typed = null));
+          }
+        }}
+      ></textarea>
+      {#if textWarnings.length}
+        <ul class="puml-warn small">
+          {#each textWarnings as w (w.line)}<li>Line {w.line}: {w.message}</li>{/each}
+        </ul>
+      {/if}
+    </aside>
+  {:else}
   <Inspector {kind} nodeIds={selNodes} edgeIds={selEdges} {focusEdgeLabel} onDelete={() => removeIds(selNodes, selEdges)} onAddChild={addChild} onAddSibling={addSibling} {selectedNode} />
+  {/if}
 
   {#if menu}
     {#key menu}
@@ -1129,6 +1358,115 @@
 </div>
 
 <style>
+  .text-panel {
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+  }
+  .text-panel .inspector-head {
+    gap: 6px;
+  }
+  .pad-text {
+    margin: 0;
+    padding: 0 var(--sp-3) var(--sp-2);
+  }
+  .puml {
+    flex: 1;
+    width: calc(100% - var(--sp-3) * 2);
+    box-sizing: border-box;
+    margin: 0 var(--sp-3) var(--sp-3);
+    resize: none;
+    font-family: ui-monospace, 'JetBrains Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre;
+    tab-size: 2;
+  }
+  .puml-warn {
+    margin: 0 var(--sp-3) var(--sp-3);
+    padding: var(--sp-2) var(--sp-2) var(--sp-2) 22px;
+    border-radius: var(--r-control);
+    background: color-mix(in srgb, var(--warn) 10%, var(--panel));
+    color: var(--warn-ink);
+  }
+  /* Checks: bottom left, next to the zoom buttons. */
+  .checks-anchor {
+    position: absolute;
+    left: 56px;
+    bottom: 12px;
+    z-index: 6;
+  }
+  .checks-pill {
+    height: 30px;
+    padding: 0 12px;
+    gap: 6px;
+    border-radius: var(--r-pill);
+    background: var(--panel);
+    box-shadow: var(--shadow);
+    font-size: var(--fs-sm);
+    color: var(--muted);
+  }
+  .checks-pill.clean {
+    color: var(--ok-ink);
+  }
+  .checks-pill.warn {
+    color: var(--warn-ink);
+    background: color-mix(in srgb, var(--warn) 12%, var(--panel));
+  }
+  .checks-pop {
+    position: absolute;
+    left: 0;
+    bottom: 38px;
+    width: min(380px, 70vw);
+    max-height: 50vh;
+    overflow: auto;
+    padding: var(--sp-2) var(--sp-3) var(--sp-3);
+    border-radius: var(--r-card);
+    background: var(--panel);
+  }
+  .checks-pop ul {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .checks-pop li {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    color: var(--warn-ink);
+  }
+  .checks-pop li :global(.lucide) {
+    flex: none;
+    margin-top: 2px;
+  }
+  .checks-pop li.info {
+    color: var(--muted);
+  }
+  .link-like {
+    height: auto;
+    padding: 0;
+    background: none;
+    text-align: left;
+    font-weight: 400;
+    color: var(--ink-2);
+    white-space: normal;
+  }
+  .link-like:hover:not(:disabled) {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  /* A shape or line a check is about: an amber dashed ring, never in exports. */
+  :global(html:not(.exporting)) .canvas :global(.svelte-flow__node.flagged) {
+    outline: 2px dashed var(--warn);
+    outline-offset: 4px;
+    border-radius: 6px;
+  }
+  :global(html:not(.exporting)) .canvas :global(.svelte-flow__edge.flagged path) {
+    stroke: var(--warn) !important;
+  }
   .first {
     max-width: 460px;
     margin-inline: auto;

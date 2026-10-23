@@ -20,3 +20,5 @@ node tests/e2e/graph-interact.mjs $port
 node tests/e2e/team.mjs $port
 node tests/e2e/shell.mjs $port
 node tests/e2e/editors-interact.mjs $port
+node tests/e2e/model.mjs $port
+node tests/e2e/palette.mjs $port

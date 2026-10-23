@@ -16,6 +16,8 @@
     onDragOver,
     onTidy,
     onFit,
+    onText,
+    textOpen = false,
     panelOpen = false
   }: {
     kind: GraphKind;
@@ -28,6 +30,9 @@
     onDragOver?: (t: NodeTypeInfo | null, x: number, y: number) => void;
     onTidy: () => void;
     onFit: () => void;
+    /** Kinds that can be typed as PlantUML: the Text button opens that panel. */
+    onText?: () => void;
+    textOpen?: boolean;
     /** The inspector is showing: keep clear of it (otherwise the toolbar may use the whole width). */
     panelOpen?: boolean;
   } = $props();
@@ -198,6 +203,9 @@
     <button onclick={onTidy} title="Lay the diagram out automatically (undo brings it back)"><Icon name="WandSparkles" size={16} /> Tidy</button>
   {/if}
   <button class="icon" onclick={onFit} title="Fit to window" aria-label="Fit to window"><Icon name="Maximize" size={16} /></button>
+  {#if onText}
+    <button class:active={textOpen} aria-pressed={textOpen} onclick={onText} title="Write the diagram as PlantUML text; the drawing follows"><Icon name="Code" size={16} /> Text</button>
+  {/if}
 </div>
 
 {#if drag?.moved}

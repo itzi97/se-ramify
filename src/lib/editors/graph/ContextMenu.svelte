@@ -27,7 +27,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import Icon from '../../components/Icon.svelte';
-  import { SWATCHES } from '../../model/colors';
+  import { palettes } from '../../stores/palette.svelte';
   import LineGlyph from './LineGlyph.svelte';
 
   let {
@@ -131,7 +131,7 @@
         <button class="dot none" class:on={!m.value} role="menuitemradio" aria-checked={!m.value} title="No colour" aria-label="No colour" onclick={() => run(() => m.pick(undefined))}>
           <Icon name="Ban" size={12} />
         </button>
-        {#each SWATCHES as s (s.hex)}
+        {#each palettes.colors as s (s.hex)}
           <button class="dot" class:on={m.value === s.hex} style:--c={s.hex} role="menuitemradio" aria-checked={m.value === s.hex} title={s.name} aria-label={s.name} onclick={() => run(() => m.pick(s.hex))}></button>
         {/each}
       </div>

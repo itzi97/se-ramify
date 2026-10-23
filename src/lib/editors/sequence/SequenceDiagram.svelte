@@ -21,9 +21,12 @@
     onEdit,
     onSelectPart,
     onEditPart,
-    onHover
+    onHover,
+    flagged = new Set<string>()
   }: {
     layout: Layout;
+    /** Messages and participants (`p:<id>`) that don't match the class diagrams: marked on screen, never in exports. */
+    flagged?: Set<string>;
     selected?: string | null;
     /** The participant chosen in the drawing or the panel. */
     selectedPart?: string | null;
@@ -179,6 +182,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <g
       class="part pickable"
+      class:flag={flagged.has('p:' + h.id)}
       class:sel={selectedPart === h.id}
       class:hot={hot === 'p:' + h.id}
       onclick={(e) => pickPart(e, h.id)}
@@ -316,6 +320,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <g
       class="msg pickable"
+      class:flag={flagged.has(m.itemId)}
       class:sel={selected === m.itemId}
       class:hot={hot === m.itemId}
       onclick={(e) => pick(e, m.itemId)}
@@ -363,6 +368,17 @@
   /* What the pointer is over (here or on its row in the panel) gets a soft accent
      halo; what is selected is drawn in the accent. Neither reaches an export:
      under .exporting these rules drop away and the attributes' ink shows. */
+  /* Doesn't match the class diagram: a wavy amber underline, like a spelling mistake. */
+  :global(html:not(.exporting)) .seq .msg.flag .label {
+    text-decoration: underline wavy var(--warn);
+    text-decoration-skip-ink: none;
+    text-underline-offset: 3px;
+  }
+  :global(html:not(.exporting)) .seq .part.flag > .halo {
+    fill: color-mix(in srgb, var(--warn) 14%, transparent);
+    stroke: var(--warn);
+    stroke-dasharray: 4 3;
+  }
   :global(html:not(.exporting)) .seq :is(.hot, .pickable:hover) > .hit {
     stroke: color-mix(in srgb, var(--accent) 18%, transparent);
   }

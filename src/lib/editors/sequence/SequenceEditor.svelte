@@ -5,8 +5,11 @@
   import type { DiagramOf, MessageStyle, ParticipantKind, SeqItem, SequenceData } from '../../model/types';
   import Icon from '../../components/Icon.svelte';
   import SequenceDiagram from './SequenceDiagram.svelte';
+  import FitBox from '../../components/FitBox.svelte';
   import { layoutSequence } from './layout';
   import { parsePlantUmlLenient, toPlantUml, type SeqWarning } from './text';
+  import { addOperation, folderModel, modelKey } from '../../stores/model';
+  import { allOperations, asMessage, buildModel, checkSequence, findClass, parseLifeline, type Fix, type Issue, type UmlModel } from '../../model/uml-model';
 
   const doc = $derived(app.docOf('sequence'));
   const data = $derived(doc.data);
@@ -20,6 +23,53 @@
   let drawHover = $state<string | null>(null);
   let tab = $state<'items' | 'text'>('items');
   let panelOpen = $state(true);
+
+  /* ------------------------------------------- the folder's class diagrams */
+
+  let model = $state<UmlModel>(buildModel([]));
+  const key = $derived(modelKey(doc.project || ''));
+  $effect(() => {
+    void key;
+    let gone = false;
+    void folderModel(doc.project || '').then((m) => !gone && (model = m));
+    return () => (gone = true);
+  });
+  const issues = $derived(checkSequence(data, model));
+  const flagged = $derived(new Set(issues.filter((i) => i.level === 'warn').map((i) => i.itemId ?? `p:${i.partId}`)));
+  const issueOf = $derived(new Map(issues.map((i) => [i.itemId ?? `p:${i.partId}`, i])));
+  const classNames = $derived([...model.classes.values()].map((c) => c.name).sort((a, b) => a.localeCompare(b, 'es')));
+  /** The operations a message to this participant can call (its class's, inherited ones too). */
+  const opsFor = (pid: string) => {
+    const part = data.participants.find((p) => p.id === pid);
+    return part && part.kind !== 'actor' ? allOperations(model, parseLifeline(part.name).type) : [];
+  };
+
+  async function applyFix(f: Fix) {
+    if (f.kind === 'rename-part') edit((s) => {
+      const p = s.participants.find((x) => x.id === f.partId);
+      if (p) p.name = f.to;
+    });
+    else if (f.kind === 'rename-call') edit((s) => {
+      const it = s.items.find((x) => x.id === f.itemId);
+      if (it && it.t === 'msg') it.text = it.text.replace(new RegExp(`\\b${f.from}\\s*\\(`), `${f.to}(`);
+    });
+    else {
+      const c = findClass(model, f.className);
+      if (c) await addOperation(c.diagramId, c.nodeId, f.line);
+    }
+  }
+  /** Classes (and use case actors) not in the diagram yet: one click adds them as participants. */
+  const unusedClasses = $derived(classNames.filter((c) => !data.participants.some((p) => parseLifeline(p.name).type.toLowerCase() === c.toLowerCase())));
+  const unusedActors = $derived(model.actors.filter((a) => !data.participants.some((p) => p.name.trim().toLowerCase() === a.toLowerCase())));
+  function addNamed(name: string, kind: ParticipantKind) {
+    const id = uid();
+    edit((s) => s.participants.push({ id, name, kind }));
+    selectPart(id);
+  }
+  function showIssue(i: Issue) {
+    if (i.itemId) selectItem(i.itemId);
+    else if (i.partId) selectPart(i.partId);
+  }
 
   const KIND_LABELS: [ParticipantKind, string][] = [
     ['actor', 'Actor'],
@@ -106,7 +156,11 @@
     const from = prev ? prev.to : parts[0].id;
     const fi = parts.findIndex((p) => p.id === from);
     const to = parts[Math.min(parts.length - 1, fi + 1)]?.id ?? from;
-    const item: SeqItem = { id: uid(), t: 'msg', from, to: to === from && parts.length > 1 ? parts[0].id : to, text: 'mensaje()', style: 'sync' };
+    const target = to === from && parts.length > 1 ? parts[0].id : to;
+    // With a class diagram: the first operation of the target's class that isn't used yet, so the arrow starts out right.
+    const used = new Set(data.items.filter((i) => i.t === 'msg' && i.to === target).map((i) => (i as { text: string }).text.split('(')[0].trim()));
+    const op = opsFor(target).find((o) => !used.has(o.name)) ?? opsFor(target)[0];
+    const item: SeqItem = { id: uid(), t: 'msg', from, to: target, text: op ? asMessage(op) : 'mensaje()', style: 'sync' };
     edit((s) => s.items.splice(at, 0, item));
     selected = item.id;
     await focusText(item.id);
@@ -332,8 +386,8 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="scroll-canvas" class:panel-open={panelOpen}>
-  <div class="page">
-    {#if data.participants.length === 0 && data.items.length === 0}
+  {#if data.participants.length === 0 && data.items.length === 0}
+    <div class="page">
       <div class="empty-hint">
         <div class="stack">
           <p>An empty sequence diagram.</p>
@@ -344,10 +398,13 @@ Socio -> S: prestar(libro)
 S --> Socio: ok</pre>
         </div>
       </div>
-    {:else}
+    </div>
+  {:else}
+    <FitBox width={layout.width} height={layout.height}>
       <div class="export" data-export-root style:width="{layout.width}px" style:height="{layout.height}px">
         <SequenceDiagram
           {layout}
+          {flagged}
           {selected}
           {selectedPart}
           hovered={rowHover}
@@ -361,8 +418,8 @@ S --> Socio: ok</pre>
           onHover={(k) => (drawHover = k)}
         />
       </div>
-    {/if}
-  </div>
+    </FitBox>
+  {/if}
 </div>
 
 {#if !panelOpen}
@@ -378,6 +435,11 @@ S --> Socio: ok</pre>
       <button class="icon" aria-label="Hide panel" title="Hide panel" onclick={() => (panelOpen = false)}><Icon name="PanelRightClose" /></button>
     </div>
 
+    <!-- Suggestions from the class diagrams: classes for participants, each class's operations for the messages sent to it. -->
+    <datalist id="seq-classes">{#each classNames as c (c)}<option value=":{c}"></option>{/each}</datalist>
+    {#each data.participants as p (p.id)}
+      <datalist id="seq-ops-{p.id}">{#each opsFor(p.id) as o (o.line)}<option value={asMessage(o)}>{o.line}</option>{/each}</datalist>
+    {/each}
     {#if tab === 'items'}
       <div class="inspector-body">
         {#if layout.problems.length}
@@ -386,11 +448,37 @@ S --> Socio: ok</pre>
           </ul>
         {/if}
 
+        {#if model.classes.size && data.participants.length}
+          <section class="checks" class:clean={!issues.length} aria-label="Checked against the class diagrams">
+            {#if !issues.length}
+              <div class="row ok-line small"><Icon name="CircleCheck" size={15} /> Matches the class diagram{model.classes.size ? ` (${model.classes.size} classes)` : ''}</div>
+            {:else}
+              <div class="row small warn-line"><Icon name="TriangleAlert" size={15} /> {issues.length} thing{issues.length === 1 ? '' : 's'} to check against the class diagram</div>
+              <ul>
+                {#each issues as i (i.itemId ?? i.partId)}
+                  <li class:info={i.level === 'info'}>
+                    <button class="link-like small" onclick={() => showIssue(i)} title="Show it">{i.text}</button>
+                    {#if i.fix}<button class="secondary small fix" onclick={() => applyFix(i.fix!.fix)}><Icon name={i.fix.fix.kind === 'add-op' ? 'ListPlus' : 'Wand2'} size={13} /> {i.fix.label}</button>{/if}
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </section>
+        {:else if !model.classes.size}
+          <p class="tiny muted hint-model"><Icon name="Lightbulb" size={13} /> Draw the class diagram in this folder and the messages are checked against its operations, with suggestions as you type.</p>
+        {/if}
+
         <section class="stack tight">
           <div class="row between">
             <span class="sect">Participants</span>
             <button class="small" onclick={() => addParticipant('object')}><Icon name="Plus" size={14} /> Add</button>
           </div>
+          {#if unusedActors.length || unusedClasses.length}
+            <div class="quick" aria-label="Add from the other diagrams">
+              {#each unusedActors as a (a)}<button class="chip" title="Add the actor {a} (from the use case diagram)" onclick={() => addNamed(a, 'actor')}><Icon name="PersonStanding" size={13} /> {a}</button>{/each}
+              {#each unusedClasses as c (c)}<button class="chip" title="Add :{c} (from the class diagram)" onclick={() => addNamed(`:${c}`, 'object')}><Icon name="Plus" size={13} /> :{c}</button>{/each}
+            </div>
+          {/if}
           {#each data.participants as p, i (p.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div
@@ -405,13 +493,13 @@ S --> Socio: ok</pre>
               <select aria-label="Kind" value={p.kind} onchange={(e) => edit((s) => (s.participants[i].kind = e.currentTarget.value as ParticipantKind))}>
                 {#each KIND_LABELS as [k, l] (k)}<option value={k}>{l}</option>{/each}
               </select>
-              <input id="seq-pname-{p.id}" type="text" aria-label="Name" value={p.name} oninput={(e) => edit((s) => (s.participants[i].name = e.currentTarget.value), `p-name-${p.id}`)} />
+              <input id="seq-pname-{p.id}" type="text" aria-label="Name" list="seq-classes" class:flag-in={flagged.has('p:' + p.id)} title={issueOf.get('p:' + p.id)?.text ?? ''} value={p.name} oninput={(e) => edit((s) => (s.participants[i].name = e.currentTarget.value), `p-name-${p.id}`)} />
               <button class="icon small" aria-label="Move left" title="Move left" disabled={i === 0} onclick={() => moveParticipant(i, -1)}><Icon name="ArrowLeft" size={14} /></button>
               <button class="icon small" aria-label="Move right" title="Move right" disabled={i === data.participants.length - 1} onclick={() => moveParticipant(i, 1)}><Icon name="ArrowRight" size={14} /></button>
               <button class="icon small danger" aria-label="Delete participant" title="Delete" onclick={() => removeParticipant(i)}><Icon name="Trash2" size={14} /></button>
             </div>
           {:else}
-            <p class="small muted">None yet. An actor starts the interaction; objects are written <code>:Clase</code> or <code>nombre:Clase</code>.</p>
+            <p class="small muted">None yet. {#if unusedClasses.length}Click the classes above to add them, and an actor to start the interaction.{:else}An actor starts the interaction; objects are written <code>:Clase</code> or <code>nombre:Clase</code>.{/if}</p>
           {/each}
         </section>
 
@@ -448,7 +536,7 @@ S --> Socio: ok</pre>
                   </select>
                 </div>
                 <div class="mrow">
-                  <input id="seq-field-{it.id}" type="text" aria-label="Message text" placeholder="operación(parámetros)" value={it.text} oninput={(e) => edit((s) => ((s.items[i] as typeof it).text = e.currentTarget.value), `m-${it.id}`)} />
+                  <input id="seq-field-{it.id}" type="text" aria-label="Message text" placeholder="operación(parámetros)" list={it.style === 'reply' ? undefined : `seq-ops-${it.to}`} class:flag-in={flagged.has(it.id)} title={issueOf.get(it.id)?.text ?? ''} value={it.text} oninput={(e) => edit((s) => ((s.items[i] as typeof it).text = e.currentTarget.value), `m-${it.id}`)} />
                   {@render actions(i)}
                 </div>
               {:else if it.t === 'open'}
@@ -581,12 +669,94 @@ destroy L   ' tras un mensaje a L (o: C -> L !!)</pre>
   }
   .scroll-canvas,
   .seq-panel {
-    --seq-panel-w: 300px;
+    --seq-panel-w: 324px;
   }
   .seq-panel {
     width: var(--seq-panel-w);
     /* Under the shell's own panels (Notes, Help, versions: z-index 50). */
     z-index: 20;
+  }
+  .checks {
+    padding: var(--sp-2);
+    border-radius: var(--r-control);
+    background: color-mix(in srgb, var(--warn) 9%, var(--panel));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 35%, transparent);
+  }
+  .checks.clean {
+    background: color-mix(in srgb, var(--ok) 8%, var(--panel));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ok) 30%, transparent);
+  }
+  .ok-line {
+    gap: 6px;
+    color: var(--ok-ink);
+    font-weight: 700;
+  }
+  .warn-line {
+    gap: 6px;
+    color: var(--warn-ink);
+    font-weight: 700;
+  }
+  .checks ul {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .checks li {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .checks li.info .link-like {
+    color: var(--muted);
+  }
+  .link-like {
+    height: auto;
+    padding: 0;
+    background: none;
+    text-align: left;
+    font-weight: 400;
+    color: var(--ink-2);
+    white-space: normal;
+  }
+  .link-like:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  .fix {
+    gap: 4px;
+  }
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .chip {
+    height: 24px;
+    padding: 0 8px;
+    gap: 3px;
+    border-radius: var(--r-pill);
+    background: var(--panel-2);
+    font-size: var(--fs-xs);
+    font-weight: 400;
+    color: var(--ink-2);
+  }
+  .chip:hover {
+    color: var(--accent);
+    background: var(--selected);
+  }
+  .hint-model {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    margin: 0;
+  }
+  input.flag-in {
+    border-color: var(--warn) !important;
+    background: color-mix(in srgb, var(--warn) 7%, var(--panel));
   }
   .export {
     background: var(--d-fill);
@@ -625,8 +795,12 @@ destroy L   ' tras un mensaje a L (o: C -> L !!)</pre>
     background: var(--selected);
   }
   .prow select {
-    width: 112px;
+    width: 88px;
     flex: none;
+  }
+  .prow .icon.small {
+    width: 22px;
+    min-width: 22px;
   }
   .prow input,
   .mrow input,

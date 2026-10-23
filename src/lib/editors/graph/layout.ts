@@ -48,7 +48,7 @@ export function mindmapRoot(nodes: GNode[]): GNode | undefined {
  * Positions (top-left) for every idea reachable from the root. Ideas not in
  * the tree (notes, orphans) are left out: they keep their own x / y.
  */
-export function mindmapLayout(nodes: GNode[], size: (n: GNode) => Size): Map<string, Placed> {
+export function mindmapLayout(nodes: GNode[], size: (n: GNode) => Size, colors: string[] = BRANCH_COLORS): Map<string, Placed> {
   const out = new Map<string, Placed>();
   const root = mindmapRoot(nodes);
   if (!root) return out;
@@ -102,7 +102,7 @@ export function mindmapLayout(nodes: GNode[], size: (n: GNode) => Size): Map<str
     let y = -total / 2;
     const x = side === 'right' ? rootSize.w / 2 + H_GAP : -rootSize.w / 2 - H_GAP;
     for (const m of list) {
-      const color = BRANCH_COLORS[main.indexOf(m) % BRANCH_COLORS.length];
+      const color = colors[main.indexOf(m) % colors.length];
       place(m, side, x, y, 1, color);
       y += heights.get(m.id)! + V_GAP;
     }

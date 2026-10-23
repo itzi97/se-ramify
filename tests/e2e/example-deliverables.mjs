@@ -27,9 +27,9 @@ await page.waitForTimeout(800);
 
 let failed = false;
 for (const id of ['E1', 'E2', 'E3', 'Final']) {
-  await page.getByRole('tab', { name: new RegExp(`^${id}`) }).click();
+  await page.getByRole('dialog', { name: 'Hand-in checklist' }).getByRole('tab', { name: new RegExp(`^${id}`) }).click();
   await page.waitForTimeout(300);
-  const count = await page.getByRole('tab', { name: new RegExp(`^${id}`) }).locator('.count').textContent();
+  const count = await page.getByRole('dialog', { name: 'Hand-in checklist' }).getByRole('tab', { name: new RegExp(`^${id}`) }).locator('.count').textContent();
   const [done, total] = count.split('/').map(Number);
   console.log(`${id}: ${count}`);
   if (done !== total) failed = true;

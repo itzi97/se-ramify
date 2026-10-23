@@ -92,14 +92,16 @@ await b.evaluate(() => window.__app.close());
 await a.waitForFunction((id) => !window.__app.presence[id], domain.id, { timeout: 10000 }).catch(() => fail('presence did not clear on close'));
 
 // 7. Checklist changes are shared: Ana asks for use cases in E1 too; Bruno sees it.
+await a.evaluate(() => window.__app.cd('Equipo'));
 await a.getByRole('button', { name: 'Hand-in checklist for Equipo' }).click();
 await a.getByRole('button', { name: /Edit checklist/ }).click();
 await a.waitForTimeout(400);
 await a.getByRole('tab', { name: /^E2/ }).click();
-await a.waitForFunction(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim().startsWith('E2'), null, { timeout: 5000 }).catch(() => fail('E2 tab not selected'));
+await a.waitForFunction(() => document.querySelector('[role="dialog"] [role="tab"][aria-selected="true"]')?.textContent?.trim().startsWith('E2'), null, { timeout: 5000 }).catch(() => fail('E2 tab not selected'));
 await a.getByRole('combobox', { name: /Move or copy Casos de uso/ }).selectOption('copy:E1');
 await a.waitForTimeout(300);
 await a.keyboard.press('Escape');
+await b.evaluate(() => window.__app.cd('Equipo'));
 await b.getByRole('button', { name: 'Hand-in checklist for Equipo' }).click();
 await b.waitForTimeout(500);
 const e1 = await b.getByRole('dialog', { name: 'Hand-in checklist' }).textContent();
