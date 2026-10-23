@@ -501,7 +501,7 @@ S --> Socio: ok</pre>
           <div class="row adds">
             <button class="secondary small" onclick={addMessage}><Icon name="ArrowRight" size={14} /> Message</button>
             <button class="secondary small" onclick={() => addFragment('alt')}><Icon name="SquareDashed" size={14} /> Fragment</button>
-            <button class="secondary small" onclick={addElse}>else</button>
+            <button class="secondary small" onclick={addElse}><Icon name="Split" size={14} /> else</button>
             <button class="secondary small" onclick={addNote}><Icon name="StickyNote" size={14} /> Note</button>
           </div>
           <p class="tiny muted">New items go after the selected one. <kbd>↑</kbd> <kbd>↓</kbd> select, <kbd>F2</kbd> edits, <kbd>Del</kbd> deletes. Click anything in the drawing to find its row here; double-click to edit it.</p>

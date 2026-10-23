@@ -343,9 +343,9 @@
           <div class="copy-banner float row" role="status">
             <Icon name="TriangleAlert" size={16} />
             <span class="small">{openMeta.conflict ? 'This is a conflict copy your sync app made: two people saved at once.' : 'This file is a copy of another diagram in the folder (same id), probably made by your sync app.'} Compare it with the original, then keep it or delete it.</span>
-            {#if openMeta.dupOf}<button class="secondary small" onclick={() => app.open(openMeta.dupOf!)}>Open the original</button>{/if}
-            <button class="secondary small" onclick={() => app.keepAsSeparate(openMeta)}>Keep as its own diagram</button>
-            <button class="secondary small" onclick={() => app.removeFile(openMeta)}>Delete this copy</button>
+            {#if openMeta.dupOf}<button class="secondary small" onclick={() => app.open(openMeta.dupOf!)}><Icon name="SquareArrowOutUpRight" size={14} /> Open the original</button>{/if}
+            <button class="secondary small" onclick={() => app.keepAsSeparate(openMeta)}><Icon name="CopyPlus" size={14} /> Keep as its own diagram</button>
+            <button class="secondary small" onclick={() => app.removeFile(openMeta)}><Icon name="Trash2" size={14} /> Delete this copy</button>
           </div>
         {/if}
       {:else}
@@ -408,14 +408,14 @@
         <p>Everyone points the app at the same shared folder (Google Drive / OneDrive / Dropbox, or a git repo) and writes their name at the bottom of the list. Changes from others appear within a few seconds. Nobody's work is overwritten: if someone saved a diagram while you were editing it, theirs opens and yours is kept as a copy. ⋯ → <em>Save a copy to send…</em> and the file button next to <em>New diagram</em> pass single diagrams around.</p>
         <div class="sect">Hand-ins</div>
         <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in; the home screen shows how far each one is. <em>Edit checklist</em> adapts it when the teacher asks for something different (shared with your group). The example project has every hand-in done for an invented library app.</p>
-        <p><button class="secondary small" onclick={async () => { side = null; showHandIns(await app.loadExampleProject()); }}>Load the example project</button></p>
+        <p><button class="secondary small" onclick={async () => { side = null; showHandIns(await app.loadExampleProject()); }}><Icon name="GraduationCap" size={14} /> Load the example project</button></p>
         <div class="sect">Exports</div>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into Word, Google Docs or PowerPoint. The Export menu also makes a Word document or a PowerPoint slide of the diagram, and copies a LaTeX figure for its PNG; <em>Image size</em> sets how sharp images are (they keep their on-screen size in documents).</p>
         <p>The box icon next to a project in the list exports the whole project — every diagram as a PNG plus the memoria with the specifications and stories, as Markdown and, if you tick them, Word, LaTeX and a PowerPoint deck for the presentation.</p>
         <p>PNG and SVG for every diagram (on white by default). UML diagrams also export PlantUML; the Gantt exports Mermaid; specifications, stories and maps export Markdown; stories export Gherkin <code>.feature</code> files.</p>
         <div class="row upd">
           <label class="check small"><input type="checkbox" checked={app.checkUpdates} onchange={(e) => app.setCheckUpdates(e.currentTarget.checked)} /> Tell me when a new version is out</label>
-          <button class="secondary small" onclick={() => app.lookForUpdate(true)}>Check now</button>
+          <button class="secondary small" onclick={() => app.lookForUpdate(true)}><Icon name="RefreshCw" size={14} /> Check now</button>
         </div>
         <p class="tiny muted">Asks GitHub once a day which version is the latest; nothing else is sent, nothing is installed. se-ramify {__APP_VERSION__}</p>
       </div>

@@ -328,7 +328,7 @@
         </div>
         <div class="row foot">
           <button class="small" onclick={() => addTemplate(a.id, templateFor(a))}><Icon name="ListPlus" size={14} /> Add typical {templateFor(a) === 'cloud' ? 'cloud' : 'local'} lines</button>
-          <button class="small quiet-btn" onclick={() => addTemplate(a.id, templateFor(a) === 'cloud' ? 'local' : 'cloud')}>…or {templateFor(a) === 'cloud' ? 'local' : 'cloud'} ones</button>
+          <button class="small quiet-btn" onclick={() => addTemplate(a.id, templateFor(a) === 'cloud' ? 'local' : 'cloud')}><Icon name="ListPlus" size={14} /> …or {templateFor(a) === 'cloud' ? 'local' : 'cloud'} ones</button>
           <span class="spacer"></span>
           <span class="tiny muted">Typical lines come without prices: put real market prices (shop PVP, the cloud provider's calculator, salary tables) and their source. No inflation or discount rate, as in class.</span>
         </div>

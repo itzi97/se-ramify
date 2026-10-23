@@ -2,7 +2,7 @@
 
 Each section below is the release note for that version: short bullets, user-facing changes only.
 
-## 0.5.0
+## 0.5.1
 
 - A home screen: the diagrams you changed last, how far each project's hand-ins are (click one to open its checklist) and every kind of diagram one click away
 - Colours by family — company, UML, requirements, design thinking, planning, infrastructure — on every diagram's badge in the list, the new-diagram window, the checklist and the home screen; filter the list by family
@@ -13,6 +13,7 @@ Each section below is the release note for that version: short bullets, user-fac
 - Canvas diagrams: right-click menus for shapes, lines and the empty canvas (add a shape where you clicked, change a line's type or direction…); colour any shape or line; a line picker that draws each kind of line; drop targets light up while you connect or drag; a mini map
 - The other editors answer the pointer: the drawing and its panel highlight each other (sequence, Gantt, stakeholders, vision, UP), clicking a part of an acta jumps to its field, drop zones light up while you drag cards, a full Kanban column turns amber
 - Colour that means something: MoSCoW priorities (Must red, Should orange, Could amber, Won't grey), each assignee's colour, done and late Gantt bars, TCO alternatives, missing prices, review items in actas
+- Every action button has an icon, down to restoring, keeping or deleting a sync copy, checking for updates and filling actors from the lines
 - Notices say what happened in colour, with Undo or Open where it applies; the window title is the open diagram's name
 - Fixes: a selected sequence message no longer exports in blue; a line could not be drawn from a note; traceability boxes were see-through; a selected double line exported as a single one
 

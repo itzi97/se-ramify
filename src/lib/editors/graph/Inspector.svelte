@@ -314,7 +314,7 @@
                 </div>
                 <label class="field">Primary actor <input type="text" value={spec.primaryActor} oninput={(e) => setSpec('primaryActor', e.currentTarget.value)} /></label>
                 <label class="field">Secondary actors <input type="text" value={spec.secondaryActors} oninput={(e) => setSpec('secondaryActors', e.currentTarget.value)} /></label>
-                <button class="inline small" onclick={fillActors}>Fill actors from the lines in the diagram</button>
+                <button class="inline small" onclick={fillActors}><Icon name="Wand2" size={13} /> Fill actors from the lines in the diagram</button>
                 <label class="field">Description <textarea rows="2" value={spec.description} oninput={(e) => setSpec('description', e.currentTarget.value)}></textarea></label>
                 <label class="field">Trigger <input type="text" value={spec.trigger} oninput={(e) => setSpec('trigger', e.currentTarget.value)} /></label>
                 <label class="field">Preconditions <textarea rows="2" value={spec.preconditions} oninput={(e) => setSpec('preconditions', e.currentTarget.value)}></textarea></label>

@@ -1,6 +1,6 @@
 {
   "name": "se-ramify",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Local-first, open-source desktop app for the diagrams of a Software Engineering course: UML, maps, stakeholders, Gantt, story maps and Kanban.",
   "private": true,
   "license": "MIT",

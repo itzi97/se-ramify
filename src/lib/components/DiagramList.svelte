@@ -395,7 +395,7 @@
         {#each app.deleted.slice(0, 20) as d (d.id)}
           <div class="row between del">
             <span class="t small">{d.title || 'Sin título'}</span>
-            <button class="secondary small" onclick={() => app.undelete(d)}>Restore</button>
+            <button class="secondary small" onclick={() => app.undelete(d)}><Icon name="RotateCcw" size={14} /> Restore</button>
           </div>
         {/each}
       </details>

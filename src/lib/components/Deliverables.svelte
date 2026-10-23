@@ -236,7 +236,7 @@
             {#if editing}
               <div class="row eacts">
                 {#if origin(r.need.id) === 'placed'}
-                  <button class="secondary small" onclick={() => unplace(r.need.id)} title="Take it back out of {tab}">Not here</button>
+                  <button class="secondary small" onclick={() => unplace(r.need.id)} title="Take it back out of {tab}"><Icon name="Undo2" size={14} /> Not here</button>
                 {:else}
                   <select class="small" aria-label="Move or copy {r.need.label}" onchange={(e) => onMove(e, r.need.id)}>
                     <option value="">Move / also in…</option>
@@ -277,7 +277,7 @@
           {#each custom.removed as id (id)}
             {@const b = builtIn.get(id)}
             {#if b}
-              <div class="row between rrow"><span class="small">{b.from} · {b.need.label}</span><button class="secondary small" onclick={() => restore(id)}>Restore</button></div>
+              <div class="row between rrow"><span class="small">{b.from} · {b.need.label}</span><button class="secondary small" onclick={() => restore(id)}><Icon name="RotateCcw" size={14} /> Restore</button></div>
             {/if}
           {/each}
         </details>
