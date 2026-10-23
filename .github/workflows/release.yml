@@ -32,8 +32,36 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
 
-  build:
+  # One job makes the draft (or finds the one this version already has) before
+  # the three builds start: left to themselves they race and each may create
+  # its own draft, splitting the installers across several releases.
+  draft:
     needs: guard
+    if: needs.guard.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.make.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: make
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="$(node -p "require('./src-tauri/tauri.conf.json').version")"; fi
+          # Release notes = this version's section of CHANGELOG.md (bullets only).
+          body="$(awk -v v="$v" '
+            /^## /{ on = ($2 == v) ; next }
+            on && /^- / { print }
+          ' CHANGELOG.md)"
+          [ -n "$body" ] || body="- See the commit log"
+          id="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" --jq "[.[] | select(.tag_name == \"v$v\" and .draft)][0].id // empty")"
+          if [ -z "$id" ]; then
+            id="$(gh api "repos/$GITHUB_REPOSITORY/releases" -f tag_name="v$v" -f target_commitish="$GITHUB_SHA" -f name="se-ramify v$v" -f body="$body" -F draft=true --jq .id)"
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: [guard, draft]
     if: needs.guard.outputs.run == 'true'
     strategy:
       fail-fast: false
@@ -71,27 +99,9 @@ jobs:
 
       - run: npm ci
 
-      # Release notes = this version's section of CHANGELOG.md (bullets only).
-      - name: Release notes from CHANGELOG.md
-        id: notes
-        shell: bash
-        run: |
-          if [ "$GITHUB_REF_TYPE" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="$(node -p "require('./src-tauri/tauri.conf.json').version")"; fi
-          body="$(awk -v v="$v" '
-            /^## /{ on = ($2 == v) ; next }
-            on && /^- / { print }
-          ' CHANGELOG.md)"
-          [ -n "$body" ] || body="- See the commit log"
-          { echo 'body<<EOF'; echo "$body"; echo 'EOF'; } >> "$GITHUB_OUTPUT"
-
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
-          releaseName: 'se-ramify v__VERSION__'
-          releaseCommitish: ${{ github.sha }}
-          releaseBody: ${{ steps.notes.outputs.body }}
-          releaseDraft: true
-          prerelease: false
+          releaseId: ${{ needs.draft.outputs.id }}
           args: --bundles ${{ matrix.bundles }}${{ matrix.target && format(' --target {0}', matrix.target) || '' }}
