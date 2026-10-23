@@ -365,8 +365,11 @@
           class="section"
           class:current={kind === 'crazy8' && sec.panel === currentPanel && !finished}
           class:target={drag?.active && drop?.sec === sec.id}
+          class:dragging={drag?.active}
+          class:tinted={!!sec.tint}
           style:grid-area={sec.area}
           style:background={sectionBg(sec)}
+          style:--tint={sec.tint}
           data-section={sec.id}
           ondblclick={(e) => onSectionDbl(e, sec.id)}
           aria-label={sec.title}
@@ -380,7 +383,9 @@
             {:else if sec.panel}
               <span class="panel-no">{sec.panel}</span>
             {:else if sec.icon}
-              <Icon name={sec.icon} size={15} />
+              <span class="sec-icon"><Icon name={sec.icon} size={15} /></span>
+            {:else if sec.tint}
+              <span class="sec-dot"></span>
             {/if}
             <strong class="sec-title">{sec.title}</strong>
             <span class="spacer"></span>
@@ -401,7 +406,10 @@
                 class:dragging={drag?.active && drag.id === s.id}
                 class:drop-before={dropBefore(sec.id, s)}
                 class:editing={editing === s.id}
+                class:picking={colorFor === s.id}
                 style:background={stickyBg(s.color)}
+                style:--n={s.color ?? '#e2c044'}
+                title={editing === s.id ? undefined : 'Click to edit · drag to move'}
                 data-sticky={s.id}
                 onpointerdown={(e) => onStickyDown(e, s.id)}
                 onpointermove={onStickyMove}
@@ -423,7 +431,7 @@
                   <div class="text">{s.text}</div>
                 {/if}
                 <div class="tools" data-no-export>
-                  <button class="icon small tool-color" title="Colour" aria-label="Colour" onclick={() => (colorFor = colorFor === s.id ? null : s.id)}><Icon name="Palette" size={12} /></button>
+                  <button class="icon small tool-color" class:on={colorFor === s.id} title="Colour" aria-label="Colour" aria-expanded={colorFor === s.id} onclick={() => (colorFor = colorFor === s.id ? null : s.id)}><span class="chip"></span></button>
                   <button class="icon small" title="Delete" aria-label="Delete sticky" onclick={() => remove(s.id)}><Icon name="X" size={12} /></button>
                 </div>
                 {#if colorFor === s.id}
@@ -517,9 +525,20 @@
     border-radius: var(--r-card);
     transition: border-color var(--t), box-shadow var(--t);
   }
-  .section.target {
+  :global(html:not(.exporting)) .section:hover {
+    border-color: color-mix(in srgb, var(--ink) 22%, var(--line));
+  }
+  :global(html:not(.exporting)) .section.tinted:hover {
+    border-color: color-mix(in srgb, var(--tint) 55%, var(--line));
+  }
+  /* While a sticky is dragged, the section under the pointer takes it: accent outline and wash. */
+  :global(html:not(.exporting)) .section.dragging:hover {
+    border-color: var(--line);
+  }
+  .section.target,
+  .section.target:hover {
     border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent), inset 0 0 0 999px var(--selected);
   }
   .section.current {
     border-color: var(--accent);
@@ -535,6 +554,20 @@
   .sec-title {
     color: var(--ink);
     font-size: var(--fs-md);
+  }
+  /* A tinted section (pains, gains, the value proposition, a quadrant…) carries its colour into its header. */
+  .sec-icon {
+    display: inline-flex;
+  }
+  .tinted .sec-icon {
+    color: color-mix(in srgb, var(--tint) 80%, var(--ink));
+  }
+  .sec-dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--tint);
   }
   .add {
     opacity: 0;
@@ -584,9 +617,17 @@
     cursor: grab;
     touch-action: none;
     user-select: none;
+    transition: box-shadow var(--t);
+  }
+  /* Hover: the note's own colour rings it and its shadow deepens; it doesn't move. */
+  :global(html:not(.exporting)) .note:is(:hover, .picking) {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--n) 75%, var(--ink)), 0 4px 10px -4px rgba(22, 25, 29, 0.35);
   }
   .note.editing {
     cursor: text;
+  }
+  :global(html:not(.exporting)) .note.editing,
+  :global(html:not(.exporting)) .note.editing:hover {
     box-shadow: 0 0 0 2px var(--accent);
   }
   .note.dragging {
@@ -640,8 +681,24 @@
     height: 20px;
     background: color-mix(in srgb, var(--panel) 70%, transparent);
   }
+  .tools button:hover {
+    background: var(--panel);
+  }
+  /* The colour button shows the note's colour: click it for the swatches. */
+  .chip {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--n);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--n) 60%, var(--ink));
+  }
+  .tool-color.on {
+    background: var(--panel);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
   .note:hover .tools,
   .note.editing .tools,
+  .note.picking .tools,
   .tools:focus-within {
     opacity: 1;
   }

@@ -77,6 +77,29 @@
 
   let tab = $state<'artifacts' | 'phases' | 'disciplines'>('artifacts');
   let selected = $state<string | null>(null);
+  /** A phase or discipline picked in the chart (or its card in the panel), and what the pointer is over. */
+  let selPhase = $state<string | null>(null);
+  let selDisc = $state<string | null>(null);
+  let hoverPhase = $state<string | null>(null);
+  let hoverDisc = $state<string | null>(null);
+  let hoverArt = $state<string | null>(null);
+
+  /** The chart is a way into the panel: a phase header opens its card in Phases, a row its discipline. */
+  function pickPhase(id: string, field?: 'milestone' | 'iterations') {
+    selPhase = id;
+    tab = 'phases';
+    queueMicrotask(() => {
+      const card = document.getElementById(`up-phase-${id}`);
+      card?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (field === 'milestone') card?.querySelector<HTMLInputElement>('[data-milestone]')?.focus();
+      else if (field === 'iterations') card?.querySelector<HTMLInputElement>('.iters input')?.focus();
+    });
+  }
+  function pickDisc(id: string) {
+    selDisc = id;
+    tab = 'disciplines';
+    queueMicrotask(() => document.getElementById(`up-disc-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  }
   let editCurves = $state(false);
   const current = $derived(data.artifacts.find((a) => a.id === selected) ?? null);
 
@@ -222,8 +245,19 @@
         <text x={CHART.pad} y={CHART.headH / 2 + 5} class="corner">Disciplinas</text>
         {#each data.phases as p, i (p.id)}
           {@const b = L.phases[i]}
-          <rect x={b.x + 1} y="2" width={b.w - 2} height={CHART.headH - 6} rx="5" class="phase-head" />
-          <text x={b.x + b.w / 2} y={CHART.headH / 2 + 3} text-anchor="middle" class="phase-name">{p.name}</text>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <g
+            class="phase pick"
+            class:on={selPhase === p.id && tab === 'phases'}
+            class:hot={hoverPhase === p.id}
+            onclick={() => pickPhase(p.id)}
+            onpointerenter={() => (hoverPhase = p.id)}
+            onpointerleave={() => hoverPhase === p.id && (hoverPhase = null)}
+          >
+            <title>{p.name}{p.goal ? ` — ${p.goal}` : ''}</title>
+            <rect x={b.x + 1} y="2" width={b.w - 2} height={CHART.headH - 6} rx="5" class="phase-head" />
+            <text x={b.x + b.w / 2} y={CHART.headH / 2 + 3} text-anchor="middle" class="phase-name">{p.name}</text>
+          </g>
         {/each}
 
         <!-- discipline rows -->
@@ -235,14 +269,32 @@
           {#each lines as line, k (k)}
             <text x={CHART.pad} y={L.rowsTop + r * CHART.rowH + CHART.rowH / 2 + 4 + (k - (lines.length - 1) / 2) * 14} class="disc">{line}</text>
           {/each}
-          <path d={hump.area} fill={colorOf(r)} class="hump" />
-          <path d={hump.line} stroke={colorOf(r)} class="hump-line" />
+          {#if hoverDisc === dsc.id || (selDisc === dsc.id && tab === 'disciplines')}
+            <rect x="0" y={L.rowsTop + r * CHART.rowH} width={L.width} height={CHART.rowH} class="row-lit" class:on={selDisc === dsc.id && tab === 'disciplines'} />
+          {/if}
+          <path d={hump.area} fill={colorOf(r)} class="hump" class:lit={hoverDisc === dsc.id || (selDisc === dsc.id && tab === 'disciplines')} />
+          <path d={hump.line} stroke={colorOf(r)} class="hump-line" class:lit={hoverDisc === dsc.id || (selDisc === dsc.id && tab === 'disciplines')} />
           <line x1={L.phases[0]?.x ?? CHART.labelW} y1={base} x2={L.width - CHART.pad} y2={base} class="baseline" />
         {/each}
 
         <!-- phase separators -->
         {#each L.phases as b, i (b.id)}
           {#if i > 0}<line x1={b.x} y1={CHART.headH - 2} x2={b.x} y2={L.milestoneTop} class="phase-sep" />{/if}
+        {/each}
+
+        <!-- each discipline's row picks it (under the curve handles) -->
+        {#each data.disciplines as dsc, r (dsc.id)}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <rect
+            class="row-hit pick"
+            x="0"
+            y={L.rowsTop + r * CHART.rowH}
+            width={L.width}
+            height={CHART.rowH}
+            onclick={() => pickDisc(dsc.id)}
+            onpointerenter={() => (hoverDisc = dsc.id)}
+            onpointerleave={() => hoverDisc === dsc.id && (hoverDisc = null)}><title>{dsc.name}: effort per phase in Disciplines</title></rect
+          >
         {/each}
 
         <!-- iterations -->
@@ -252,7 +304,8 @@
         {#each L.phases as b (b.id)}
           {#each b.iters as it, k (k)}
             {#if k > 0}<line x1={it.x} y1={L.iterTop} x2={it.x} y2={L.milestoneTop} class="iter-sep" />{/if}
-            <text x={it.x + it.w / 2} y={L.iterTop + CHART.iterH / 2 + 4} text-anchor="middle" class="iter">{it.name}</text>
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <text x={it.x + it.w / 2} y={L.iterTop + CHART.iterH / 2 + 4} text-anchor="middle" class="iter pick" class:hot={hoverPhase === b.id} onclick={() => pickPhase(b.id, 'iterations')} onpointerenter={() => (hoverPhase = b.id)} onpointerleave={() => hoverPhase === b.id && (hoverPhase = null)}>{it.name}</text>
           {/each}
         {/each}
 
@@ -262,10 +315,14 @@
           {@const b = L.phases[i]}
           {@const mx = b.x + b.w - (i === data.phases.length - 1 ? 10 : 0)}
           {@const my = L.milestoneTop + 14}
-          <path d="M {mx} {my - 8} L {mx + 8} {my} L {mx} {my + 8} L {mx - 8} {my} Z" class="diamond" />
-          {#each wrapText(p.milestone, Math.max(12, Math.floor((b.w - 24) / 6.4))) as line, k (k)}
-            <text x={mx - 14} y={my + 4 + k * 14} text-anchor="end" class="milestone">{line}</text>
-          {/each}
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <g class="ms pick" class:hot={hoverPhase === p.id} onclick={() => pickPhase(p.id, 'milestone')} onpointerenter={() => (hoverPhase = p.id)} onpointerleave={() => hoverPhase === p.id && (hoverPhase = null)}>
+            <title>Milestone of {p.name}: {p.milestone}</title>
+            <path d="M {mx} {my - 8} L {mx + 8} {my} L {mx} {my + 8} L {mx - 8} {my} Z" class="diamond" />
+            {#each wrapText(p.milestone, Math.max(12, Math.floor((b.w - 24) / 6.4))) as line, k (k)}
+              <text x={mx - 14} y={my + 4 + k * 14} text-anchor="end" class="milestone">{line}</text>
+            {/each}
+          </g>
         {/each}
 
         <!-- curve handles (screen only) -->
@@ -307,7 +364,7 @@
             {#each list as a (a.id)}
               {@const st = statusInfo(a.status)}
               {@const meta = metaOf(a.diagramId)}
-              <div class="art" class:on={selected === a.id}>
+              <div class="art" class:on={selected === a.id} class:hot={hoverArt === a.id} onpointerenter={() => (hoverArt = a.id)} onpointerleave={() => hoverArt === a.id && (hoverArt = null)} role="group">
                 <button class="art-main" onclick={() => select(a.id)} title={a.note || a.name}>
                   <span class="chip" style:background={st.color} title={st.label}></span>
                   <span class="art-name" class:done={a.status === 'done'}>{a.name}</span>
@@ -366,7 +423,7 @@
             <span class="small muted">Status</span>
             <div class="seg" role="radiogroup" aria-label="Status">
               {#each STATUSES as s (s.status)}
-                <button role="radio" class:active={a.status === s.status} aria-checked={a.status === s.status} onclick={() => app.change((d) => updateArtifact(ud(d), a.id, { status: s.status }))}>
+                <button role="radio" class="tone" class:active={a.status === s.status} style:--tc={s.color} aria-checked={a.status === s.status} onclick={() => app.change((d) => updateArtifact(ud(d), a.id, { status: s.status }))}>
                   <span class="chip" style:background={s.color}></span>{s.label}
                 </button>
               {/each}
@@ -414,7 +471,7 @@
               </div>
               {#each artifactsOf(data, p.id) as a (a.id)}
                 {@const meta = metaOf(a.diagramId)}
-                <button class="menu-row item" onclick={() => (selected = a.id)}>
+                <button class="menu-row item" class:hot={hoverArt === a.id} onclick={() => (selected = a.id)} onpointerenter={() => (hoverArt = a.id)} onpointerleave={() => hoverArt === a.id && (hoverArt = null)}>
                   <span class="chip" style:background={statusInfo(a.status).color}></span>
                   <span class="iname">{a.name}</span>
                   {#if meta}<Icon name="Link" size={12} />{/if}
@@ -426,13 +483,13 @@
         {/if}
       {:else if tab === 'phases'}
         {#each data.phases as p, i (p.id)}
-          <div class="phase-card stack">
+          <div class="phase-card stack" id="up-phase-{p.id}" class:on={selPhase === p.id} class:hot={hoverPhase === p.id} role="group" onpointerenter={() => (hoverPhase = p.id)} onpointerleave={() => hoverPhase === p.id && (hoverPhase = null)} onfocusin={() => (selPhase = p.id)}>
             <label class="field">
               Phase {i + 1}
               <input type="text" value={p.name} oninput={(e) => app.change((d) => setPhase(ud(d), p.id, { name: e.currentTarget.value }), `pname:${p.id}`)} />
             </label>
             <label class="field">Goal <textarea rows="2" value={p.goal} use:autosize={p.goal} oninput={(e) => app.change((d) => setPhase(ud(d), p.id, { goal: e.currentTarget.value }), `pgoal:${p.id}`)}></textarea></label>
-            <label class="field">Milestone <input type="text" value={p.milestone} oninput={(e) => app.change((d) => setPhase(ud(d), p.id, { milestone: e.currentTarget.value }), `pmile:${p.id}`)} /></label>
+            <label class="field">Milestone <input type="text" data-milestone value={p.milestone} oninput={(e) => app.change((d) => setPhase(ud(d), p.id, { milestone: e.currentTarget.value }), `pmile:${p.id}`)} /></label>
             <div class="field">
               <span class="small muted">Iterations</span>
               <div class="iters">
@@ -453,7 +510,7 @@
         <p class="tiny muted">Effort from 0 (none) to {MAX_EFFORT} (peak) in each phase; it draws the humps. You can also drag them with <strong>Edit curves</strong>.</p>
         <div class="dlist">
           {#each data.disciplines as dsc, r (dsc.id)}
-            <div class="dblock">
+            <div class="dblock" id="up-disc-{dsc.id}" class:on={selDisc === dsc.id} class:hot={hoverDisc === dsc.id} role="group" onpointerenter={() => (hoverDisc = dsc.id)} onpointerleave={() => hoverDisc === dsc.id && (hoverDisc = null)} onfocusin={() => (selDisc = dsc.id)}>
               <div class="dname">
                 <span class="chip" style:background={colorOf(r)}></span>
                 <input type="text" value={dsc.name} aria-label="Discipline name" oninput={(e) => app.change((d) => renameDiscipline(ud(d), dsc.id, e.currentTarget.value), `dname:${dsc.id}`)} />
@@ -522,6 +579,46 @@
   }
   .phase-head {
     fill: var(--ink-2);
+    transition: fill var(--t);
+  }
+  .pick {
+    cursor: pointer;
+  }
+  /* The chart answers the pointer and shows what the panel is editing; none of it is exported. */
+  :global(html:not(.exporting)) .phase.hot .phase-head {
+    fill: color-mix(in srgb, var(--ink-2) 72%, var(--accent));
+  }
+  :global(html:not(.exporting)) .phase.on .phase-head {
+    fill: var(--accent);
+  }
+  :global(html:not(.exporting)) .phase.on .phase-name {
+    fill: var(--accent-ink);
+  }
+  .row-hit {
+    fill: transparent;
+  }
+  .row-lit {
+    fill: color-mix(in srgb, var(--accent) 7%, transparent);
+    pointer-events: none;
+  }
+  .row-lit.on {
+    fill: var(--selected);
+  }
+  :global(html.exporting) .row-lit {
+    display: none;
+  }
+  :global(html:not(.exporting)) .hump.lit {
+    fill-opacity: 0.55;
+  }
+  :global(html:not(.exporting)) .hump-line.lit {
+    stroke-width: 2.6;
+  }
+  :global(html:not(.exporting)) .iter.hot,
+  :global(html:not(.exporting)) .ms.hot .milestone {
+    fill: var(--accent);
+  }
+  :global(html:not(.exporting)) .ms.hot .diamond {
+    fill: var(--accent);
   }
   .phase-name {
     font-size: 14px;
@@ -617,6 +714,17 @@
     background: var(--panel);
     border: 1px solid var(--line);
     overflow: hidden;
+    transition: border-color var(--t), box-shadow var(--t);
+  }
+  .art:hover,
+  .art.hot {
+    border-color: color-mix(in srgb, var(--ink) 32%, var(--line));
+    box-shadow: 0 3px 8px -4px rgba(22, 25, 29, 0.3);
+  }
+  :global(html.exporting) .art.hot,
+  :global(html.exporting) .art:hover {
+    border-color: var(--line);
+    box-shadow: none;
   }
   .art.on {
     border-color: var(--accent);
@@ -689,6 +797,13 @@
   .seg .chip {
     margin-right: 5px;
   }
+  /* The chosen status wears its own colour, as its dot on the plan. */
+  .seg button.tone.active,
+  .seg button.tone.active:hover {
+    background: color-mix(in srgb, var(--tc) 24%, var(--panel));
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1.5px var(--tc);
+  }
   .two {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -710,6 +825,9 @@
     min-height: 30px;
     gap: 8px;
   }
+  .item.hot {
+    background: var(--hover);
+  }
   .iname {
     flex: 1;
     min-width: 0;
@@ -725,6 +843,22 @@
   .phase-card {
     padding-bottom: var(--sp-3);
     border-bottom: 1px solid var(--line);
+  }
+  /* The phase / discipline picked in the chart: an accent edge, like a selected row. */
+  .phase-card,
+  .dblock {
+    margin-left: -10px;
+    padding-left: 10px;
+    border-left: 3px solid transparent;
+    transition: border-color var(--t), background-color var(--t);
+  }
+  .phase-card.hot,
+  .dblock.hot {
+    border-left-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .phase-card.on,
+  .dblock.on {
+    border-left-color: var(--accent);
   }
   .phase-card:last-child {
     border-bottom: 0;

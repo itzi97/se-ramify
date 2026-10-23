@@ -7,6 +7,8 @@
   import Icon from '../../components/Icon.svelte';
   import StoryFields from '../../components/StoryFields.svelte';
   import { startCardDrag, type DropTarget } from '../storymap/cardDrag';
+  import { personBadge, priorityBadge } from '../../model/badges';
+  import { roster } from '../../model/people';
   import { shift } from '../storymap/ops';
   import { CARD_TYPES, cardsIn, moveCard, newCard, overLimit, removeColumn, typeInfo } from './ops';
 
@@ -20,7 +22,8 @@
 
   const sel = $derived(selected ? data.cards.find((c) => c.id === selected) ?? null : null);
   const epics = $derived([...new Set(data.cards.map((c) => c.epic?.trim()).filter((e): e is string => !!e))].sort());
-  const people = $derived([...new Set(data.cards.map((c) => c.assignee.trim()).filter(Boolean))].sort());
+  // Teammates first, so they have the same colour here as everywhere in the app; other assignees after them.
+  const people = $derived(roster(app.team, data.cards.map((c) => c.assignee)));
 
   function edit(fn: (k: KanbanData) => void, key?: string) {
     app.change((d) => fn((d as typeof doc).data), key);
@@ -108,12 +111,13 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="scroll-canvas">
-  <div class="board" data-export-root>
+  <div class="board" class:dragging={!!dragging} data-export-root>
     {#each data.columns as col, ci (col.id)}
       {@const list = cardsIn(data, col.id)}
       {@const over = overLimit(data, col.id)}
       {@const others = list.filter((x) => x.id !== dragging).length}
       {@const pts = totalPoints(list)}
+      {@const full = !over && col.wip > 0 && list.length === col.wip}
       <section class="col" class:over aria-label={col.name}>
         <header class="col-head">
           <input
@@ -127,7 +131,7 @@
               if (x) x.name = e.currentTarget.value;
             }, `col:${col.id}`)}
           />
-          <span class="count" class:over title={col.wip ? `WIP limit ${col.wip}` : 'No WIP limit'}>{list.length}{col.wip ? `/${col.wip}` : ''}</span>
+          <span class="count" class:over class:full title={over ? `Over the WIP limit of ${col.wip}` : full ? `At the WIP limit (${col.wip}): finish one before pulling another` : col.wip ? `WIP limit ${col.wip}` : 'No WIP limit'}>{list.length}{col.wip ? `/${col.wip}` : ''}</span>
           <span class="menu-anchor" data-no-export>
             <button class="icon small" aria-label="Column options" title="Column options" onclick={() => (colMenu = colMenu === col.id ? null : col.id)}><Icon name="Ellipsis" size={15} /></button>
             {#if colMenu === col.id}
@@ -171,10 +175,16 @@
               <span class="title" class:untitled={!c.title.trim() && !c.iWant.trim()}>{storyTitle(c)}</span>
               <span class="row foot">
                 {#if c.gherkin.trim()}<span class="muted" title="Has acceptance criteria"><Icon name="ListChecks" size={12} /></span>{/if}
-                {#if c.priority}<span class="pill">{c.priority}</span>{/if}
+                {#if c.priority}
+                  {@const pb = priorityBadge(c.priority)}
+                  <span class="pill prio" style:--p={pb?.c} style:--pi={pb?.ink} title={pb?.label}>{c.priority}</span>
+                {/if}
                 <span class="spacer"></span>
                 {#if typeof c.points === 'number'}<span class="pill strong" title="Story points">{c.points}</span>{/if}
-                {#if c.assignee.trim()}<span class="who" title={c.assignee}>{initials(c.assignee)}</span>{/if}
+                {#if c.assignee.trim()}
+                  {@const pc = personBadge(c.assignee, people)}
+                  <span class="who" style:--w={pc.c} style:--wi={pc.ink} title={c.assignee}>{initials(c.assignee)}</span>
+                {/if}
               </span>
             </div>
           {/each}
@@ -201,7 +211,7 @@
     <div class="inspector-body">
       <div class="seg types" role="radiogroup" aria-label="Card type">
         {#each CARD_TYPES as t (t.type)}
-          <button class:active={sel.type === t.type} role="radio" aria-checked={sel.type === t.type} onclick={() => updateCard(sel.id, { type: t.type as CardType })}>
+          <button class:active={sel.type === t.type} style:--tc={t.color} role="radio" aria-checked={sel.type === t.type} onclick={() => updateCard(sel.id, { type: t.type as CardType })}>
             <span class="dot" style:background={t.color}></span>{t.label}
           </button>
         {/each}
@@ -273,6 +283,11 @@
     background: var(--danger);
     color: #fff;
   }
+  /* Exactly at the limit: amber, the column is full. */
+  .count.full {
+    background: var(--warn);
+    color: #16191d;
+  }
   .warn {
     color: var(--danger);
     padding: 0 4px;
@@ -303,8 +318,15 @@
     padding: 2px;
     border-radius: var(--r-control);
   }
-  .cards.target {
-    background: color-mix(in srgb, var(--accent) 9%, transparent);
+  /* While a card is dragged every column shows it takes drops; the one under the pointer lights up. */
+  .board.dragging .cards {
+    outline: 1px dashed color-mix(in srgb, var(--ink) 18%, transparent);
+    outline-offset: -1px;
+  }
+  .board.dragging .cards.target {
+    background: var(--selected);
+    outline: 2px dashed var(--selected-line);
+    outline-offset: -2px;
   }
   .card {
     display: flex;
@@ -320,6 +342,12 @@
     cursor: grab;
     touch-action: none;
     user-select: none;
+    transition: box-shadow var(--t), border-color var(--t);
+  }
+  /* Hover: the border takes the card type's colour and the shadow deepens; nothing moves. */
+  :global(html:not(.exporting)) .card:hover {
+    border-color: color-mix(in srgb, var(--t) 55%, var(--line));
+    box-shadow: 0 4px 10px -4px rgba(22, 25, 29, 0.3);
   }
   .card.epic {
     background: color-mix(in srgb, var(--t) 12%, var(--panel));
@@ -327,6 +355,9 @@
   .card.sel {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+  :global(html.exporting) .card.sel {
+    outline: none;
   }
   :global(.card.drag-source) {
     opacity: 0.35;
@@ -376,6 +407,12 @@
     font-weight: 700;
     color: var(--ink-2);
   }
+  /* MoSCoW: Must red, Should orange, Could amber, Won't grey. */
+  .pill.prio {
+    font-weight: 700;
+    color: var(--pi);
+    background: var(--p);
+  }
   .who {
     width: 22px;
     height: 22px;
@@ -384,8 +421,9 @@
     place-items: center;
     font-size: 10px;
     font-weight: 700;
-    color: var(--accent-ink);
-    background: var(--accent);
+    /* Each person keeps one colour (from their name), so the board shows whose is whose. */
+    color: var(--wi);
+    background: var(--w);
   }
   .drop-line {
     height: 3px;
@@ -414,6 +452,15 @@
   .types {
     flex-wrap: wrap;
     border-radius: var(--r-card);
+  }
+  /* The chosen type takes its own colour, as on the card's tag and edge. */
+  .types button.active,
+  .types button.active:hover {
+    background: var(--tc);
+    color: #fff;
+  }
+  .types button.active .dot {
+    background: #fff !important;
   }
   .dot {
     width: 8px;

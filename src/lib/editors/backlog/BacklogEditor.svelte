@@ -6,6 +6,7 @@
   import Icon from '../../components/Icon.svelte';
   import StoryCard from './StoryCard.svelte';
   import Overview from './Overview.svelte';
+  import { priorityBadge } from '../../model/badges';
   import {
     AI_FIELDS,
     MOSCOW,
@@ -155,7 +156,6 @@
     view = 'epics';
   }
 
-  const prio = (p: string) => (p || '').toLowerCase().replace(/[^a-z]/g, '');
   const otherEpics = (e: Epic) => data.epics.filter((x) => x.id !== e.id).map((x) => ({ id: x.id, label: `${epicCode(data, x)} ${x.title}` }));
 </script>
 
@@ -196,7 +196,10 @@
               <button class="epic-row" class:on={selected?.id === e.id} onclick={() => ((selectedId = e.id), (openStory = null))}>
                 <span class="code">{epicCode(data, e)}</span>
                 <span class="etitle" class:placeholder={!e.title.trim()}>{e.title || 'Sin título'}</span>
-                {#if e.priority}<span class="prio {prio(e.priority)}">{e.priority}</span>{/if}
+                {#if e.priority}
+                  {@const pb = priorityBadge(e.priority)}
+                  <span class="prio" style:--p={pb?.c} style:--pi={pb?.ink} title={pb?.label}>{e.priority}</span>
+                {/if}
                 <span class="count" title="{st.stories} stories, {st.points} points">{st.stories ? `${st.stories} HU` : '—'}{st.points ? ` · ${st.points}` : ''}</span>
               </button>
             {/each}
@@ -208,7 +211,7 @@
 
         {#if data.epics.length}
         <div class="checks">
-          <button class="inline check-head" onclick={() => (showAllChecks = !showAllChecks)} aria-expanded={showAllChecks}>
+          <button class="inline check-head" class:bad={errors > 0} class:warned={!errors && problems.length > 0} class:good={!problems.length} onclick={() => (showAllChecks = !showAllChecks)} aria-expanded={showAllChecks}>
             <Icon name={problems.length ? (errors ? 'CircleX' : 'TriangleAlert') : 'CircleCheck'} size={14} />
             {#if problems.length}{errors} {errors === 1 ? 'problem' : 'problems'}, {problems.length - errors} {problems.length - errors === 1 ? 'warning' : 'warnings'}{:else}Every story is complete{/if}
           </button>
@@ -303,7 +306,7 @@
     </div>
   {:else}
     <div class="scroll">
-      <div class="overview-wrap"><Overview {data} title={doc.title} /></div>
+      <div class="overview-wrap"><Overview {data} title={doc.title} onPick={(epicId, storyId) => goTo({ epicId, storyId })} /></div>
     </div>
   {/if}
 
@@ -387,8 +390,20 @@
     text-align: left;
     border-radius: var(--r-control);
   }
-  .epic-row.on {
-    background: var(--press);
+  .epic-row:hover {
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
+  }
+  .epic-row.on,
+  .epic-row.on:hover {
+    background: var(--selected);
+    box-shadow: inset 3px 0 0 var(--accent);
+    color: var(--ink);
+  }
+  .epic-row.on .code {
+    color: var(--accent);
+  }
+  .epic-row.on .etitle {
+    font-weight: 700;
   }
   .etitle {
     flex: 1;
@@ -416,27 +431,14 @@
   .code.big {
     font-size: 13px;
   }
+  /* MoSCoW: Must red, Should orange, Could amber, Won't grey (same chips as the story map and Kanban). */
   .prio {
     padding: 0 7px;
     border-radius: var(--r-pill);
     font-size: var(--fs-xs);
     font-weight: 700;
-    border: 1px solid var(--line);
-  }
-  .prio.must {
-    background: var(--tier-S);
-    color: var(--on-tier-S);
-    border-color: transparent;
-  }
-  .prio.should {
-    background: var(--tier-A);
-    color: var(--on-tier-A);
-    border-color: transparent;
-  }
-  .prio.could {
-    background: var(--tier-B);
-    color: var(--on-tier-B);
-    border-color: transparent;
+    background: var(--p);
+    color: var(--pi);
   }
   .checks {
     border-top: 1px solid var(--line);
@@ -451,6 +453,15 @@
     text-decoration: none;
     gap: 6px;
     font-weight: 700;
+  }
+  .check-head.bad :global(svg) {
+    color: var(--danger);
+  }
+  .check-head.warned :global(svg) {
+    color: var(--warn);
+  }
+  .check-head.good :global(svg) {
+    color: var(--ok);
   }
   .checks ul {
     margin: 4px 0 0;
@@ -469,7 +480,10 @@
     justify-content: flex-start;
   }
   .checks li.warn button {
-    color: var(--muted);
+    color: color-mix(in srgb, var(--warn) 75%, var(--ink));
+  }
+  .checks li button:hover {
+    background: var(--hover);
   }
   .checks .more {
     color: var(--ink-2) !important;

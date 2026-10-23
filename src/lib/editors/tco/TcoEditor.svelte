@@ -5,6 +5,7 @@
   import Icon from '../../components/Icon.svelte';
   import Swatches from '../../components/Swatches.svelte';
   import { autosize } from '../board/actions';
+  import { inkOn } from '../../model/colors';
   import {
     BLOCKS,
     MAX_ALTERNATIVES,
@@ -51,6 +52,23 @@
   const bestScore = $derived(bestScored(data));
 
   let tab = $state<string>('');
+  /** The alternative under the pointer in the summary (row, bar, line, legend): the others fade in the chart. */
+  let hoverAlt = $state<string | null>(null);
+  let editEl = $state<HTMLElement | null>(null);
+
+  /** Anything about an alternative in the summary opens its tab above (and brings the tabs into view). */
+  function pickAlt(id: string) {
+    tab = id;
+    editEl?.querySelector('.head')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  const over = (id: string) => () => (hoverAlt = id);
+  const out = (id: string) => () => hoverAlt === id && (hoverAlt = null);
+  function keyPick(e: KeyboardEvent, id: string) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      pickAlt(id);
+    }
+  }
   const alt = $derived(data.alternatives.find((a) => a.id === tab) ?? null);
   const altIndex = $derived(data.alternatives.findIndex((a) => a.id === tab));
   $effect(() => {
@@ -184,7 +202,7 @@
 <div class="scroll-canvas">
   <div class="page">
     <!-- ───────────────────────────── editing ───────────────────────────── -->
-    <section class="edit float" aria-label="TCO lines">
+    <section class="edit float" aria-label="TCO lines" bind:this={editEl}>
       <div class="head row between">
         <div class="row tabs-row">
           <div class="seg tabs" role="tablist" aria-label="Alternatives">
@@ -213,7 +231,9 @@
 
       <div class="totals row">
         {#each sums as s (s.id)}
-          <span class="total-chip" class:best={best?.id === s.id}><span class="dot" style:background={s.color}></span>{s.name}: <strong>{eur(s.total)}</strong>{#if s.unpriced}<span class="muted"> · {s.unpriced} sin precio</span>{/if}</span>
+          <button class="total-chip" class:best={best?.id === s.id} class:cur={tab === s.id} title="Open {s.name}" onclick={() => (tab = s.id)}
+            ><span class="dot" style:background={s.color}></span>{s.name}: <strong>{eur(s.total)}</strong>{#if s.unpriced}<span class="unpriced-note">· {s.unpriced} sin precio</span>{/if}</button
+          >
         {/each}
       </div>
 
@@ -340,7 +360,7 @@
                     {#each data.alternatives as a (a.id)}
                       {@const v = scoreOf(data, c.id, a.id)}
                       <td class="num">
-                        <div class="seg scores" role="radiogroup" aria-label="{c.name} — {a.name}">
+                        <div class="seg scores" role="radiogroup" aria-label="{c.name} — {a.name}" style:--alt={altColor(data, a)} style:--alt-ink={inkOn(altColor(data, a))}>
                           {#each [1, 2, 3, 4, 5] as n (n)}
                             <button class:active={v === n} role="radio" aria-checked={v === n} onclick={() => setScore(c.id, a.id, v === n ? 0 : n)}>{n}</button>
                           {/each}
@@ -401,7 +421,8 @@
         </thead>
         <tbody>
           {#each sums as s (s.id)}
-            <tr class:best={best?.id === s.id}>
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+            <tr class:best={best?.id === s.id} class:cur={tab === s.id} class:hot={hoverAlt === s.id} tabindex="0" title="Open {s.name}" onclick={() => pickAlt(s.id)} onkeydown={(e) => keyPick(e, s.id)} onpointerenter={over(s.id)} onpointerleave={out(s.id)}>
               <th scope="row"><span class="dot" style:background={s.color}></span>{s.name}{#if best?.id === s.id}<span class="badge">más barata</span>{/if}</th>
               {#each s.perYear as v, i (i)}<td class="num">{eur(v)}</td>{/each}
               <td class="num total">{eur(s.total)}</td>
@@ -426,26 +447,48 @@
           {#each yearIdx as gi (gi)}
             {#each sums as s, ai (s.id)}
               {@const v = s.perYear[gi]}
-              <rect x={barX(gi, ai) + 2} y={yOf(v)} width={Math.max(0, barW - 4)} height={Math.max(0, CH.top + plotH - yOf(v))} rx="3" fill={s.color} />
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+              <rect
+                class="bar pick"
+                class:dim={hoverAlt && hoverAlt !== s.id}
+                x={barX(gi, ai) + 2}
+                y={yOf(v)}
+                width={Math.max(0, barW - 4)}
+                height={Math.max(0, CH.top + plotH - yOf(v))}
+                rx="3"
+                fill={s.color}
+                onclick={() => pickAlt(s.id)}
+                onpointerenter={over(s.id)}
+                onpointerleave={out(s.id)}><title>{s.name} · año {gi + 1}: {eur(v)}</title></rect
+              >
             {/each}
             <text class="tick" x={groupX(gi)} y={CH.h - 12} text-anchor="middle">Año {gi + 1}</text>
           {/each}
           {#each sums as s (s.id)}
-            <polyline class="cum" points={s.cumulative.map((v, i) => `${groupX(i)},${yOf(v)}`).join(' ')} stroke={s.color} />
-            {#each s.cumulative as v, i (i)}<circle cx={groupX(i)} cy={yOf(v)} r="4" fill="var(--panel)" stroke={s.color} stroke-width="2.5" />{/each}
-            <text class="cum-label" x={groupX(years - 1) + 8} y={yOf(s.cumulative[years - 1] ?? 0) + 4} fill={s.color}>{short(s.total)}</text>
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <g class="series pick" class:dim={hoverAlt && hoverAlt !== s.id} class:hot={hoverAlt === s.id} onclick={() => pickAlt(s.id)} onpointerenter={over(s.id)} onpointerleave={out(s.id)}>
+              <title>{s.name} · acumulado: {eur(s.total)}</title>
+              <polyline class="hit" points={s.cumulative.map((v, i) => `${groupX(i)},${yOf(v)}`).join(' ')} />
+              <polyline class="cum" points={s.cumulative.map((v, i) => `${groupX(i)},${yOf(v)}`).join(' ')} stroke={s.color} />
+              {#each s.cumulative as v, i (i)}<circle cx={groupX(i)} cy={yOf(v)} r="4" fill="var(--panel)" stroke={s.color} stroke-width="2.5" />{/each}
+              <text class="cum-label" x={groupX(years - 1) + 8} y={yOf(s.cumulative[years - 1] ?? 0) + 4} fill={s.color}>{short(s.total)}</text>
+            </g>
           {/each}
           <line class="axis" x1={CH.left} x2={CH.w - CH.right} y1={CH.top + plotH} y2={CH.top + plotH} />
         </svg>
         <div class="legend row">
-          {#each sums as s (s.id)}<span class="row"><span class="dot" style:background={s.color}></span>{s.name}</span>{/each}
+          {#each sums as s (s.id)}
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <span class="row pick" class:hot={hoverAlt === s.id} onclick={() => pickAlt(s.id)} onpointerenter={over(s.id)} onpointerleave={out(s.id)}><span class="dot" style:background={s.color}></span>{s.name}</span>
+          {/each}
         </div>
       </figure>
 
       <section class="blocks">
         <h3>Por bloque de coste</h3>
         {#each sums as s (s.id)}
-          <div class="block-bar">
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div class="block-bar pick" class:hot={hoverAlt === s.id} class:dim={hoverAlt && hoverAlt !== s.id} onclick={() => pickAlt(s.id)} onpointerenter={over(s.id)} onpointerleave={out(s.id)}>
             <div class="bb-name"><span class="dot" style:background={s.color}></span>{s.name}</div>
             <div class="bb-track">
               {#each BLOCKS as b (b.key)}
@@ -474,7 +517,8 @@
           <h3>Arquitectura de cada alternativa</h3>
           <div class="arch-grid" style:grid-template-columns="repeat({Math.min(2, data.alternatives.length)}, 1fr)">
             {#each data.alternatives as a (a.id)}
-              <div class="arch" style:border-top-color={altColor(data, a)}>
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+              <div class="arch pick" class:hot={hoverAlt === a.id} style:border-top-color={altColor(data, a)} title="Open {a.name}" onclick={() => pickAlt(a.id)} onpointerenter={over(a.id)} onpointerleave={out(a.id)}>
                 <strong>{a.name}</strong>
                 <p>{a.description.trim() || '—'}</p>
               </div>
@@ -598,10 +642,23 @@
   .total-chip {
     display: inline-flex;
     align-items: center;
+    gap: 0;
+    height: auto;
     padding: 3px 10px;
     border-radius: var(--r-pill);
     background: var(--panel-2);
+    color: var(--ink);
     font-size: var(--fs-sm);
+  }
+  .total-chip:hover {
+    background: color-mix(in srgb, var(--ink) 9%, var(--panel-2));
+  }
+  .total-chip.cur {
+    background: var(--selected);
+  }
+  .unpriced-note {
+    margin-left: 5px;
+    color: color-mix(in srgb, var(--warn) 80%, var(--ink));
   }
   .total-chip strong {
     margin-left: 4px;
@@ -697,10 +754,12 @@
     text-align: right;
   }
   .warn-note {
-    color: #b0700c;
+    color: color-mix(in srgb, var(--warn) 80%, var(--ink));
   }
+  /* A line without a price yet: amber until someone puts the market price in. */
   .amount.unpriced {
-    background: color-mix(in srgb, var(--tier-B) 14%, transparent) !important;
+    background: color-mix(in srgb, var(--warn) 18%, transparent) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 55%, transparent);
   }
   .qty {
     width: 56px;
@@ -740,6 +799,16 @@
   .acts {
     width: 1%;
     white-space: nowrap;
+  }
+  .lines tbody tr:not(.block-row, .add-row) td {
+    transition: background-color var(--t);
+  }
+  .lines tbody tr:not(.block-row, .add-row):hover td,
+  .lines tbody tr:not(.block-row, .add-row):focus-within td {
+    background: color-mix(in srgb, var(--ink) 4%, var(--panel));
+  }
+  .crit tbody tr:hover td {
+    background: color-mix(in srgb, var(--ink) 4%, var(--panel));
   }
   .acts button {
     opacity: 0.35;
@@ -788,6 +857,12 @@
     width: 26px;
     padding: 0;
     justify-content: center;
+  }
+  /* A score is drawn in its alternative's colour, as in the chart and the summary. */
+  .scores button.active,
+  .scores button.active:hover {
+    background: var(--alt);
+    color: var(--alt-ink);
   }
 
   /* ───────── summary card ───────── */
@@ -858,6 +933,54 @@
   }
   .summary .total {
     font-weight: 700;
+  }
+  /* The summary is a way in: a row, a bar, a line or a legend entry opens that alternative.
+     Hover and the open one show on screen only; the exported card stays plain. */
+  .pick {
+    cursor: pointer;
+  }
+  .summary tbody tr {
+    transition: background-color var(--t);
+  }
+  .summary tbody tr:focus-visible {
+    outline-offset: -2px;
+  }
+  :global(html:not(.exporting)) .summary tbody tr:is(:hover, .hot) {
+    background: var(--hover);
+  }
+  :global(html:not(.exporting)) .summary tbody tr.cur {
+    background: var(--selected);
+  }
+  :global(html:not(.exporting)) .summary tbody tr.cur th:first-child {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .bar,
+  .series,
+  .block-bar,
+  .legend .row,
+  .arch {
+    transition: opacity var(--t), background-color var(--t), border-color var(--t);
+  }
+  :global(html:not(.exporting)) .chart .dim,
+  :global(html:not(.exporting)) .block-bar.dim {
+    opacity: 0.3;
+  }
+  .series .hit {
+    fill: none;
+    stroke: transparent;
+    stroke-width: 14;
+  }
+  :global(html:not(.exporting)) .series.hot .cum {
+    stroke-width: 3.5;
+  }
+  :global(html:not(.exporting)) .legend .row:is(:hover, .hot) {
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  :global(html:not(.exporting)) .arch:is(:hover, .hot) {
+    border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+    background: color-mix(in srgb, var(--ink) 3%, var(--panel));
   }
   .summary tr.best th,
   .summary tr.best .total {

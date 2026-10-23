@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { UserStory } from '../model/types';
   import { MOSCOW, SCENARIO_TEMPLATE, storySentence } from '../model/stories';
+  import { priorityBadge } from '../model/badges';
   import Icon from './Icon.svelte';
 
   /**
@@ -58,7 +59,7 @@
     <label class="field">Points <input type="number" min="0" step="1" value={story.points ?? ''} oninput={(e) => onPoints(e.currentTarget.value)} /></label>
     <label class="field">
       Priority
-      <select value={story.priority ?? ''} onchange={(e) => update({ priority: e.currentTarget.value })}>
+      <select class="prio" style:--prio={priorityBadge(story.priority)?.c ?? 'transparent'} title={priorityBadge(story.priority)?.label} value={story.priority ?? ''} onchange={(e) => update({ priority: e.currentTarget.value })}>
         <option value="">—</option>
         {#each MOSCOW as p (p)}<option value={p}>{p}</option>{/each}
         {#if story.priority && !(MOSCOW as readonly string[]).includes(story.priority)}<option value={story.priority}>{story.priority}</option>{/if}
@@ -91,6 +92,10 @@
 <style>
   .tight {
     gap: var(--sp-2);
+  }
+  /* The priority keeps its MoSCoW colour here too, as on the cards. */
+  .prio {
+    box-shadow: inset 4px 0 0 var(--prio);
   }
   .trio {
     display: grid;

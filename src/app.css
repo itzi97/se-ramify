@@ -6,7 +6,7 @@
      type     --fs-xs 11 · --fs-sm 12 · --fs-md 13.5 (body) · --fs-lg 16
      space    --sp-1 4 · --sp-2 8 · --sp-3 12 · --sp-4 16 · --sp-5 24
      radii    --r-control (inputs, menu rows, inner boxes) · --r-card (floating
-              surfaces, cards, tier rows) · --r-pill (buttons, segments, pills)
+              surfaces, cards) · --r-pill (buttons, segments, pills)
      motion   --t: the one transition for hover, menus, panels and hints
      panels   --panel-w: every floating panel is this wide
      diagram  --d-ink, --d-fill, --d-line: what diagrams are drawn with
@@ -43,16 +43,6 @@
   /* Hover and press wash: works on any surface, both themes. */
   --hover: color-mix(in srgb, var(--ink) 7%, transparent);
   --press: color-mix(in srgb, var(--ink) 13%, transparent);
-
-  /* Tier colours: the defaults of a new board; App sets the open board's. */
-  --tier-S: #d9534f;
-  --tier-A: #e8873a;
-  --tier-B: #c9a227;
-  --tier-C: #58a55c;
-  --on-tier-S: #ffffff;
-  --on-tier-A: #ffffff;
-  --on-tier-B: #ffffff;
-  --on-tier-C: #ffffff;
 
   --fs-xs: 11px;
   --fs-sm: 12px;
@@ -97,9 +87,29 @@
 
   --font: 'Plain Digits', 'Atkinson Hyperlegible', system-ui, sans-serif;
   --mono: ui-monospace, Menlo, Consolas, monospace;
-  /* The desktop's accent colour when it has one (set from JS); ink otherwise. */
-  --accent: var(--ink);
-  --accent-ink: var(--paper);
+  /* The desktop's accent colour when it has one (set from JS); pen blue otherwise. */
+  --accent: #2f5fd0;
+  --accent-ink: #ffffff;
+  /* What is selected or current (the open diagram, a chosen card): a wash of the accent. */
+  --selected: color-mix(in srgb, var(--accent) 13%, transparent);
+  --selected-line: color-mix(in srgb, var(--accent) 55%, transparent);
+  /* Behind a dialog: dims the window without hiding it. */
+  --veil: rgba(22, 25, 29, 0.2);
+
+  /* Diagram families: the colour of a kind's badge wherever it shows (list, new
+     diagram, hand-ins, welcome). Colour says which family a diagram belongs to;
+     the diagrams themselves stay ink on paper unless someone colours a shape. */
+  /* Each passes 4.5:1 as small text on its own 13% wash (the list's counts, chips). */
+  --fam-company: #945b08;
+  --fam-uml: #2f5fd0;
+  --fam-req: #6c47d9;
+  --fam-dt: #bd2c61;
+  --fam-plan: #257735;
+  --fam-arch: #0a7384;
+  --warn: #c98a12;
+  /* Green and amber as words ("5/5", "Files that need attention"), where the fills' shades are too light. */
+  --ok-ink: #3e7541;
+  --warn-ink: #8c600d;
   color-scheme: light;
 }
 
@@ -117,10 +127,34 @@
     --faint: #5c636b;
     --dot: #2a2f35;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    --accent: #7aa0f5;
+    --accent-ink: #0d1626;
+    --fam-company: #f0a83c;
+    --fam-uml: #7aa0f5;
+    --fam-req: #a58bff;
+    --fam-dt: #f2709c;
+    --fam-plan: #5fcf78;
+    --fam-arch: #3cc3d6;
+    --warn: #f0b43c;
+    --ok-ink: #6cc070;
+    --warn-ink: #f0b43c;
+    --veil: rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
+  --accent: #7aa0f5;
+  --accent-ink: #0d1626;
+  --fam-company: #f0a83c;
+  --fam-uml: #7aa0f5;
+  --fam-req: #a58bff;
+  --fam-dt: #f2709c;
+  --fam-plan: #5fcf78;
+  --fam-arch: #3cc3d6;
+  --warn: #f0b43c;
+  --ok-ink: #6cc070;
+  --warn-ink: #f0b43c;
+  --veil: rgba(0, 0, 0, 0.5);
   --paper: #16191d;
   --panel: #1f2328;
   --panel-2: #272c32;
@@ -242,12 +276,10 @@ a {
 .failed {
   color: var(--danger);
 }
-/* Section heading inside a panel or menu. */
+/* Section heading inside a panel or menu: a small bold label in sentence case. */
 .sect {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 
@@ -493,7 +525,7 @@ input[type='checkbox']:not(.notes *):checked::after {
   color: var(--danger);
 }
 
-/* Segmented control: one size everywhere (view switch, tiers, layout, theme, tabs). */
+/* Segmented control: one size everywhere (start from, image size, theme). */
 .seg {
   display: inline-flex;
   padding: 3px;
@@ -511,31 +543,6 @@ input[type='checkbox']:not(.notes *):checked::after {
   padding: 0;
 }
 
-/* Tier marks: the tier's own colour, the same one as its row in Tiers. */
-.tier-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 17px;
-  height: 17px;
-  border-radius: var(--r-control);
-  font-size: var(--fs-xs);
-  font-weight: 700;
-  line-height: 1;
-  color: var(--paper);
-  background: var(--muted);
-}
-.tier-badge.S { background: var(--tier-S); color: var(--on-tier-S); }
-.tier-badge.A { background: var(--tier-A); color: var(--on-tier-A); }
-.tier-badge.B { background: var(--tier-B); color: var(--on-tier-B); }
-.tier-badge.C { background: var(--tier-C); color: var(--on-tier-C); }
-/* In a segmented control the selected tier gets a ring, not a filled slot,
-   so the tier colour stays readable. */
-.seg button.active:has(> .tier-badge) {
-  background: var(--panel);
-  box-shadow: inset 0 0 0 2px var(--accent);
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -551,9 +558,6 @@ input[type='checkbox']:not(.notes *):checked::after {
 }
 .svelte-flow__background circle {
   fill: var(--dot);
-}
-.svelte-flow__node {
-  transition: transform var(--t-layout);
 }
 .svelte-flow__edge-path {
   stroke: var(--edge-color, var(--faint));
@@ -857,7 +861,8 @@ input[type='range'] {
 .exporting .edit-hint {
   display: none !important;
 }
-.exporting .svelte-flow__edge.selected .ln,
+/* (The inner stroke of a double line is paper, not ink: it keeps its own colour.) */
+.exporting .svelte-flow__edge.selected .ln:not(.double-inner),
 .exporting .svelte-flow__edge.selected .mark {
   stroke: var(--edge-ink) !important;
 }

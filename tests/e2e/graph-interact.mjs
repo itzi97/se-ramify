@@ -1,5 +1,6 @@
 // Graph editor smoke: add shapes from the toolbar, connect them by dragging, rename inline,
-// delete, undo; mind map Tab / Enter; tidy; PNG export.
+// delete, undo; tidy; PNG export; right-click menus (colour, line type, add here) and the
+// mini map; mind map Tab / Enter.
 import { chromium } from 'playwright';
 const port = process.argv[2] ?? '1430';
 const browser = await chromium.launch({ executablePath: process.env.CHROMIUM || undefined });
@@ -69,6 +70,37 @@ await page.getByRole('menuitem', { name: /PNG/ }).click();
 const file = await dl;
 if (!file) fail('no png download');
 else { const p = await file.path(); const fs = await import('node:fs'); console.log('png bytes', fs.statSync(p).size); fs.copyFileSync(p, (await import('node:path')).join((await import('node:os')).tmpdir(), 'se-ramify-export-class.png')); }
+
+// 5b. right-click menus: colour a shape, retype a line, add a shape where the canvas was clicked;
+//     the mini map is remembered for the kind
+const menu = page.getByRole('menu');
+await page.locator('.svelte-flow__node').nth(0).click({ button: 'right' });
+await menu.getByRole('menuitemradio', { name: 'Green' }).click();
+await page.waitForTimeout(200);
+d = await data();
+if (d.nodes[0].color !== '#58a55c') fail('menu colour: ' + d.nodes[0].color);
+if (await menu.count()) fail('menu stayed open');
+const mid = await page.locator('.svelte-flow__edge .hit').first().evaluate((el) => {
+  const p = el.getPointAtLength(el.getTotalLength() / 2);
+  const m = el.getScreenCTM();
+  return { x: p.x * m.a + m.e, y: p.y * m.d + m.f };
+});
+await page.mouse.click(mid.x, mid.y, { button: 'right' });
+await menu.getByRole('menuitemradio', { name: 'Composición' }).click();
+await page.waitForTimeout(200);
+d = await data();
+if (d.edges[0].type !== 'composition') fail('menu line type: ' + d.edges[0].type);
+await page.locator('.svelte-flow__pane').click({ button: 'right', position: { x: 60, y: 160 } });
+await menu.locator('.tile', { hasText: 'Interfaz' }).click();
+await page.waitForTimeout(300);
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+d = await data();
+if (!d.nodes.some((n) => n.type === 'interface')) fail('add from the canvas menu');
+await page.getByRole('button', { name: 'Mini map' }).click();
+await page.waitForTimeout(200);
+if (!(await page.locator('.graph-minimap').count())) fail('mini map not shown');
+if ((await page.evaluate(() => localStorage.getItem('se-ramify:ui:minimap:class'))) !== '1') fail('mini map not remembered');
 
 // 6. mind map: Tab adds under, Enter beside
 await page.evaluate(() => window.__app.create('mindmap', 'MM', 'T'));

@@ -29,13 +29,13 @@ Nothing to sign up for and no internet needed: diagrams are files in a folder yo
 
 ## Working as a team
 
-Everyone in the group installs the app and points it (*Choose folder* at the bottom of the list) at the **same shared folder**. Each diagram is its own small file, so people working on different diagrams never get in each other's way. Write **your name** at the bottom of the list: it's saved with every diagram you edit, the list shows each diagram's last editor's initial, and hovering shows "Edited by Bruno, 5 min ago".
+Everyone in the group installs the app and points it (*Choose folder* at the bottom of the list) at the **same shared folder**. Each diagram is its own small file, so people working on different diagrams never get in each other's way. Write **your name** at the bottom of the list: it's saved with every diagram you edit, each person gets a colour of their own, the list marks what a teammate changed in the last days with their initial, and hovering shows "Edited by Bruno, 5 min ago".
 
 Three ways to share the folder — use whichever your group already has:
 
 * **Synced folder** (Google Drive for desktop, OneDrive, Dropbox, Nextcloud…): put the folder inside it. The app re-reads the folder every few seconds, so a teammate's changes appear on their own; an open diagram you aren't editing updates in place.
 * **Git repository**: keep the folder in a repo and pull / commit / push as usual. Files are pretty-printed JSON, so diffs are readable. If a merge leaves conflict markers in a file, the app lists it under *Files that need attention* with *Mine* / *Theirs* / *Both*; commit the result to finish the merge.
-* **Sending files**: ⋯ → *Save a copy to send…* writes one diagram as a file you can send by chat or e-mail; *Open a diagram file…* at the bottom of the list adds one someone sent you (if you already have it, you choose between replacing yours or keeping both).
+* **Sending files**: ⋯ → *Save a copy to send…* writes one diagram as a file you can send by chat or e-mail; the file button next to *New diagram* (or *Open a diagram file…* on the home screen) adds one someone sent you (if you already have it, you choose between replacing yours or keeping both).
 
 **Nobody's work is overwritten.** Before saving, the app checks whether the file changed since you opened it. If a teammate saved the same diagram while you were editing it, their version opens and yours is kept next to it as "*… (versión de Itziar)*" — compare the two and keep what you need. Copies that a sync app makes when two people save at once (and files copied by hand) are marked with ⚠ in the list, with buttons to open the original, keep the copy as its own diagram, or delete it. Deleted files keep a backup in *Recently deleted*.
 
@@ -51,7 +51,7 @@ The checklist icon next to a project in the list (or ⋯ → *Hand-in checklist*
 
 When the teacher asks for something different from the brief, *Edit checklist* changes it for your group: *Also in E1* (use cases already in the first hand-in), *Move to…*, remove an item, or add your own (a diagram kind and how many, or a written part). The changes live in `se-ramify-config/` in the shared folder, so everyone sees the same checklist; *Reset to the brief* undoes them.
 
-*Load the example project* (bottom of the list, or Help) adds every hand-in done for an invented product — BiblioYa, a library loans app by an invented company, Faro Software — to see what a complete one looks like. [`examples/`](examples/) has its exports: the images, PlantUML, Gherkin, AI pack and a PDF memoria per hand-in.
+*Load the example project* (home screen, Help or Ctrl+K) adds every hand-in done for an invented product — BiblioYa, a library loans app by an invented company, Faro Software — to see what a complete one looks like. [`examples/`](examples/) has its exports: the images, PlantUML, Gherkin, AI pack and a PDF memoria per hand-in.
 
 ## Exports
 
@@ -80,13 +80,19 @@ The sequence diagram also *imports* PlantUML (⋯ → Import), and has a text ta
 
 First run: pick a folder for your diagrams. *New diagram* (Ctrl+N) shows every kind with where it appears in the course; give it a project name ("Proyecto final", "Ejercicios T3") and the list on the left groups by it.
 
-**Canvas diagrams** (UML, maps, DFD, E/R, screens, traceability, infrastructure): click a shape in the toolbar to drop it in the middle, or drag it onto the canvas; double-click empty canvas for the kind's main shape. Hover a shape and drag from its dot to another shape to connect them — the toolbar's relation menu picks the kind of line (association, «include», composition, data flow…), and the panel on the right changes it afterwards. Double-click a shape to rename it in place (class compartments too), a line to edit its label. Containers (system boundary, swimlanes, packages, deployment nodes, zones) carry whatever is inside them when dragged and resize from their corners. Straight or right-angle lines are a toggle; *Tidy* lays the whole diagram out (undo brings yours back). `Del` deletes, `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste shapes (also into another diagram of the same kind), `Ctrl+D` duplicates, arrows nudge (Shift: 1 px), `Ctrl+A` selects all, Shift+drag selects an area; select several to align or distribute them.
+**Home** (the house in the top bar, or whenever no diagram is open) has the six diagrams changed last, how far each project's hand-ins are (click E1, E2, E3 or Final to open that checklist) and every kind of diagram, one click from a new one.
+
+**The list** colours each diagram by family — company, UML, requirements, design thinking, planning, infrastructure — and the numbers at the top filter by one (hover to preview). Right-click a diagram, or its ⋯, to rename, duplicate, move to another project, archive or delete it; each comes with *Undo*. Drag a diagram onto another project to move it there. `F2` renames the focused row, the arrows move between rows, a project's name folds it, and the sort button next to the filter orders by date, title or kind and shows archived diagrams. A teammate's initial in their colour marks what they changed in the last days, and a ring what they have open now (amber while they edit it).
+
+**Ctrl+K** finds any diagram (by title, project, kind or who changed it) or action (exports, checklists, themes, a new diagram of any kind) by typing.
+
+**Canvas diagrams** (UML, maps, DFD, E/R, screens, traceability, infrastructure): click a shape in the toolbar to drop it in the middle, or drag it onto the canvas; double-click empty canvas for the kind's main shape. Hover a shape and drag from its dot to another shape to connect them — the toolbar's relation menu picks the kind of line (association, «include», composition, data flow…), and the panel on the right changes it afterwards. Double-click a shape to rename it in place (class compartments too), a line to edit its label. Containers (system boundary, swimlanes, packages, deployment nodes, zones) carry whatever is inside them when dragged and resize from their corners. Straight or right-angle lines are a toggle; *Tidy* lays the whole diagram out (undo brings yours back). `Del` deletes, `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste shapes (also into another diagram of the same kind), `Ctrl+D` duplicates, arrows nudge (Shift: 1 px), `Ctrl+A` selects all, Shift+drag selects an area; select several to align or distribute them. Right-click (or `Shift+F10`) a shape, a line or the empty canvas for what you can do there — rename, colour, duplicate, bring to front, a line's type or direction, a new shape right where you clicked. Any shape or line can take a colour, and exports keep it. The map button under the zoom controls shows a mini map to drag and zoom around big diagrams.
 
 **Use case specifications** live on each use case: select it and fill in the panel (code, actors — *Fill actors from the lines in the diagram* reads them off the drawing — description, trigger, pre / postconditions, main and alternative flows, priority, frequency). *Export → Use case specifications* gives one table per use case.
 
 **Mind maps** lay themselves out: `Tab` adds an idea under the selected one, `Enter` one beside it, `Shift+Enter` just commits, `F2` renames.
 
-**Everything else** (sequence, Gantt, story map, Kanban, stakeholders, journey, boards) has its own editor; cards and sticky notes drag with the pointer directly, so it behaves the same on Wayland, X11 and Windows.
+**Everything else** (sequence, Gantt, story map, Kanban, stakeholders, journey, boards) has its own editor; cards and sticky notes drag with the pointer directly, so it behaves the same on Wayland, X11 and Windows. The drawing and its panel point at each other: hover or click a message, a bar, a stakeholder's dot or a blank of the vision and its row lights up on the other side; in an acta, clicking a part of the document takes you to its field. Colours carry meaning — MoSCoW priorities, each assignee, a full Kanban column, a late Gantt task, a TCO price still missing — and never end up in an export as selection or hover.
 
 Every change saves itself within half a second. `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo across all editors, and each diagram keeps its own history while the app is open, so switching away and back doesn't lose it. ⋯ keeps *Notes* about the diagram, *Duplicate*, *Archive*, *Previous versions* (a dated copy when you start editing a diagram and every five minutes after, and before a delete or restore) and *Delete*; a deleted diagram can be brought back from *Recently deleted* at the bottom of the list.
 
@@ -130,7 +136,8 @@ src/
   lib/stores/app.svelte.ts   app state, undo / redo, autosave, backups, image and text export
   lib/storage/diagrams.ts    JSON-file storage (Tauri) + localStorage fallback
   lib/desktop/appearance.ts  desktop colour scheme + accent (XDG portal)
-  lib/components/            DiagramList, NewDiagram, Panel, Notices, Swatches, StoryFields, Icon
+  lib/components/            DiagramList, Home, CommandPalette, NewDiagram, Deliverables, ExportFormats,
+                             Panel, Notices, KindBadge, Avatar, Swatches, StoryFields, Icon
   lib/editors/
     types.ts                 the contract every editor follows
     registry.ts              kind → editor, example, exports

@@ -12,6 +12,12 @@
     app.change((d) => ((d as DiagramOf<'vision'>).data[key] = value), `vision-${key}`);
   }
 
+  /** The field being typed in, and the one under the pointer (in the form, the sentence or the table): lit in all three. */
+  let active = $state<keyof VisionData | null>(null);
+  let hoverKey = $state<keyof VisionData | null>(null);
+  const hoverOn = (k: keyof VisionData) => () => (hoverKey = k);
+  const hoverOff = (k: keyof VisionData) => () => hoverKey === k && (hoverKey = null);
+
   function focusField(key: keyof VisionData) {
     const el = document.getElementById(`vision-${key}`) as HTMLTextAreaElement | null;
     el?.focus();
@@ -27,12 +33,35 @@
         <p class="small muted">Geoffrey Moore's template for the product vision. Fill each blank; the card reads it back as one sentence.</p>
       </div>
       {#each VISION_FIELDS as f (f.key)}
-        <label class="field">
-          {f.label}
-          <textarea id="vision-{f.key}" rows="2" placeholder="e.g. {f.hint}" value={data[f.key]} oninput={(e) => set(f.key, e.currentTarget.value)}></textarea>
+        <label class="field" class:hot={hoverKey === f.key} class:on={active === f.key} onpointerenter={hoverOn(f.key)} onpointerleave={hoverOff(f.key)}>
+          <span class="flabel"><span class="state" class:done={!!data[f.key]?.trim()}></span>{f.label}</span>
+          <textarea
+            id="vision-{f.key}"
+            rows="2"
+            placeholder="e.g. {f.hint}"
+            value={data[f.key]}
+            oninput={(e) => set(f.key, e.currentTarget.value)}
+            onfocus={() => (active = f.key)}
+            onblur={() => active === f.key && (active = null)}
+          ></textarea>
         </label>
       {/each}
-      <p class="tiny muted">{filled} of {VISION_FIELDS.length} filled.</p>
+      <div class="progress">
+        {#each VISION_FIELDS as f (f.key)}
+          <button
+            type="button"
+            class="bar"
+            class:done={!!data[f.key]?.trim()}
+            class:hot={hoverKey === f.key || active === f.key}
+            title="{f.label}{data[f.key]?.trim() ? '' : ' · still empty'}"
+            aria-label="{f.label}{data[f.key]?.trim() ? '' : ', empty'}"
+            onclick={() => focusField(f.key)}
+            onpointerenter={hoverOn(f.key)}
+            onpointerleave={hoverOff(f.key)}
+          ></button>
+        {/each}
+        <span class="tiny muted">{filled} of {VISION_FIELDS.length} filled{filled === VISION_FIELDS.length ? '' : ' · click a gap to fill it'}.</span>
+      </div>
     </form>
 
     <div class="card-col">
@@ -41,11 +70,12 @@
           <div class="kicker">Visión del producto</div>
           <h2>{data.product.trim() || doc.title}</h2>
         </header>
-        <p class="pitch">{#each pieces as p, i (i)}{#if p.t === 'lead'}{p.text}{:else}<span class="blank" class:empty={p.empty} role="button" tabindex="0" onclick={() => focusField(p.key)} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), focusField(p.key))}>{p.text}</span>{/if}{/each}</p>
+        <p class="pitch">{#each pieces as p, i (i)}{#if p.t === 'lead'}{p.text}{:else}<span class="blank" class:empty={p.empty} class:on={active === p.key} class:hot={hoverKey === p.key} role="button" tabindex="0" title="Click to edit" onclick={() => focusField(p.key)} onpointerenter={hoverOn(p.key)} onpointerleave={hoverOff(p.key)} onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), focusField(p.key))}>{p.text}</span>{/if}{/each}</p>
         <table>
           <tbody>
             {#each VISION_FIELDS as f (f.key)}
-              <tr>
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+              <tr class:on={active === f.key} class:hot={hoverKey === f.key} onclick={() => focusField(f.key)} onpointerenter={hoverOn(f.key)} onpointerleave={hoverOff(f.key)}>
                 <th scope="row">{(f.lead || 'Producto').replace(/^./, (c) => c.toUpperCase())}</th>
                 <td class:missing={!data[f.key]?.trim()}>{data[f.key]?.trim() || '—'}</td>
               </tr>
@@ -114,18 +144,95 @@
     color: var(--d-ink);
     text-decoration: underline;
     text-decoration-color: var(--line);
-    text-underline-offset: 4px;
-    cursor: text;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 5px;
+    cursor: pointer;
+    transition: background-color var(--t), text-decoration-color var(--t);
   }
   .blank.empty {
     font-weight: 400;
     font-style: italic;
     color: var(--muted);
     text-decoration-style: dashed;
+    text-decoration-color: color-mix(in srgb, var(--warn) 70%, transparent);
+  }
+  /* Hover (or hovering its field or row) shows the blank can be clicked: accent underline and a wash.
+     The blank being typed in keeps the wash. None of it reaches the exported card. */
+  .blank:hover,
+  .blank.hot {
+    text-decoration-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+  }
+  .blank.on {
+    text-decoration-color: var(--accent);
+    background: var(--selected);
+  }
+  :global(html.exporting) .blank {
+    background: none;
+    text-decoration-color: var(--line);
+  }
+  :global(html.exporting) .blank.empty {
     text-decoration-color: var(--muted);
   }
-  .blank:hover {
-    background: var(--hover);
+  .flabel {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color var(--t);
+  }
+  /* Each field says whether it's filled: green when it is, amber while it's empty. */
+  .state {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--warn);
+  }
+  .state.done {
+    background: var(--ok);
+  }
+  .field.hot .flabel,
+  .field.on .flabel {
+    color: var(--accent);
+  }
+  .field.hot textarea {
+    border-color: var(--accent);
+  }
+  .progress {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px;
+  }
+  .progress .tiny {
+    flex-basis: 100%;
+    margin-top: 2px;
+  }
+  .bar {
+    width: 36px;
+    height: 14px;
+    padding: 0;
+    border-radius: var(--r-control);
+  }
+  .bar::before {
+    content: '';
+    display: block;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: color-mix(in srgb, var(--warn) 45%, transparent);
+    transition: background-color var(--t), box-shadow var(--t);
+  }
+  .bar.done::before {
+    background: var(--ok);
+  }
+  .bar:hover,
+  .bar.hot {
+    background: transparent;
+  }
+  .bar:hover::before,
+  .bar.hot::before {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
   }
   table {
     width: 100%;
@@ -146,6 +253,23 @@
     white-space: nowrap;
   }
   td.missing {
+    color: var(--warn);
+  }
+  tr {
+    cursor: pointer;
+    transition: background-color var(--t);
+  }
+  tr:hover,
+  tr.hot {
+    background: var(--hover);
+  }
+  tr.on {
+    background: var(--selected);
+  }
+  :global(html.exporting) tr {
+    background: none;
+  }
+  :global(html.exporting) td.missing {
     color: var(--faint);
   }
   .wrap {

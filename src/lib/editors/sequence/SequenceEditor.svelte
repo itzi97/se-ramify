@@ -13,6 +13,11 @@
   const layout = $derived(layoutSequence(data));
 
   let selected = $state<string | null>(null);
+  /** A participant picked in the drawing (head, lifeline, bar) or its row. */
+  let selectedPart = $state<string | null>(null);
+  /** Hover keys (item id or `p:<participant id>`): from the panel's rows, and from the drawing. */
+  let rowHover = $state<string | null>(null);
+  let drawHover = $state<string | null>(null);
   let tab = $state<'items' | 'text'>('items');
   let panelOpen = $state(true);
 
@@ -196,9 +201,38 @@
     el?.select?.();
   }
 
-  function selectFromDiagram(id: string | null) {
+  function selectItem(id: string | null) {
     selected = id;
+    if (id) selectedPart = null;
+  }
+
+  function selectFromDiagram(id: string | null) {
+    selectItem(id);
+    if (!id) selectedPart = null;
     if (id) document.getElementById(`seq-row-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function selectPart(id: string) {
+    selectedPart = id;
+    selected = null;
+  }
+
+  /** A head or lifeline clicked: its row in the panel comes into view. */
+  function selectPartFromDiagram(id: string) {
+    selectPart(id);
+    document.getElementById(`seq-part-${id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  /** Double-click on a head or lifeline (or F2): straight into its name. */
+  async function focusPart(id: string) {
+    selectPart(id);
+    panelOpen = true;
+    tab = 'items';
+    await tick();
+    const el = document.getElementById(`seq-pname-${id}`) as HTMLInputElement | null;
+    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    el?.focus();
+    el?.select();
   }
 
   /* ----------------------------------------------------------------- text */
@@ -237,6 +271,31 @@
 
   function onKey(e: KeyboardEvent) {
     if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    const pi = selectedPart ? data.participants.findIndex((p) => p.id === selectedPart) : -1;
+    if (pi >= 0) {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        void removeParticipant(pi).then(() => {
+          if (!data.participants.some((p) => p.id === selectedPart)) selectedPart = null;
+        });
+        return;
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        const j = Math.max(0, Math.min(data.participants.length - 1, pi + (e.key === 'ArrowRight' ? 1 : -1)));
+        selectPartFromDiagram(data.participants[j].id);
+        return;
+      }
+      if (e.key === 'F2') {
+        e.preventDefault();
+        void focusPart(data.participants[pi].id);
+        return;
+      }
+      if (e.key === 'Escape') {
+        selectedPart = null;
+        return;
+      }
+    }
     const i = indexOf(selected);
     if ((e.key === 'Delete' || e.key === 'Backspace') && i >= 0) {
       e.preventDefault();
@@ -287,7 +346,20 @@ S --> Socio: ok</pre>
       </div>
     {:else}
       <div class="export" data-export-root style:width="{layout.width}px" style:height="{layout.height}px">
-        <SequenceDiagram {layout} {selected} onSelect={selectFromDiagram} onEdit={(id) => { selected = id; void focusText(id); }} />
+        <SequenceDiagram
+          {layout}
+          {selected}
+          {selectedPart}
+          hovered={rowHover}
+          onSelect={selectFromDiagram}
+          onEdit={(id) => {
+            selectItem(id);
+            void focusText(id);
+          }}
+          onSelectPart={selectPartFromDiagram}
+          onEditPart={(id) => void focusPart(id)}
+          onHover={(k) => (drawHover = k)}
+        />
       </div>
     {/if}
   </div>
@@ -320,11 +392,20 @@ S --> Socio: ok</pre>
             <button class="small" onclick={() => addParticipant('object')}><Icon name="Plus" size={14} /> Add</button>
           </div>
           {#each data.participants as p, i (p.id)}
-            <div class="prow">
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <div
+              id="seq-part-{p.id}"
+              class="prow"
+              class:sel={selectedPart === p.id}
+              class:hot={drawHover === 'p:' + p.id}
+              onclick={() => selectPart(p.id)}
+              onmouseenter={() => (rowHover = 'p:' + p.id)}
+              onmouseleave={() => (rowHover = null)}
+            >
               <select aria-label="Kind" value={p.kind} onchange={(e) => edit((s) => (s.participants[i].kind = e.currentTarget.value as ParticipantKind))}>
                 {#each KIND_LABELS as [k, l] (k)}<option value={k}>{l}</option>{/each}
               </select>
-              <input type="text" aria-label="Name" value={p.name} oninput={(e) => edit((s) => (s.participants[i].name = e.currentTarget.value), `p-name-${p.id}`)} />
+              <input id="seq-pname-{p.id}" type="text" aria-label="Name" value={p.name} oninput={(e) => edit((s) => (s.participants[i].name = e.currentTarget.value), `p-name-${p.id}`)} />
               <button class="icon small" aria-label="Move left" title="Move left" disabled={i === 0} onclick={() => moveParticipant(i, -1)}><Icon name="ArrowLeft" size={14} /></button>
               <button class="icon small" aria-label="Move right" title="Move right" disabled={i === data.participants.length - 1} onclick={() => moveParticipant(i, 1)}><Icon name="ArrowRight" size={14} /></button>
               <button class="icon small danger" aria-label="Delete participant" title="Delete" onclick={() => removeParticipant(i)}><Icon name="Trash2" size={14} /></button>
@@ -343,7 +424,17 @@ S --> Socio: ok</pre>
           <span class="sect">Messages and fragments</span>
           {#each data.items as it, i (it.id)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-            <div id="seq-row-{it.id}" class="item" class:sel={selected === it.id} style:margin-left="{depths[i] * 14}px" class:nested={depths[i] > 0} onclick={() => (selected = it.id)}>
+            <div
+              id="seq-row-{it.id}"
+              class="item {it.t}"
+              class:sel={selected === it.id}
+              class:hot={drawHover === it.id}
+              style:margin-left="{depths[i] * 14}px"
+              class:nested={depths[i] > 0}
+              onclick={() => selectItem(it.id)}
+              onmouseenter={() => (rowHover = it.id)}
+              onmouseleave={() => (rowHover = null)}
+            >
               {#if it.t === 'msg'}
                 <div class="mrow">
                   <select aria-label="From" value={it.from} onchange={(e) => edit((s) => ((s.items[i] as typeof it).from = e.currentTarget.value))}>
@@ -413,7 +504,7 @@ S --> Socio: ok</pre>
             <button class="secondary small" onclick={addElse}>else</button>
             <button class="secondary small" onclick={addNote}><Icon name="StickyNote" size={14} /> Note</button>
           </div>
-          <p class="tiny muted">New items go after the selected one. <kbd>↑</kbd> <kbd>↓</kbd> select, <kbd>F2</kbd> edits, <kbd>Del</kbd> deletes. Double-click a message on the diagram to edit it.</p>
+          <p class="tiny muted">New items go after the selected one. <kbd>↑</kbd> <kbd>↓</kbd> select, <kbd>F2</kbd> edits, <kbd>Del</kbd> deletes. Click anything in the drawing to find its row here; double-click to edit it.</p>
         </section>
       </div>
     {:else}
@@ -518,6 +609,21 @@ destroy L   ' tras un mensaje a L (o: C -> L !!)</pre>
     align-items: center;
     gap: 4px;
   }
+  .prow {
+    padding: 3px;
+    margin: 0 -3px;
+    border: 1px solid transparent;
+    border-radius: var(--r-control);
+    transition: background-color var(--t), border-color var(--t);
+  }
+  .prow:hover,
+  .prow.hot {
+    background: var(--hover);
+  }
+  .prow.sel {
+    border-color: var(--accent);
+    background: var(--selected);
+  }
   .prow select {
     width: 112px;
     flex: none;
@@ -550,17 +656,29 @@ destroy L   ' tras un mensaje a L (o: C -> L !!)</pre>
     padding: 6px;
     border: 1px solid transparent;
     border-radius: var(--r-control);
+    cursor: pointer;
+    transition: background-color var(--t), border-color var(--t);
   }
   .item.nested {
     border-left: 2px solid var(--line);
     border-radius: 0 var(--r-control) var(--r-control) 0;
   }
-  .item:hover {
+  /* Notes keep the yellow of the drawing's notes, so they're told apart at a glance. */
+  .item.note {
+    background: color-mix(in srgb, #e2c044 13%, transparent);
+  }
+  .item:hover,
+  .item.hot {
     background: var(--hover);
   }
-  .item.sel {
+  .item.note:hover,
+  .item.note.hot {
+    background: color-mix(in srgb, #e2c044 24%, transparent);
+  }
+  .item.sel,
+  .item.note.sel {
     border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    background: var(--selected);
   }
   .kw {
     font-size: var(--fs-sm);

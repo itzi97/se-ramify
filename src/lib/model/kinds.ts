@@ -66,6 +66,61 @@ export const KINDS: KindInfo[] = [
 
 export const GROUP_ORDER: KindInfo['group'][] = ['Company', 'UML', 'Requirements', 'Design thinking', 'Planning', 'Architecture'];
 
+/** Each group's colour token (app.css) and its short name, for badges, chips and filters. */
+export const FAMILIES: Record<KindInfo['group'], { key: string; color: string; label: string }> = {
+  Company: { key: 'company', color: 'var(--fam-company)', label: 'Company' },
+  UML: { key: 'uml', color: 'var(--fam-uml)', label: 'UML' },
+  Requirements: { key: 'req', color: 'var(--fam-req)', label: 'Requirements' },
+  'Design thinking': { key: 'dt', color: 'var(--fam-dt)', label: 'Design thinking' },
+  Planning: { key: 'plan', color: 'var(--fam-plan)', label: 'Planning' },
+  Architecture: { key: 'arch', color: 'var(--fam-arch)', label: 'Architecture' }
+};
+
+/** What people call each kind in class, short enough for a chip ("Casos de uso", "Gantt"). */
+const SHORT_ES: Partial<Record<DiagramKind, string>> = {
+  orgchart: 'Organigrama',
+  tco: 'TCO',
+  minutes: 'Acta',
+  canvas: 'Modelo de negocio',
+  usecase: 'Casos de uso',
+  class: 'Clases',
+  sequence: 'Secuencia',
+  communication: 'Comunicación',
+  activity: 'Actividad',
+  state: 'Estados',
+  deployment: 'Despliegue',
+  er: 'Entidad / relación',
+  dfd: 'DFD',
+  screenflow: 'Pantallas',
+  traceability: 'Trazabilidad',
+  stakeholder: 'Stakeholders',
+  vision: 'Visión',
+  mindmap: 'Mapa mental',
+  context: 'Mapa de contexto',
+  persona: 'Persona',
+  journey: 'Customer journey',
+  empathy: 'Mapa de empatía',
+  brainstorm: 'Brainstorming',
+  crazy8: 'Crazy eight',
+  sixhats: '6 sombreros',
+  conceptmap: 'Mapa conceptual',
+  backlog: 'Backlog',
+  up: 'Proceso Unificado',
+  storymap: 'Story map',
+  kanban: 'Kanban',
+  gantt: 'Gantt',
+  flowchart: 'Diagrama de flujo',
+  architecture: 'Arquitectura'
+};
+
+export function shortName(kind: DiagramKind): string {
+  return SHORT_ES[kind] ?? kindInfo(kind).es;
+}
+
+export function familyOf(kind: DiagramKind) {
+  return FAMILIES[kindInfo(kind).group];
+}
+
 export function kindInfo(kind: DiagramKind): KindInfo {
   return KINDS.find((k) => k.kind === kind)!;
 }

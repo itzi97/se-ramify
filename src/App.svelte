@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { app } from './lib/stores/app.svelte';
-  import { kindInfo } from './lib/model/kinds';
+  import { GROUP_ORDER, KINDS, familyOf, kindInfo, shortName } from './lib/model/kinds';
+  import type { DiagramKind } from './lib/model/types';
+  import type { DeliverableId } from './lib/model/deliverables';
   import { moduleFor } from './lib/editors/registry';
   import type { BackupMeta } from './lib/storage/diagrams';
-  import { storage } from './lib/storage/diagrams';
+  import { isTauri, storage } from './lib/storage/diagrams';
   import type { TextExport } from './lib/editors/types';
   import Icon from './lib/components/Icon.svelte';
   import Panel from './lib/components/Panel.svelte';
@@ -14,17 +16,36 @@
   import { editedLine } from './lib/storage/team';
   import Notices from './lib/components/Notices.svelte';
   import ExportFormats from './lib/components/ExportFormats.svelte';
+  import Home from './lib/components/Home.svelte';
+  import KindBadge from './lib/components/KindBadge.svelte';
+  import Avatar from './lib/components/Avatar.svelte';
+  import CommandPalette, { type Command } from './lib/components/CommandPalette.svelte';
+  import { exportProject } from './lib/export/project';
+  import { focusIn } from './lib/components/focus';
+  import { ago } from './lib/model/people';
 
   type Menu = 'export' | 'more' | null;
   type Side = 'notes' | 'versions' | 'help' | null;
 
   let menu = $state<Menu>(null);
   let side = $state<Side>(null);
-  let newOpen = $state(false);
-  let handIns = $state<string | null>(null);
+  /** The new-diagram dialog, with a kind already picked when it came from the home screen or the palette. */
+  let newOpen = $state<{ kind?: DiagramKind } | null>(null);
+  let handIns = $state<{ project: string; tab?: DeliverableId } | null>(null);
+  let paletteOpen = $state(false);
   let backups = $state<BackupMeta[]>([]);
 
   onMount(() => void app.init());
+
+  // The window (taskbar, Alt+Tab) is named after the open diagram.
+  $effect(() => {
+    const title = app.doc ? `${app.doc.title.trim() || 'Sin título'} — se-ramify` : 'se-ramify';
+    document.title = title;
+    if (isTauri)
+      void import('@tauri-apps/api/window')
+        .then(({ getCurrentWindow }) => getCurrentWindow().setTitle(title))
+        .catch(() => {});
+  });
 
   const info = $derived(app.doc ? kindInfo(app.doc.kind) : null);
   const mod = $derived(app.doc ? moduleFor(app.doc.kind) : null);
@@ -41,6 +62,56 @@
   function toggle(m: Exclude<Menu, null>) {
     menu = menu === m ? null : m;
   }
+
+  const projects = $derived([...new Set(app.list.map((m) => m.project))].sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'es'))));
+  const showHandIns = (project: string, tab?: DeliverableId) => (handIns = { project, tab });
+
+  /** Everything the palette (Ctrl+K) can do, besides opening diagrams. */
+  const commands = $derived.by((): Command[] => {
+    const out: Command[] = [{ id: 'new', label: 'New diagram…', section: 'Actions', icon: 'Plus', hint: 'Ctrl+N', keywords: 'crear nuevo', run: () => (newOpen = {}) }];
+    const doc = app.doc;
+    if (doc) {
+      out.push(
+        { id: 'png', label: 'Export as PNG image', section: 'Actions', icon: 'Image', keywords: 'exportar imagen descargar download', run: () => app.exportImage('png') },
+        { id: 'svg', label: 'Export as SVG image', section: 'Actions', icon: 'FileImage', keywords: 'exportar vector', run: () => app.exportImage('svg') },
+        { id: 'copy', label: 'Copy as image', section: 'Actions', icon: 'ClipboardCopy', hint: 'Ctrl+Shift+C', keywords: 'copiar pegar paste clipboard', run: () => app.copyImage() },
+        { id: 'docx', label: 'Export as Word document (.docx)', section: 'Actions', icon: 'FileText', keywords: 'word documento', run: () => app.exportDocx() },
+        { id: 'pptx', label: 'Export as PowerPoint slide (.pptx)', section: 'Actions', icon: 'Presentation', keywords: 'powerpoint diapositiva slides', run: () => app.exportSlide() },
+        { id: 'latex', label: 'Copy LaTeX figure', section: 'Actions', icon: 'Sigma', keywords: 'latex tex figura overleaf', run: () => app.copyLatexFigure() },
+        ...textExports.map((x): Command => ({ id: `tx:${x.label}`, label: `Export ${x.label}`, section: 'Actions', icon: 'FileText', keywords: x.ext, run: () => app.exportText(x) })),
+        { id: 'notes', label: 'Notes of this diagram', section: 'Actions', icon: 'NotebookPen', keywords: 'notas', run: () => (side = 'notes') },
+        { id: 'versions', label: 'Previous versions', section: 'Actions', icon: 'History', keywords: 'restaurar historial backup restore', run: openVersions },
+        { id: 'dup', label: 'Duplicate this diagram', section: 'Actions', icon: 'Copy', keywords: 'duplicar copia', run: () => app.duplicate() },
+        { id: 'send', label: 'Save a copy to send…', section: 'Actions', icon: 'Send', keywords: 'enviar compartir share', run: () => app.exportDiagramFile() },
+        { id: 'archive', label: doc.archived ? 'Unarchive this diagram' : 'Archive this diagram', section: 'Actions', icon: 'Archive', keywords: 'archivar', run: () => app.toggleArchive() },
+        { id: 'delete', label: 'Delete this diagram…', section: 'Actions', icon: 'Trash2', keywords: 'borrar eliminar', run: () => app.remove() },
+        { id: 'home', label: 'Home', section: 'View', icon: 'House', keywords: 'inicio recientes recent close cerrar', run: () => app.close() }
+      );
+      if (mod?.importText) out.push({ id: 'import-text', label: `${mod.importText.label}…`, section: 'Actions', icon: 'FileInput', keywords: 'importar', run: importText });
+    }
+    for (const p of projects) {
+      out.push(
+        { id: `hi:${p}`, label: `Hand-in checklist: ${p || 'No project'}`, section: 'Hand-ins', icon: 'ClipboardCheck', keywords: 'entregas entrega e1 e2 e3 final checklist rubric', run: () => showHandIns(p) },
+        { id: `ex:${p}`, label: `Export project: ${p || 'No project'}`, section: 'Hand-ins', icon: 'PackageOpen', keywords: 'memoria exportar zip', run: () => exportProject(p) }
+      );
+    }
+    for (const g of GROUP_ORDER)
+      for (const k of KINDS.filter((k) => k.group === g))
+        out.push({ id: `new:${k.kind}`, label: k.es, section: 'New diagram', kind: k.kind, hint: 'New', keywords: `${k.label} ${shortName(k.kind)} nuevo new crear`, run: () => (newOpen = { kind: k.kind }) });
+    out.push(
+      { id: 'example', label: 'Load the example project', section: 'Actions', icon: 'GraduationCap', keywords: 'ejemplo biblioya sample', run: async () => showHandIns(await app.loadExampleProject()) },
+      { id: 'import', label: 'Open a diagram file…', section: 'Actions', icon: 'FileInput', keywords: 'importar abrir json', run: () => app.importDiagramFile() },
+      { id: 'folder', label: 'Use another folder…', section: 'Actions', icon: 'FolderOpen', keywords: 'carpeta directorio', run: () => app.pickDir() },
+      { id: 'update', label: 'Check for a new version', section: 'Actions', icon: 'Sparkles', keywords: 'actualizar update', run: () => app.lookForUpdate(true) },
+      { id: 'list', label: app.listOpen ? 'Hide the diagram list' : 'Show the diagram list', section: 'View', icon: 'PanelLeft', keywords: 'lista sidebar', run: () => app.toggleList() },
+      { id: 'archived', label: app.showArchived ? 'Hide archived diagrams' : 'Show archived diagrams', section: 'View', icon: 'Archive', keywords: 'archivados', run: () => (app.showArchived = !app.showArchived) },
+      { id: 'light', label: 'Light theme', section: 'View', icon: 'Sun', keywords: 'claro tema', run: () => app.setTheme('light') },
+      { id: 'dark', label: 'Dark theme', section: 'View', icon: 'Moon', keywords: 'oscuro tema', run: () => app.setTheme('dark') },
+      { id: 'system', label: 'Theme like the desktop', section: 'View', icon: 'Monitor', keywords: 'sistema tema', run: () => app.setTheme('system') },
+      { id: 'help', label: 'Help and shortcuts', section: 'View', icon: 'CircleHelp', keywords: 'ayuda atajos', run: () => (side = 'help') }
+    );
+    return out;
+  });
 
   async function openVersions() {
     menu = null;
@@ -83,7 +154,13 @@
     }
     if (mod && e.key.toLowerCase() === 'n' && app.dir) {
       e.preventDefault();
-      newOpen = true;
+      newOpen = {};
+      return;
+    }
+    if (mod && e.key.toLowerCase() === 'k' && app.dir) {
+      e.preventDefault();
+      menu = null;
+      paletteOpen = !paletteOpen;
       return;
     }
     if (mod && e.shiftKey && e.key.toLowerCase() === 'c' && app.doc) {
@@ -114,7 +191,11 @@
       <Icon name="PanelLeft" />
     </button>
     {#if app.doc && info}
-      <span class="kind" title="{info.label} · {info.course}"><Icon name={info.icon} size={16} /> <span class="kind-name">{info.es}</span></span>
+      <button class="icon" onclick={() => app.close()} aria-label="Home" title="Home: recent diagrams, hand-ins, new diagrams"><Icon name="House" /></button>
+      <span class="kind" style:--fam={familyOf(app.doc.kind).color} title="{info.es} · {info.label}&#10;In the course: {info.course}">
+        <KindBadge kind={app.doc.kind} />
+        <span class="kind-name" lang="es">{shortName(app.doc.kind)}</span>
+      </span>
       <input
         class="ghost-input title"
         type="text"
@@ -126,37 +207,59 @@
         }}
         lang="es"
       />
-      <input
-        class="ghost-input project"
-        type="text"
-        aria-label="Project"
-        placeholder="Project"
-        value={app.doc.project}
-        oninput={(e) => app.change((d) => (d.project = e.currentTarget.value), 'project')}
-      />
+      <span class="proj-pill" title="Project: its diagrams share one hand-in checklist">
+        <Icon name="Folder" size={14} />
+        <input
+          class="project"
+          type="text"
+          aria-label="Project"
+          placeholder="No project"
+          list="top-projects"
+          value={app.doc.project}
+          oninput={(e) => app.change((d) => (d.project = e.currentTarget.value), 'project')}
+          onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          lang="es"
+        />
+        <button class="icon small" aria-label="Hand-in checklist for this project" title="Hand-in checklist: what E1, E2, E3 and the final ask for" onclick={() => app.doc && showHandIns(app.doc.project)}><Icon name="ClipboardCheck" size={15} /></button>
+      </span>
+      <datalist id="top-projects">{#each projects.filter(Boolean) as p (p)}<option value={p}></option>{/each}</datalist>
       <div class="spacer"></div>
       {#if app.doc && app.presence[app.doc.id]?.length}
-        {@const editing = app.presence[app.doc.id].some((p) => p.editing)}
+        {@const ps = app.presence[app.doc.id]}
+        {@const editing = ps.some((p) => p.editing)}
         <span class="here-chip tiny" class:editing role="status" title={editing ? 'If you both change it, both versions are kept — agree who edits what.' : 'They have it open; nobody else is changing it right now.'}>
-          <Icon name="Users" size={13} /> {app.presenceLine(app.doc.id).replace(/^./, (c) => c.toUpperCase())}
+          <span class="faces">{#each ps.slice(0, 3) as p (p.client)}<Avatar name={p.name} size={18} state={p.editing ? 'editing' : 'here'} />{/each}</span>
+          <span class="here-text">{app.presenceLine(app.doc.id).replace(/^./, (c) => c.toUpperCase())}</span>
         </span>
       {/if}
-      <span class="status tiny muted" class:failed={app.saving === 'error'} aria-live="polite" title={app.doc ? editedLine(app.doc.updated, app.doc.updatedBy) : ''}>
+      <button
+        class="status small"
+        class:failed={app.saving === 'error'}
+        class:pending={app.saving === 'pending'}
+        aria-live="polite"
+        title="{app.doc ? editedLine(app.doc.updated, app.doc.updatedBy) : ''}&#10;{app.saving === 'error' ? 'Click to try saving again' : 'Click for previous versions'}"
+        onclick={() => (app.saving === 'error' ? app.flush() : openVersions())}
+      >
+        <Icon name={app.saving === 'error' ? 'CircleAlert' : app.saving === 'pending' ? 'LoaderCircle' : 'Check'} size={14} class={app.saving === 'pending' ? 'spin' : ''} />
         {app.saving === 'pending' ? 'Saving…' : app.saving === 'error' ? 'Not saved' : 'Saved'}
-      </span>
+      </button>
       <button class="icon" onclick={() => app.undo()} disabled={!app.canUndo} aria-label="Undo" title="Undo (Ctrl+Z)"><Icon name="Undo2" /></button>
       <button class="icon" onclick={() => app.redo()} disabled={!app.canRedo} aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><Icon name="Redo2" /></button>
+      <button class="icon" onclick={() => ((menu = null), (paletteOpen = true))} aria-label="Find" title="Find a diagram or an action (Ctrl+K)"><Icon name="Search" /></button>
       <div class="menu-anchor">
         <button class:active={menu === 'export'} onclick={() => { void app.loadExportPrefs(); toggle('export'); }} aria-haspopup="menu" aria-expanded={menu === 'export'}><Icon name="Download" size={16} /> Export</button>
         {#if menu === 'export'}
           <button class="scrim" aria-label="Close menu" tabindex="-1" onclick={() => (menu = null)}></button>
           <div class="menu float arrive" role="menu">
+            <div class="sect pad-s">Image</div>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportImage('png'); }}><Icon name="Image" size={16} /> PNG image</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportImage('svg'); }}><Icon name="FileImage" size={16} /> SVG image</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.copyImage(); }}><Icon name="ClipboardCopy" size={16} /> Copy as image <kbd class="quiet">Ctrl+Shift+C</kbd></button>
+            <div class="sect pad-s">Into a document</div>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportDocx(); }}><Icon name="FileText" size={16} /> Word document (.docx)</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportSlide(); }}><Icon name="Presentation" size={16} /> PowerPoint slide (.pptx)</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.copyLatexFigure(); }}><Icon name="Sigma" size={16} /> Copy LaTeX figure</button>
+            <div class="opts">
             <label class="check small muted pad"><input type="checkbox" checked={app.lightExports} onchange={(e) => app.setLightExports(e.currentTarget.checked)} /> White background</label>
             <div class="row pad size-row">
               <span class="small muted">Image size</span>
@@ -166,8 +269,9 @@
                 {/each}
               </div>
             </div>
+            </div>
             {#if textExports.length}
-              <div class="sect pad">As text</div>
+              <div class="sect pad-s">As text</div>
               {#each textExports as x (x.label)}
                 <div class="row text-row">
                   <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportText(x); }}><Icon name="FileText" size={16} /> {x.label}</button>
@@ -187,7 +291,7 @@
             {#if mod?.importText}
               <button class="menu-row" role="menuitem" onclick={importText}><Icon name="FileInput" size={16} /> {mod.importText.label}…</button>
             {/if}
-            <button class="menu-row" role="menuitem" onclick={() => { menu = null; handIns = app.doc?.project ?? ''; }}><Icon name="ClipboardCheck" size={16} /> Hand-in checklist…</button>
+            <button class="menu-row" role="menuitem" onclick={() => { menu = null; showHandIns(app.doc?.project ?? ''); }}><Icon name="ClipboardCheck" size={16} /> Hand-in checklist…</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.duplicate(); }}><Icon name="Copy" size={16} /> Duplicate</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.exportDiagramFile(); }}><Icon name="Send" size={16} /> Save a copy to send…</button>
             <button class="menu-row" role="menuitem" onclick={() => { menu = null; void app.toggleArchive(); }}><Icon name="Archive" size={16} /> {app.doc.archived ? 'Unarchive' : 'Archive'}</button>
@@ -205,8 +309,9 @@
         {/if}
       </div>
     {:else}
-      <strong class="brand">se-ramify</strong>
+      <span class="brand"><img src="/favicon.svg" alt="" width="20" height="20" /> se-ramify</span>
       <div class="spacer"></div>
+      {#if app.dir}<button class="icon" onclick={() => (paletteOpen = true)} aria-label="Find" title="Find a diagram or an action (Ctrl+K)"><Icon name="Search" /></button>{/if}
     {/if}
     <button class="icon" onclick={() => (side = side === 'help' ? null : 'help')} aria-label="Help" title="Help"><Icon name="CircleHelp" /></button>
   </header>
@@ -214,14 +319,20 @@
   {#if app.ready && !app.dir}
     <main class="welcome">
       <div class="stack card float">
-        <h1>se-ramify</h1>
-        <p>The diagrams of Software Engineering — UML, system and use case diagrams, stakeholder maps, design thinking boards, story maps, Kanban and Gantt — in one local app.</p>
-        <p class="muted small">Each diagram is a plain JSON file in a folder you choose, so it's yours to sync, back up or put in git.</p>
+        <div class="marks" aria-hidden="true">
+          {#each GROUP_ORDER as g (g)}{#each KINDS.filter((k) => k.group === g).slice(0, 2) as k (k.kind)}<KindBadge kind={k.kind} />{/each}{/each}
+        </div>
+        <h1><img src="/favicon.svg" alt="" width="36" height="36" /> se-ramify</h1>
+        <p>Every diagram of Software Engineering — use cases, classes, sequences, stakeholder maps, design thinking boards, story maps, Kanban and Gantt — in one app, checked against the course's hand-ins.</p>
+        <ol class="steps small">
+          <li><strong>Choose a folder.</strong> Each diagram is a plain file in it, yours to back up or put in git.</li>
+          <li><strong>Share that folder with your group</strong> (Google Drive, OneDrive, Dropbox or a git repo). Everyone sees the others' changes within seconds.</li>
+        </ol>
         <button class="primary" onclick={() => app.pickDir()}><Icon name="FolderOpen" size={16} /> Choose a folder for diagrams</button>
       </div>
     </main>
   {:else if app.ready}
-    {#if app.listOpen}<DiagramList onNew={() => (newOpen = true)} onHandIns={(p) => (handIns = p)} />{/if}
+    {#if app.listOpen}<DiagramList onNew={() => (newOpen = {})} onHandIns={(p) => showHandIns(p)} />{/if}
     <main class="editor-area" lang="es">
       {#if app.doc && Editor}
         {#key app.doc.id}
@@ -238,12 +349,7 @@
           </div>
         {/if}
       {:else}
-        <div class="empty-hint">
-          <div class="stack">
-            <p>{app.list.length ? 'Pick a diagram on the left, or make a new one.' : 'No diagrams yet.'}</p>
-            <p><button class="primary" style="pointer-events:auto" onclick={() => (newOpen = true)}><Icon name="Plus" size={16} /> New diagram</button></p>
-          </div>
-        </div>
+        <Home onNew={(kind) => (newOpen = { kind })} onHandIns={showHandIns} onPalette={() => (paletteOpen = true)} />
       {/if}
     </main>
   {/if}
@@ -251,42 +357,58 @@
   {#if side === 'notes' && app.doc}
     <Panel title="Notes" onClose={() => (side = null)}>
       <p class="tiny muted">About the whole diagram: decisions, sources, what's left to do. Saved with it, never drawn.</p>
-      <!-- svelte-ignore a11y_autofocus -->
-      <textarea rows="16" autofocus value={app.doc.notes} oninput={(e) => app.change((d) => (d.notes = e.currentTarget.value), 'notes')}></textarea>
+      <textarea rows="16" use:focusIn value={app.doc.notes} oninput={(e) => app.change((d) => (d.notes = e.currentTarget.value), 'notes')}></textarea>
     </Panel>
   {:else if side === 'versions'}
     <Panel title="Previous versions" onClose={() => (side = null)}>
-      <p class="tiny muted">A copy is kept every five minutes while you edit, and before a delete or a restore.</p>
-      {#each backups as b (b.path)}
-        <div class="row between">
-          <span class="small">{new Date(b.when).toLocaleString()}</span>
-          <button class="secondary small" onclick={() => app.restore(b)}>Restore</button>
-        </div>
+      <p class="tiny muted">A copy is kept every five minutes while you edit, and before a delete or a restore. Restoring keeps the current version as a copy too; <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.</p>
+      {#if backups.length}
+        <ol class="versions">
+          {#each backups as b (b.path)}
+            <li class="ver">
+              <span class="when">
+                <strong class="small">{new Date(b.when).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</strong>
+                <span class="tiny muted">{ago(b.when)}</span>
+              </span>
+              <button class="secondary small" onclick={() => app.restore(b)}><Icon name="RotateCcw" size={14} /> Restore</button>
+            </li>
+          {/each}
+        </ol>
       {:else}
-        <p class="small muted">No copies yet.</p>
-      {/each}
+        <p class="small muted">No copies yet: the first one is kept after your first change.</p>
+      {/if}
     </Panel>
   {:else if side === 'help'}
     <Panel title="Help" onClose={() => (side = null)}>
       <div class="stack small help">
-        <p>Every change saves itself within half a second. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes, <kbd>Ctrl</kbd>+<kbd>N</kbd> starts a new diagram. Inside a text box <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes your typing there; click outside it to undo whole steps.</p>
+        <p>Every change saves itself within half a second. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd> redoes, <kbd>Ctrl</kbd>+<kbd>N</kbd> starts a new diagram and <kbd>Ctrl</kbd>+<kbd>K</kbd> finds any diagram or action by typing. Inside a text box <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes your typing there; click outside it to undo whole steps.</p>
+        <div class="sect">The list</div>
+        <ul>
+          <li>The coloured numbers at the top show one family of diagrams (company, UML, requirements, design thinking, planning, infrastructure); the badge of each diagram has its family's colour.</li>
+          <li>Right-click a diagram (or its <kbd>⋯</kbd>) to rename, duplicate, move it to another project, archive or delete it. <kbd>F2</kbd> renames the focused one, the arrows move between them.</li>
+          <li>Click a project's name to fold it. The sort button next to the filter orders by date, title or kind, and shows archived diagrams.</li>
+          <li>The house in the top bar goes back home: recent diagrams, how far each hand-in is, and every kind of diagram.</li>
+        </ul>
         <div class="sect">Canvas diagrams (UML, maps, DFD, E/R…)</div>
         <ul>
           <li>Click a shape in the toolbar to drop it in the middle, or drag it onto the canvas.</li>
           <li>Drag from the small dot on a hovered shape to another shape to connect them; the toolbar's relation menu picks the kind of line.</li>
           <li>Double-click a shape or a line to edit its text; the panel on the right edits everything else.</li>
           <li><kbd>Del</kbd> deletes, <kbd>Ctrl</kbd>+<kbd>C</kbd> / <kbd>X</kbd> / <kbd>V</kbd> copy, cut and paste shapes (also between diagrams of the same kind), <kbd>Ctrl</kbd>+<kbd>D</kbd> duplicates, arrows nudge, <kbd>Ctrl</kbd>+<kbd>A</kbd> selects all, Shift+drag selects an area.</li>
-          <li>Tidy lays the diagram out for you; containers (system, swimlanes, packages, nodes, zones) carry whatever is inside them.</li>
+          <li>Tidy lays the diagram out for you; containers (system, swimlanes, packages, nodes, zones) carry whatever is inside them, and light up when a shape you drag will land in them.</li>
+          <li>Right-click a shape, a line or the empty canvas (or press <kbd>Shift</kbd>+<kbd>F10</kbd> / the Menu key) for what you can do there: rename, colour, duplicate, bring to front, change a line's type or direction, add a shape right where you clicked, paste there.</li>
+          <li>Any shape or line can take a colour (right-click, or the Colour row in the side panel); exports keep it, on white paper.</li>
+          <li>The map button under the zoom controls shows a mini map: drag it to move around, scroll on it to zoom.</li>
         </ul>
         <div class="sect">Mind maps</div>
         <ul>
           <li><kbd>Tab</kbd> adds an idea under the selected one, <kbd>Enter</kbd> one beside it, <kbd>F2</kbd> renames.</li>
         </ul>
         <div class="sect">Working as a team</div>
-        <p>Everyone points the app at the same shared folder (Google Drive / OneDrive / Dropbox, or a git repo) and writes their name at the bottom of the list. Changes from others appear within a few seconds. Nobody's work is overwritten: if someone saved a diagram while you were editing it, theirs opens and yours is kept as a copy. ⋯ → <em>Save a copy to send…</em> and <em>Open a diagram file…</em> (bottom of the list) pass single diagrams around.</p>
+        <p>Everyone points the app at the same shared folder (Google Drive / OneDrive / Dropbox, or a git repo) and writes their name at the bottom of the list. Changes from others appear within a few seconds. Nobody's work is overwritten: if someone saved a diagram while you were editing it, theirs opens and yours is kept as a copy. ⋯ → <em>Save a copy to send…</em> and the file button next to <em>New diagram</em> pass single diagrams around.</p>
         <div class="sect">Hand-ins</div>
-        <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in. <em>Edit checklist</em> adapts it when the teacher asks for something different (shared with your group). "Load the example project" at the bottom of the list adds every hand-in done for an invented library app.</p>
-        <p><button class="secondary small" onclick={async () => { side = null; handIns = await app.loadExampleProject(); }}>Load the example project</button></p>
+        <p>The checklist icon next to a project (or ⋯ → Hand-in checklist) shows what E1, E2, E3 and the final hand-in ask for, which diagrams cover each part, what is still missing inside them, and exports just that hand-in; the home screen shows how far each one is. <em>Edit checklist</em> adapts it when the teacher asks for something different (shared with your group). The example project has every hand-in done for an invented library app.</p>
+        <p><button class="secondary small" onclick={async () => { side = null; showHandIns(await app.loadExampleProject()); }}>Load the example project</button></p>
         <div class="sect">Exports</div>
         <p><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copies the diagram as an image to paste into Word, Google Docs or PowerPoint. The Export menu also makes a Word document or a PowerPoint slide of the diagram, and copies a LaTeX figure for its PNG; <em>Image size</em> sets how sharp images are (they keep their on-screen size in documents).</p>
         <p>The box icon next to a project in the list exports the whole project — every diagram as a PNG plus the memoria with the specifications and stories, as Markdown and, if you tick them, Word, LaTeX and a PowerPoint deck for the presentation.</p>
@@ -300,8 +422,11 @@
     </Panel>
   {/if}
 
-  {#if newOpen}<NewDiagram onClose={() => (newOpen = false)} />{/if}
-  {#if handIns !== null}<Deliverables project={handIns} onClose={() => (handIns = null)} />{/if}
+  {#if newOpen}<NewDiagram initialKind={newOpen.kind} onClose={() => (newOpen = null)} />{/if}
+  {#if handIns}
+    {#key `${handIns.project}|${handIns.tab}`}<Deliverables project={handIns.project} initialTab={handIns.tab} onClose={() => (handIns = null)} />{/key}
+  {/if}
+  {#if paletteOpen}<CommandPalette {commands} onClose={() => (paletteOpen = false)} />{/if}
   <ExportFormats />
   <Notices />
 </div>
@@ -314,18 +439,28 @@
   .here-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    max-width: 320px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--ok);
+    gap: 8px;
+    max-width: 340px;
+    height: 28px;
+    padding: 0 10px 0 5px;
+    border-radius: var(--r-pill);
+    border: 1px solid color-mix(in srgb, var(--ok) 55%, var(--line));
+    background: color-mix(in srgb, var(--ok) 8%, var(--panel));
     color: var(--ink-2);
   }
   .here-chip.editing {
-    background: color-mix(in srgb, var(--ok) 16%, transparent);
+    border-color: color-mix(in srgb, var(--warn) 60%, var(--line));
+    background: color-mix(in srgb, var(--warn) 12%, var(--panel));
+  }
+  .here-chip .faces {
+    display: inline-flex;
+    gap: 6px;
+    padding-left: 3px;
+  }
+  .here-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .copy-banner {
     position: absolute;
@@ -356,15 +491,23 @@
     z-index: 40;
   }
   .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-2);
     padding: 0 var(--sp-2);
+    font-weight: 700;
+  }
+  .brand img {
+    border-radius: 5px;
   }
   .kind {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 var(--sp-2);
-    color: var(--muted);
+    gap: 7px;
+    padding: 0 var(--sp-2) 0 var(--sp-1);
+    color: var(--fam);
     font-size: var(--fs-sm);
+    font-weight: 700;
     white-space: nowrap;
   }
   .title {
@@ -373,16 +516,74 @@
     min-width: 120px;
     max-width: 340px;
     field-sizing: content;
+    text-overflow: ellipsis;
+  }
+  /* The project, as a pill: type to move the diagram, pick from the others, open its checklist. */
+  .proj-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 30px;
+    margin-left: var(--sp-1);
+    padding: 0 3px 0 10px;
+    border-radius: var(--r-pill);
+    background: var(--panel-2);
+    color: var(--muted);
+  }
+  .proj-pill:hover {
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .proj-pill:has(input:focus) {
+    box-shadow: inset 0 0 0 1px var(--accent);
+    background: var(--panel);
   }
   .project {
     width: auto;
-    min-width: 80px;
+    min-width: 72px;
     max-width: 220px;
-    color: var(--muted);
+    height: 28px;
+    padding: 0 4px;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--ink-2);
+    font-size: var(--fs-sm);
     field-sizing: content;
+    text-overflow: ellipsis;
+    outline: none;
+  }
+  /* The suggestions still drop down while typing; the arrow only took room. */
+  .project::-webkit-calendar-picker-indicator {
+    display: none !important;
+  }
+  .proj-pill button {
+    border-radius: var(--r-pill);
+  }
+  .proj-pill button:hover {
+    color: var(--accent);
+    background: var(--selected);
   }
   .status {
-    padding: 0 var(--sp-2);
+    gap: 5px;
+    padding: 0 10px;
+    color: var(--muted);
+  }
+  .status :global(.lucide) {
+    color: var(--ok);
+  }
+  .status.pending :global(.lucide) {
+    color: var(--muted);
+  }
+  .status.failed,
+  .status.failed :global(.lucide) {
+    color: var(--danger);
+  }
+  :global(.spin) {
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .menu-anchor {
     position: relative;
@@ -401,6 +602,20 @@
   .pad {
     padding: var(--sp-2);
   }
+  /* A section label inside a menu: sits close to the rows it names. */
+  .pad-s {
+    padding: var(--sp-2) var(--sp-2) 2px;
+  }
+  .pad-s:not(:first-child) {
+    margin-top: var(--sp-1);
+    border-top: 1px solid var(--line);
+    padding-top: var(--sp-3);
+  }
+  .opts {
+    margin: var(--sp-1) 0;
+    padding-top: var(--sp-1);
+    border-top: 1px solid var(--line);
+  }
   .text-row {
     gap: 0;
   }
@@ -415,15 +630,84 @@
     padding: var(--sp-4);
   }
   .welcome .card {
-    max-width: 480px;
-    padding: var(--sp-5);
+    max-width: 520px;
+    padding: var(--sp-5) 28px 28px;
   }
   .welcome h1 {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-3);
     margin: 0;
-    font-size: 22px;
+    font-size: 24px;
+  }
+  .welcome h1 img {
+    border-radius: 9px;
   }
   .welcome button {
     align-self: flex-start;
+  }
+  .marks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-bottom: var(--sp-1);
+  }
+  .steps {
+    margin: 0;
+    padding-left: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    color: var(--ink-2);
+  }
+  /* Previous versions: newest first, on a line through time. */
+  .versions {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .ver {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sp-3);
+    padding: 7px 0 7px 20px;
+  }
+  .ver::before {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--line);
+  }
+  .ver:first-child::before {
+    top: 50%;
+  }
+  .ver:last-child::before {
+    bottom: 50%;
+  }
+  .ver::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: var(--panel);
+    box-shadow: inset 0 0 0 2px var(--muted);
+  }
+  .ver:first-child::after {
+    box-shadow: inset 0 0 0 2px var(--accent);
+  }
+  .when {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
   .help ul {
     margin: 0;
@@ -432,9 +716,14 @@
   .help li + li {
     margin-top: 4px;
   }
+  @media (max-width: 1100px) {
+    .here-text {
+      display: none;
+    }
+  }
   @media (max-width: 900px) {
     .kind-name,
-    .project {
+    .proj-pill {
       display: none;
     }
   }

@@ -8,6 +8,7 @@
   import { blankSpec } from '../../model/diagram';
   import { searchIcons } from '../../model/icons';
   import { childrenMap } from './layout';
+  import { canPaint, commonColor, paint, reverseEdge } from './ops';
 
   let {
     kind,
@@ -187,7 +188,18 @@
   }
 
   const hasStereo = $derived(node && ['class', 'container', 'box3d', 'artifact', 'component', 'rect', 'action', 'screen'].includes(ninfo!.shape) && node.type !== 'note');
-  const colourable = $derived(node && ['zone', 'topic', 'concept', 'note', 'central'].includes(ninfo!.shape));
+  const shapeOf = (type: string, icon?: string) => nodeTypeInfo(kind, type, icon).shape;
+  const colourable = $derived(!!node && canPaint(ninfo!.shape));
+
+  /* Colour for a mixed selection: every shape that takes one, and every line. */
+  const paintNodes = $derived(data.nodes.filter((n) => nodeIds.includes(n.id) && canPaint(shapeOf(n.type, n.icon))));
+  const paintEdges = $derived(data.edges.filter((e) => edgeIds.includes(e.id)));
+  const manyColour = $derived(commonColor([...paintNodes.map((n) => n.color), ...paintEdges.map((e) => e.color)]));
+  function paintAll(hex: string | undefined) {
+    const ns = nodeIds.slice();
+    const es = edgeIds.slice();
+    app.change((d) => void paint(d.data as GraphData, ns, es, hex, shapeOf));
+  }
   const iconResults = $derived(searchIcons(iconQuery, 40));
   const typeChoices = $derived(node ? palette.nodes.filter((t) => !t.hidden && t.shape !== 'central' && !!t.container === !!ninfo!.container) : []);
 </script>
@@ -352,9 +364,19 @@
           <button class="secondary small" onclick={() => setMessages((ms) => ms.push({ seq: nextSeq(), text: 'mensaje()', dir: 'forward' }))}><Icon name="Plus" size={14} /> Add message</button>
           <p class="tiny muted">→ goes from {data.nodes.find((n) => n.id === edge!.from)?.label} to {data.nodes.find((n) => n.id === edge!.to)?.label}. Number them in order ("1", "1.1", "2").</p>
         {/if}
-        <button class="secondary small" onclick={() => setEdge({ from: edge!.to, to: edge!.from, fromLabel: edge!.toLabel, toLabel: edge!.fromLabel })}><Icon name="ArrowLeftRight" size={14} /> Reverse direction</button>
+        <div class="field">Colour <Swatches value={edge.color} onPick={(c) => setEdge({ color: c })} /></div>
+        <button class="secondary small" onclick={() => {
+          const id = edge!.id;
+          app.change((d) => {
+            const e = (d.data as GraphData).edges.find((x) => x.id === id);
+            if (e) reverseEdge(e);
+          });
+        }}><Icon name="ArrowLeftRight" size={14} /> Reverse direction</button>
       {:else}
         <p class="small muted">{nodeIds.length} shapes, {edgeIds.length} lines.</p>
+        {#if paintNodes.length || paintEdges.length}
+          <div class="field">Colour <Swatches value={manyColour} onPick={paintAll} /></div>
+        {/if}
         {#if nodeIds.length > 1 && kind !== 'mindmap'}
           <div class="sect">Align</div>
           <div class="row wrap">

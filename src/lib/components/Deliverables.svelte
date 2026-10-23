@@ -6,18 +6,21 @@
    */
   import { app } from '../stores/app.svelte';
   import { storage } from '../storage/diagrams';
-  import { KINDS, kindInfo } from '../model/kinds';
+  import { KINDS, kindInfo, shortName } from '../model/kinds';
   import { slug, uid } from '../model/diagram';
+  import { checklistFile, projectCustom, projectDocs } from '../stores/handins';
+  import KindBadge from './KindBadge.svelte';
   import { blankMinutes } from '../editors/minutes/model';
   import { moduleFor } from '../editors/registry';
-  import { applyCustom, builtInNeeds, deliverableDocs, emptyCustom, isCustomised, parseCustom, review, type ChecklistCustom, type DeliverableId, type Need, type NeedReview } from '../model/deliverables';
+  import { applyCustom, builtInNeeds, deliverableDocs, emptyCustom, isCustomised, review, type ChecklistCustom, type DeliverableId, type Need, type NeedReview } from '../model/deliverables';
   import type { DataByKind, Diagram, DiagramKind, DiagramMeta, MinutesType } from '../model/types';
   import { exportSet } from '../export/project';
   import Icon from './Icon.svelte';
 
-  let { project, onClose }: { project: string; onClose: () => void } = $props();
+  let { project, onClose, initialTab }: { project: string; onClose: () => void; initialTab?: DeliverableId } = $props();
 
-  let tab = $state<DeliverableId>('E1');
+  // svelte-ignore state_referenced_locally
+  let tab = $state<DeliverableId>(initialTab ?? 'E1');
   let docs = $state<Diagram[]>([]);
   let loading = $state(true);
 
@@ -25,22 +28,7 @@
 
   async function load() {
     loading = true;
-    const s = await storage();
-    const out: Diagram[] = [];
-    for (const m of metas) {
-      // A sync app's copy of a diagram doesn't count twice.
-      if (m.dupOf || m.conflict) continue;
-      // The open diagram may have edits not saved yet: use the live copy.
-      if (app.doc && app.doc.id === m.id) out.push(JSON.parse(JSON.stringify(app.doc)) as Diagram);
-      else {
-        try {
-          out.push(await s.load(m.path));
-        } catch {
-          /* unreadable file: the list already shows it */
-        }
-      }
-    }
-    docs = out;
+    docs = await projectDocs(project);
     loading = false;
   }
 
@@ -51,15 +39,15 @@
 
   /* The group's changes to the checklist, shared through the folder. */
   const IDS: DeliverableId[] = ['E1', 'E2', 'E3', 'Final'];
-  const cfgName = $derived(`handins-${slug(project, 40) || 'sin-proyecto'}.json`);
+  const cfgName = $derived(checklistFile(project));
   let custom = $state<ChecklistCustom>(emptyCustom());
   let editing = $state(false);
   let draft = $state({ label: '', kind: 'text', min: 1, optional: false });
   const builtIn = new Map(builtInNeeds().map((x) => [x.need.id, x]));
 
   $effect(() => {
-    const name = cfgName;
-    void storage().then(async (s) => (custom = parseCustom(await s.readConfig(name))));
+    void cfgName;
+    void projectCustom(project).then((c) => (custom = c));
   });
 
   async function saveCustom(c: ChecklistCustom) {
@@ -107,6 +95,13 @@
 
   const reviews = $derived(applyCustom(custom).map((d) => review(d, docs)));
   const current = $derived(reviews.find((r) => r.deliverable.id === tab)!);
+  /** Required items of the open tab by state, for its bar. */
+  const tally = $derived.by(() => {
+    const req = current.parts.flatMap((p) => p.needs).filter((r) => r.state !== 'text' && !r.need.optional);
+    const n = (st: string) => req.filter((r) => r.state === st).length;
+    return { done: n('done'), partial: n('partial'), missing: n('missing'), total: req.length };
+  });
+  const pct = (a: number, b: number) => (b ? (a / b) * 100 : 0);
 
   const metaOf = (id: string): DiagramMeta | undefined => app.list.find((m) => m.id === id);
 
@@ -183,16 +178,29 @@
       <button class="icon" aria-label="Close" onclick={onClose}><Icon name="X" /></button>
     </div>
   </header>
-  <div class="tabs seg" role="tablist" aria-label="Hand-in">
+  <div class="tabs" role="tablist" aria-label="Hand-in">
     {#each reviews as r (r.deliverable.id)}
-      <button role="tab" class:active={tab === r.deliverable.id} aria-selected={tab === r.deliverable.id} onclick={() => (tab = r.deliverable.id)}>
-        {r.deliverable.id}
-        <span class="count" class:full={r.done === r.total}>{r.done}/{r.total}</span>
+      <button role="tab" class="htab" class:on={tab === r.deliverable.id} class:full={r.total > 0 && r.done === r.total} aria-selected={tab === r.deliverable.id} onclick={() => (tab = r.deliverable.id)}>
+        <span class="tl"><strong>{r.deliverable.id}</strong><span class="count">{r.done}/{r.total}</span></span>
+        <span class="tbar"><span style:width="{pct(r.done, r.total)}%"></span></span>
       </button>
     {/each}
   </div>
   <div class="body">
     <p class="small"><strong>{current.deliverable.title}.</strong> {current.deliverable.blurb}</p>
+    {#if tally.total}
+      <div class="summary" aria-label="{tally.done} of {tally.total} required parts done">
+        <span class="sbar">
+          <span class="seg-done" style:width="{pct(tally.done, tally.total)}%"></span>
+          <span class="seg-partial" style:width="{pct(tally.partial, tally.total)}%"></span>
+        </span>
+        <span class="legend tiny">
+          <span class="lg done"><Icon name="CircleCheck" size={13} /> {tally.done} done</span>
+          {#if tally.partial}<span class="lg partial"><Icon name="CircleAlert" size={13} /> {tally.partial} to finish</span>{/if}
+          {#if tally.missing}<span class="lg missing"><Icon name="Circle" size={13} /> {tally.missing} missing</span>{/if}
+        </span>
+      </div>
+    {/if}
     {#if isCustomised(custom)}
       <p class="tiny custom-note">
         <Icon name="Users" size={13} /> Adjusted by your group ({custom.added.length} added, {custom.placements.length} moved or copied, {custom.removed.length} removed) — everyone sharing this folder sees the same checklist.
@@ -213,7 +221,7 @@
               <div class="row wrap gap">
                 <span class="nlabel">{r.need.label}{#if r.need.optional}<span class="muted"> (optional)</span>{/if}</span>
                 {#each r.docs as d, i (d.id + i)}
-                  <button class="chip" onclick={() => openDoc(d)} title="Open — {kindInfo(d.kind).es}"><Icon name={kindInfo(d.kind).icon} size={13} /> {d.title}</button>
+                  <button class="chip" onclick={() => openDoc(d)} title="Open — {kindInfo(d.kind).es}"><KindBadge kind={d.kind} size="sm" /> <span lang="es">{d.title}</span></button>
                 {/each}
               </div>
               {#if r.state === 'missing' && r.need.kinds.length}
@@ -241,7 +249,7 @@
                 {/if}
               </div>
             {:else if r.state !== 'text' && (r.state === 'missing' || r.docs.length < (r.need.min ?? 1))}
-              <button class="secondary small" onclick={() => create(r.need, r.docs.length)}><Icon name="Plus" size={14} /> Create</button>
+              <button class="secondary small create" onclick={() => create(r.need, r.docs.length)} title="Create a {kindInfo(r.need.kinds[0]).es} in {project || 'No project'}"><Icon name="Plus" size={14} /> <span lang="es">{shortName(r.need.kinds[0])}</span></button>
             {/if}
           </div>
         {/each}
@@ -284,7 +292,7 @@
 
 <style>
   .veil {
-    background: color-mix(in srgb, var(--ink) 18%, transparent) !important;
+    background: var(--veil) !important;
     z-index: 80;
   }
   .dialog {
@@ -371,18 +379,100 @@
     padding: 4px 0;
     gap: var(--sp-3);
   }
+  /* One tab per entrega, each with how much of it is done. */
   .tabs {
-    margin: var(--sp-3) var(--sp-4) 0;
-    align-self: flex-start;
+    display: flex;
+    gap: var(--sp-2);
+    padding: var(--sp-3) var(--sp-4) 0;
+  }
+  .htab {
+    height: auto;
+    width: 112px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 7px 10px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-control);
+    background: var(--panel);
+    color: var(--ink-2);
+  }
+  .htab:hover {
+    border-color: var(--muted);
+    background: var(--panel);
+  }
+  .htab.on {
+    border-color: var(--accent);
+    background: var(--selected);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .tl {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
   }
   .count {
-    margin-left: 6px;
-    font-size: var(--fs-xs, 11px);
-    opacity: 0.75;
+    font-size: var(--fs-xs);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
   }
-  .count.full {
-    color: var(--ok, #2e8b57);
-    opacity: 1;
+  .htab.full .count {
+    color: var(--ok-ink);
+    font-weight: 700;
+  }
+  .tbar,
+  .sbar {
+    display: flex;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--panel-2);
+    box-shadow: inset 0 0 0 1px var(--line);
+    overflow: hidden;
+  }
+  .tbar span {
+    background: var(--accent);
+    transition: width var(--t-layout);
+  }
+  .htab.full .tbar span {
+    background: var(--ok);
+  }
+  .summary {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: var(--sp-3);
+  }
+  .sbar {
+    height: 8px;
+    border-radius: 4px;
+  }
+  .seg-done {
+    background: var(--ok);
+    transition: width var(--t-layout);
+  }
+  .seg-partial {
+    background: var(--warn);
+    transition: width var(--t-layout);
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sp-3);
+  }
+  .lg {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .lg.done :global(.lucide) {
+    color: var(--ok);
+  }
+  .lg.partial :global(.lucide) {
+    color: var(--warn);
+  }
+  .lg.missing :global(.lucide) {
+    color: var(--muted);
   }
   .body {
     flex: 1;
@@ -415,7 +505,16 @@
     align-items: flex-start;
     gap: var(--sp-3);
     padding: var(--sp-2) var(--sp-3);
+    box-shadow: inset 3px 0 0 var(--state, transparent);
   }
+  .need.s-done {
+    --state: var(--ok);
+  }
+  .need.s-partial {
+    --state: var(--warn);
+    background: color-mix(in srgb, var(--warn) 6%, var(--panel));
+  }
+
   .need + .need {
     border-top: 1px solid var(--line);
   }
@@ -451,17 +550,22 @@
     font-style: italic;
   }
   .chip {
-    height: auto;
-    padding: 1px 8px;
-    gap: 4px;
+    height: 26px;
+    padding: 0 9px 0 3px;
+    gap: 5px;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: var(--panel-2);
+    background: var(--panel);
     color: var(--ink);
-    font-size: var(--fs-sm, 12px);
+    font-size: var(--fs-sm);
   }
   .chip:hover {
     border-color: var(--accent);
+    background: var(--selected);
+  }
+  .create {
+    flex: none;
+    border-style: dashed;
   }
   .problems {
     margin: 4px 0 0;

@@ -105,12 +105,48 @@
       focusId = null;
     }
   }
+
+  /* ------------------------------------------- the document points at the form */
+
+  /** The form section that just received a click from the document: it flashes once. */
+  let flash = $state<string | null>(null);
+  let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * A click on the document lands in the form: on the row's own field when
+   * one was clicked (an agenda item, an action…), else the section's first.
+   */
+  function jump(sec: string, rowId?: string) {
+    const box = document.querySelector<HTMLElement>(`[data-sec="${sec}"]`);
+    const field = (rowId && document.getElementById(`min-${rowId}`)) || box?.querySelector<HTMLElement>('input:not([type=checkbox]), textarea, select');
+    (field ?? box)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    field?.focus({ preventScroll: true });
+    flash = null;
+    clearTimeout(flashTimer);
+    requestAnimationFrame(() => (flash = sec));
+    flashTimer = setTimeout(() => (flash = null), 1100);
+  }
+  function pick(sec: string, rowId?: string) {
+    return (e: Event) => {
+      e.stopPropagation();
+      jump(sec, rowId);
+    };
+  }
+  function keyPick(sec: string) {
+    return (e: KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        jump(sec);
+      }
+    };
+  }
+  const KIND_COLOR: Record<string, string> = { well: '#58a55c', bad: '#d9534f', improve: '#e2c044' };
 </script>
 
 <div class="scroll-canvas">
   <div class="wrap">
     <form class="form float stack" onsubmit={(e) => e.preventDefault()} aria-label="Meeting minutes">
-      <section class="stack">
+      <section class="stack" data-sec="meeting" class:flash={flash === 'meeting'}>
         <div class="sect">Meeting</div>
         <label class="field">
           Type
@@ -127,11 +163,11 @@
         <label class="field">Place <input type="text" placeholder="Sala de reuniones, Teams…" value={d.place} oninput={(e) => set('place', e.currentTarget.value)} /></label>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-sec="attendees" class:flash={flash === 'attendees'}>
         <div class="sect">Attendees</div>
         {#each d.attendees as a (a.id)}
           <div class="line">
-            <input use:focusIf={a.id} type="text" class="grow" placeholder="Nombre" aria-label="Name" value={a.name} oninput={(e) => upd('attendees', a.id, { name: e.currentTarget.value }, 'name')} onkeydown={(e) => rowKeys(e, 'attendees', a.id, !a.name && !a.role)} />
+            <input id="min-{a.id}" use:focusIf={a.id} type="text" class="grow" placeholder="Nombre" aria-label="Name" value={a.name} oninput={(e) => upd('attendees', a.id, { name: e.currentTarget.value }, 'name')} onkeydown={(e) => rowKeys(e, 'attendees', a.id, !a.name && !a.role)} />
             <input type="text" class="grow" placeholder="Rol" aria-label="Role" value={a.role} oninput={(e) => upd('attendees', a.id, { role: e.currentTarget.value }, 'role')} onkeydown={(e) => rowKeys(e, 'attendees', a.id, false)} />
             <label class="check" title="Attended"><input type="checkbox" checked={a.present} onchange={(e) => upd('attendees', a.id, { present: e.currentTarget.checked }, 'present')} /> Present</label>
             <button type="button" class="icon small" aria-label="Remove attendee" onclick={() => del('attendees', a.id)}><Icon name="X" size={14} /></button>
@@ -140,7 +176,7 @@
         <button type="button" class="secondary small add" onclick={() => add('attendees')}><Icon name="Plus" size={14} /> Attendee</button>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-sec="agenda" class:flash={flash === 'agenda'}>
         <div class="row between">
           <div class="sect">Agenda</div>
           {#if !agendaIsTemplate(d)}
@@ -150,7 +186,7 @@
         {#each d.agenda as a, i (a.id)}
           <div class="line">
             <span class="num">{i + 1}.</span>
-            <input use:focusIf={a.id} type="text" class="grow" aria-label="Agenda item {i + 1}" value={a.text} oninput={(e) => upd('agenda', a.id, { text: e.currentTarget.value }, 'text')} onkeydown={(e) => rowKeys(e, 'agenda', a.id, !a.text)} />
+            <input id="min-{a.id}" use:focusIf={a.id} type="text" class="grow" aria-label="Agenda item {i + 1}" value={a.text} oninput={(e) => upd('agenda', a.id, { text: e.currentTarget.value }, 'text')} onkeydown={(e) => rowKeys(e, 'agenda', a.id, !a.text)} />
             <button type="button" class="icon small" aria-label="Move up" disabled={i === 0} onclick={() => edit((m) => moveRow(m, 'agenda', a.id, -1))}><Icon name="ChevronUp" size={14} /></button>
             <button type="button" class="icon small" aria-label="Move down" disabled={i === d.agenda.length - 1} onclick={() => edit((m) => moveRow(m, 'agenda', a.id, 1))}><Icon name="ChevronDown" size={14} /></button>
             <button type="button" class="icon small" aria-label="Remove item" onclick={() => del('agenda', a.id)}><Icon name="X" size={14} /></button>
@@ -159,19 +195,19 @@
         <button type="button" class="secondary small add" onclick={() => add('agenda')}><Icon name="Plus" size={14} /> Item</button>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-sec="discussion" class:flash={flash === 'discussion'}>
         <div class="sect">Discussion</div>
         <textarea use:autosize={d.discussion} rows="4" placeholder="Qué se habló, punto por punto." aria-label="Discussion" value={d.discussion} oninput={(e) => set('discussion', e.currentTarget.value)}></textarea>
       </section>
 
       {#if info.questions}
-        <section class="stack">
+        <section class="stack" data-sec="questions" class:flash={flash === 'questions'}>
           <div class="sect">Questions and answers</div>
           {#each d.questions as q, i (q.id)}
             <div class="qa stack">
               <div class="line">
                 <span class="num">{i + 1}.</span>
-                <input use:focusIf={q.id} type="text" class="grow" placeholder="Pregunta al cliente" aria-label="Question {i + 1}" value={q.text} oninput={(e) => upd('questions', q.id, { text: e.currentTarget.value }, 'text')} />
+                <input id="min-{q.id}" use:focusIf={q.id} type="text" class="grow" placeholder="Pregunta al cliente" aria-label="Question {i + 1}" value={q.text} oninput={(e) => upd('questions', q.id, { text: e.currentTarget.value }, 'text')} />
                 <button type="button" class="icon small" aria-label="Remove question" onclick={() => del('questions', q.id)}><Icon name="X" size={14} /></button>
               </div>
               <textarea use:autosize={q.answer} rows="1" placeholder="Respuesta" aria-label="Answer {i + 1}" value={q.answer} oninput={(e) => upd('questions', q.id, { answer: e.currentTarget.value }, 'answer')}></textarea>
@@ -182,14 +218,14 @@
       {/if}
 
       {#if info.review}
-        <section class="stack">
+        <section class="stack" data-sec="review" class:flash={flash === 'review'}>
           <div class="sect">Review — team and methodology</div>
           {#each REVIEW_KINDS as k (k.kind)}
-            <div class="stack tight">
-              <div class="small strong">{k.es} <span class="muted">· {k.label.toLowerCase()}</span></div>
+            <div class="stack tight kind" style:--k={KIND_COLOR[k.kind]}>
+              <div class="small strong kind-head"><span class="kdot"></span>{k.es} <span class="muted">· {k.label.toLowerCase()}</span></div>
               {#each d.review.filter((r) => r.kind === k.kind) as r (r.id)}
                 <div class="line">
-                  <textarea use:focusIf={r.id} use:autosize={r.text} rows="1" class="grow" aria-label="{k.label} item" value={r.text} oninput={(e) => upd('review', r.id, { text: e.currentTarget.value }, 'text')} onkeydown={(e) => rowKeys(e, 'review', r.id, !r.text, { kind: k.kind, area: r.area })}></textarea>
+                  <textarea id="min-{r.id}" use:focusIf={r.id} use:autosize={r.text} rows="1" class="grow" aria-label="{k.label} item" value={r.text} oninput={(e) => upd('review', r.id, { text: e.currentTarget.value }, 'text')} onkeydown={(e) => rowKeys(e, 'review', r.id, !r.text, { kind: k.kind, area: r.area })}></textarea>
                   <div class="seg mini" role="radiogroup" aria-label="Area">
                     {#each REVIEW_AREAS as a (a.area)}
                       <button type="button" role="radio" aria-checked={r.area === a.area} class:active={r.area === a.area} onclick={() => upd('review', r.id, { area: a.area }, 'area')}>{a.es}</button>
@@ -208,25 +244,25 @@
         </section>
       {/if}
 
-      <section class="stack">
+      <section class="stack" data-sec="decisions" class:flash={flash === 'decisions'}>
         <div class="sect">Decisions</div>
         {#each d.decisions as x, i (x.id)}
           <div class="line">
             <span class="num">{i + 1}.</span>
-            <textarea use:focusIf={x.id} use:autosize={x.text} rows="1" class="grow" aria-label="Decision {i + 1}" value={x.text} oninput={(e) => upd('decisions', x.id, { text: e.currentTarget.value }, 'text')} onkeydown={(e) => rowKeys(e, 'decisions', x.id, !x.text)}></textarea>
+            <textarea id="min-{x.id}" use:focusIf={x.id} use:autosize={x.text} rows="1" class="grow" aria-label="Decision {i + 1}" value={x.text} oninput={(e) => upd('decisions', x.id, { text: e.currentTarget.value }, 'text')} onkeydown={(e) => rowKeys(e, 'decisions', x.id, !x.text)}></textarea>
             <button type="button" class="icon small" aria-label="Remove decision" onclick={() => del('decisions', x.id)}><Icon name="X" size={14} /></button>
           </div>
         {/each}
         <button type="button" class="secondary small add" onclick={() => add('decisions')}><Icon name="Plus" size={14} /> Decision</button>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-sec="actions" class:flash={flash === 'actions'}>
         <div class="sect">Actions</div>
         {#each d.actions as a (a.id)}
-          <div class="action stack tight">
+          <div class="action stack tight" class:done={a.done}>
             <div class="line">
               <input type="checkbox" checked={a.done} aria-label="Done" onchange={(e) => upd('actions', a.id, { done: e.currentTarget.checked }, 'done')} />
-              <textarea use:focusIf={a.id} use:autosize={a.text} rows="1" class="grow" placeholder="Qué hay que hacer" aria-label="Action" value={a.text} oninput={(e) => upd('actions', a.id, { text: e.currentTarget.value }, 'text')}></textarea>
+              <textarea id="min-{a.id}" use:focusIf={a.id} use:autosize={a.text} rows="1" class="grow" placeholder="Qué hay que hacer" aria-label="Action" value={a.text} oninput={(e) => upd('actions', a.id, { text: e.currentTarget.value }, 'text')}></textarea>
               <button type="button" class="icon small" aria-label="Remove action" onclick={() => del('actions', a.id)}><Icon name="X" size={14} /></button>
             </div>
             <div class="line indent">
@@ -238,7 +274,7 @@
         <button type="button" class="secondary small add" onclick={() => add('actions')}><Icon name="Plus" size={14} /> Action</button>
       </section>
 
-      <section class="stack">
+      <section class="stack" data-sec="next" class:flash={flash === 'next'}>
         <div class="sect">Next meeting</div>
         <input type="text" placeholder="Fecha, hora, lugar y tema" aria-label="Next meeting" value={d.next} oninput={(e) => set('next', e.currentTarget.value)} />
       </section>
@@ -255,7 +291,8 @@
 
     <div class="doc-col">
       <article class="acta" data-export-root lang="es">
-        <header>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <header class="pick" title="Edit the meeting details" tabindex="-1" onclick={pick('meeting')} onkeydown={keyPick('meeting')}>
           <div class="kicker">{doc.title}</div>
           <h1>{heading(d)}</h1>
           <table class="meta">
@@ -268,59 +305,65 @@
         </header>
 
         {#if present.length || absent.length}
-          <section class="cols">
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="cols pick" title="Edit the attendees" onclick={pick('attendees')}>
             {#if present.length}
               <div>
                 <h2>Asistentes</h2>
-                <ul class="people">{#each present as a (a.id)}<li><strong>{a.name}</strong>{#if a.role.trim()}<span class="role">{a.role}</span>{/if}</li>{/each}</ul>
+                <ul class="people">{#each present as a (a.id)}<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions --><li class="item" onclick={pick('attendees', a.id)}><strong>{a.name}</strong>{#if a.role.trim()}<span class="role">{a.role}</span>{/if}</li>{/each}</ul>
               </div>
             {/if}
             {#if absent.length}
               <div>
                 <h2>Ausentes</h2>
-                <ul class="people">{#each absent as a (a.id)}<li><strong>{a.name}</strong>{#if a.role.trim()}<span class="role">{a.role}</span>{/if}</li>{/each}</ul>
+                <ul class="people">{#each absent as a (a.id)}<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions --><li class="item" onclick={pick('attendees', a.id)}><strong>{a.name}</strong>{#if a.role.trim()}<span class="role">{a.role}</span>{/if}</li>{/each}</ul>
               </div>
             {/if}
           </section>
         {/if}
 
         {#if agenda.length}
-          <section>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="pick" title="Edit the agenda" onclick={pick('agenda')}>
             <h2>Orden del día</h2>
-            <ol>{#each agenda as a (a.id)}<li>{a.text}</li>{/each}</ol>
+            <ol>{#each agenda as a (a.id)}<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions --><li class="item" onclick={pick('agenda', a.id)}>{a.text}</li>{/each}</ol>
           </section>
         {/if}
 
         {#if d.discussion.trim()}
-          <section>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="pick" title="Edit the discussion" onclick={pick('discussion')}>
             <h2>Desarrollo de la reunión</h2>
             {#each d.discussion.trim().split(/\n\s*\n/) as p, i (i)}<p class="para">{p}</p>{/each}
           </section>
         {/if}
 
         {#if info.questions && questions.length}
-          <section>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="pick" title="Edit the questions" onclick={pick('questions')}>
             <h2>Preguntas y respuestas</h2>
             <ol class="qa-list">
               {#each questions as q (q.id)}
-                <li><div class="q">{q.text}</div><div class="a" class:pending={!q.answer.trim()}>{q.answer.trim() || 'Pendiente de respuesta.'}</div></li>
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                <li class="item" onclick={pick('questions', q.id)}><div class="q">{q.text}</div><div class="a" class:pending={!q.answer.trim()}>{q.answer.trim() || 'Pendiente de respuesta.'}</div></li>
               {/each}
             </ol>
           </section>
         {/if}
 
         {#if hasReview}
-          <section>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="pick" title="Edit the review" onclick={pick('review')}>
             <h2>Valoración</h2>
             <table class="review">
               <thead><tr><th></th>{#each groups as g (g.area)}<th scope="col">{g.es}</th>{/each}</tr></thead>
               <tbody>
                 {#each REVIEW_KINDS as k, ki (k.kind)}
-                  <tr class={k.kind}>
+                  <tr class={k.kind} style:--k={KIND_COLOR[k.kind]}>
                     <th scope="row">{k.es}</th>
                     {#each groups as g (g.area)}
                       <td>
-                        {#if g.kinds[ki].items.length}<ul>{#each g.kinds[ki].items as r (r.id)}<li>{r.text}</li>{/each}</ul>{:else}<span class="none">—</span>{/if}
+                        {#if g.kinds[ki].items.length}<ul>{#each g.kinds[ki].items as r (r.id)}<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions --><li class="item" onclick={pick('review', r.id)}>{r.text}</li>{/each}</ul>{:else}<span class="none">—</span>{/if}
                       </td>
                     {/each}
                   </tr>
@@ -331,20 +374,23 @@
         {/if}
 
         {#if decisions.length}
-          <section>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="pick" title="Edit the decisions" onclick={pick('decisions')}>
             <h2>Acuerdos</h2>
-            <ol>{#each decisions as x (x.id)}<li>{x.text}</li>{/each}</ol>
+            <ol>{#each decisions as x (x.id)}<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions --><li class="item" onclick={pick('decisions', x.id)}>{x.text}</li>{/each}</ol>
           </section>
         {/if}
 
         {#if actions.length}
-          <section>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="pick" title="Edit the actions" onclick={pick('actions')}>
             <h2>Acciones</h2>
             <table class="actions">
               <thead><tr><th scope="col">Acción</th><th scope="col">Responsable</th><th scope="col">Fecha límite</th><th scope="col">Estado</th></tr></thead>
               <tbody>
                 {#each actions as a (a.id)}
-                  <tr><td>{a.text}</td><td>{a.owner || '—'}</td><td class="nowrap">{shortDate(a.due) || '—'}</td><td class="nowrap">{a.done ? 'Hecha' : 'Pendiente'}</td></tr>
+                  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                  <tr class="item" onclick={pick('actions', a.id)}><td>{a.text}</td><td>{a.owner || '—'}</td><td class="nowrap">{shortDate(a.due) || '—'}</td><td class="nowrap state" class:done={a.done}>{a.done ? 'Hecha' : 'Pendiente'}</td></tr>
                 {/each}
               </tbody>
             </table>
@@ -352,7 +398,8 @@
         {/if}
 
         {#if d.next.trim()}
-          <section>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <section class="pick" title="Edit the next meeting" onclick={pick('next')}>
             <h2>Próxima reunión</h2>
             <p class="para">{d.next}</p>
           </section>
@@ -456,6 +503,54 @@
     margin: 0;
     padding-left: 18px;
     color: var(--ink-2);
+  }
+  /* Still missing: amber, like everything unfinished. */
+  .check-list:has(ul) {
+    padding: var(--sp-2) var(--sp-3);
+    border-left: 3px solid var(--warn);
+    border-radius: 0 var(--r-control) var(--r-control) 0;
+    background: color-mix(in srgb, var(--warn) 9%, transparent);
+  }
+  /* A form section the document just pointed at flashes once. */
+  section.flash {
+    animation: flash 1.1s ease-out;
+    border-radius: var(--r-control);
+  }
+  @keyframes flash {
+    from {
+      background: var(--selected);
+      box-shadow: 0 0 0 6px var(--selected);
+    }
+    to {
+      background: transparent;
+      box-shadow: 0 0 0 6px transparent;
+    }
+  }
+  /* Review kinds keep their colour in the form and the document: Bien green, Mal red, Mejorable amber. */
+  .kind-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .kdot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--k);
+  }
+  .kind textarea {
+    border-left: 3px solid var(--k);
+  }
+  .action {
+    transition: border-color var(--t), background-color var(--t);
+  }
+  .action.done {
+    border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+    background: color-mix(in srgb, var(--ok) 6%, transparent);
+  }
+  .action.done textarea {
+    text-decoration: line-through;
+    color: var(--muted);
   }
   .ok {
     display: flex;
@@ -578,15 +673,14 @@
     width: 96px;
     font-weight: 700;
     border-left-width: 4px;
+    border-left-color: var(--k);
+    background: color-mix(in srgb, var(--k) 14%, var(--d-fill));
   }
-  .review tr.well th {
-    border-left-color: var(--tier-C);
+  .review tbody td {
+    background: color-mix(in srgb, var(--k) 4%, var(--d-fill));
   }
-  .review tr.bad th {
-    border-left-color: var(--tier-S);
-  }
-  .review tr.improve th {
-    border-left-color: var(--tier-B);
+  .review li::marker {
+    color: color-mix(in srgb, var(--k) 80%, var(--d-ink));
   }
   .review td {
     width: 50%;
@@ -603,6 +697,37 @@
   .actions th:nth-child(2),
   .actions td:nth-child(2) {
     width: 150px;
+  }
+  /* Action state: done green, pending amber. */
+  .state {
+    font-weight: 700;
+    color: color-mix(in srgb, var(--warn) 75%, var(--d-ink));
+  }
+  .state.done {
+    color: color-mix(in srgb, var(--ok) 80%, var(--d-ink));
+  }
+  /* The document is a way into the form: hover shows what a click edits. Screen only. */
+  .pick,
+  .item {
+    cursor: pointer;
+  }
+  .acta .pick {
+    border-radius: var(--r-control);
+    transition: background-color var(--t), box-shadow var(--t);
+  }
+  .acta .item {
+    border-radius: 3px;
+    transition: background-color var(--t);
+  }
+  :global(html:not(.exporting)) .acta .pick:hover {
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 5%, transparent);
+  }
+  :global(html:not(.exporting)) .acta .item:hover {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .acta .pick:focus-visible {
+    outline-offset: 8px;
   }
 
   .cols:has(> :only-child) .people {

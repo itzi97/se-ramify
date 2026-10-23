@@ -28,4 +28,15 @@
     background: var(--panel-2);
     color: var(--muted);
   }
+  /* The dots carry their own colour, so hover and focus show as a ring around them. */
+  .swatch {
+    transition: box-shadow var(--t);
+  }
+  .swatch:hover {
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--muted);
+  }
+  .swatch:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+  }
 </style>

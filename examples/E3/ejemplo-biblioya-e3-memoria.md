@@ -1,6 +1,6 @@
 # Ejemplo — BiblioYa — Entrega 3 — Modelo propio, backlog y PUD
 
-_Exportado con se-ramify el 20/10/2026._
+_Exportado con se-ramify el 23/10/2026._
 
 ## Contenido de la entrega
 

@@ -18,6 +18,7 @@ import type { ImageSource, TextExport } from '../editors/types';
 import { slug } from '../model/diagram';
 import { withPhys } from '../export/png';
 import { kindInfo } from '../model/kinds';
+import { roster } from '../model/people';
 
 const SAVE_DELAY = 500;
 /** How often the folder is re-read for teammates' changes (synced folder, git pull). */
@@ -45,7 +46,10 @@ export interface Presence {
 export interface Notice {
   id: number;
   text: string;
-  tone: 'info' | 'error';
+  /** info: something happened · ok: what you asked for is done · warn: done, but look · error: it failed. */
+  tone: 'info' | 'ok' | 'warn' | 'error';
+  /** One button on the notice: Undo, Open your copy… */
+  action?: { label: string; run: () => unknown };
 }
 
 class AppState {
@@ -93,6 +97,9 @@ class AppState {
   private backedUp = new Set<string>();
   private imageSource: (() => ImageSource | Promise<ImageSource>) | null = null;
   private noticeSeq = 0;
+
+  /** Everyone who saved in the folder or has a diagram open, A–Z: the order people's colours are handed out in. */
+  team = $derived(roster([this.userName, ...this.list.map((m) => m.updatedBy), ...Object.values(this.presence).flatMap((ps) => ps.map((p) => p.name))]));
 
   canUndo = $derived(this.undoStack.length > 0);
   canRedo = $derived(this.redoStack.length > 0);
@@ -281,11 +288,14 @@ class AppState {
   }
 
   /** Save the open diagram as a single file to send to someone (chat, e-mail). */
-  async exportDiagramFile() {
-    if (!this.doc) return;
-    await this.flush();
+  async exportDiagramFile(path = this.path) {
+    if (!path) return;
     const s = await storage();
-    const d = $state.snapshot(this.doc) as Diagram;
+    let d: Diagram;
+    if (path === this.path && this.doc) {
+      await this.flush();
+      d = $state.snapshot(this.doc) as Diagram;
+    } else d = await s.load(path);
     await s.exportFile(`${slug(d.title) || d.kind}.se-ramify.json`, JSON.stringify(d, null, 2) + '\n', { name: 'se-ramify diagram', extensions: ['json'], mime: 'application/json' });
   }
 
@@ -321,7 +331,7 @@ class AppState {
     } else path = await s.save(d);
     await this.refresh();
     await this.open(path);
-    this.notify(`Added "${d.title}"${d.project ? ` to ${d.project}` : ''}.`);
+    this.notify(`Added "${d.title}"${d.project ? ` to ${d.project}` : ''}.`, 'ok');
   }
 
   /** A file that shares its id with another (a sync app's copy): keep it as a diagram of its own. */
@@ -365,7 +375,7 @@ class AppState {
       await s.writeRaw(p.path, JSON.stringify(keep === 'theirs' ? theirs : ours, null, 2) + '\n');
       if (keep === 'both') await s.save({ ...theirs, id: uid(), title: `${theirs.title} (${sides.theirsLabel || 'la otra versión'})` });
       await this.refresh();
-      this.notify(keep === 'both' ? 'Kept both versions as separate diagrams.' : `Kept ${keep === 'ours' ? 'your' : 'the incoming'} version. Commit the file to finish the merge.`);
+      this.notify(keep === 'both' ? 'Kept both versions as separate diagrams.' : `Kept ${keep === 'ours' ? 'your' : 'the incoming'} version. Commit the file to finish the merge.`, 'ok');
     } catch (err) {
       this.notify(`${p.name}: one side isn't a valid diagram (${err instanceof Error ? err.message : err}). Fix it by hand or with git.`, 'error');
     }
@@ -444,7 +454,7 @@ class AppState {
     }
     await this.refresh();
     if (first) await this.open(first);
-    this.notify(`Added the example project "${name}": every hand-in, done for an invented library app.`);
+    this.notify(`Added the example project "${name}": every hand-in, done for an invented library app.`, 'ok');
     return name;
   }
 
@@ -459,28 +469,110 @@ class AppState {
   }
 
   async remove() {
-    if (!this.doc || !this.path) return;
+    if (this.path) await this.deleteFile(this.path);
+  }
+
+  /** Delete a diagram, open or not, after asking. A backup is kept: Undo and "Recently deleted" bring it back. */
+  async deleteFile(path: string) {
+    const meta = this.list.find((m) => m.path === path);
+    if (!meta) return;
+    // A sync app's copy shares its id with the original: it has its own wording and no undo.
+    if (meta.dupOf || meta.conflict) return this.removeFile(meta);
     const s = await storage();
-    if (!(await s.confirm(`Delete "${this.doc.title}"? You can bring it back from "Recently deleted" at the bottom of the list.`, 'Delete diagram'))) return;
-    await s.backup($state.snapshot(this.doc) as Diagram);
-    const path = this.path;
-    this.doc = null;
-    this.path = null;
+    if (!(await s.confirm(`Delete "${meta.title}"? You can bring it back from "Recently deleted" at the bottom of the list.`, 'Delete diagram'))) return;
+    let d: Diagram;
+    if (path === this.path && this.doc) {
+      d = $state.snapshot(this.doc) as Diagram;
+      if (this.saveTimer) clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      this.saving = 'saved';
+      this.histories.delete(d.id);
+      this.doc = null;
+      this.path = null;
+      this.imageSource = null;
+    } else {
+      try {
+        d = await s.load(path);
+      } catch {
+        d = { id: meta.id, title: meta.title } as Diagram;
+      }
+    }
+    if (d.kind) await s.backup(d);
     await s.remove(path);
     await this.refresh();
     await this.refreshDeleted();
+    const back = this.deleted.find((b) => b.id === d.id);
+    this.notify(`Deleted "${meta.title}".`, 'ok', back ? { label: 'Undo', run: () => this.undelete(back) } : undefined);
   }
 
-  /** Archive closes the diagram (it leaves the list); unarchive keeps it open. */
-  async toggleArchive() {
-    if (!this.doc) return;
-    const archiving = !this.doc.archived;
-    this.change((d) => (d.archived = archiving));
-    if (archiving && !this.showArchived) {
+  /** Change a diagram from the list without opening it (rename, move, archive). The open one goes through change(), so Ctrl+Z undoes it. */
+  async patchFile(path: string, fn: (d: Diagram) => void) {
+    if (path === this.path && this.doc) {
+      this.change(fn);
       await this.flush();
-      this.close();
-      this.notify('Archived. Tick "Show archived" at the bottom of the list to see it again.');
+      return;
     }
+    const s = await storage();
+    try {
+      const d = await s.load(path);
+      fn(d);
+      d.updated = nowIso();
+      if (this.userName) d.updatedBy = this.userName;
+      await s.save(d, path);
+      await this.refresh();
+    } catch (err) {
+      this.notify(`Couldn't change that diagram: ${err instanceof Error ? err.message : err}`, 'error');
+    }
+  }
+
+  async renameFile(path: string, title: string) {
+    const t = title.trim();
+    const meta = this.list.find((m) => m.path === path);
+    if (!t || !meta || meta.title === t) return;
+    await this.patchFile(path, (d) => (d.title = t));
+  }
+
+  /** `undoing`: putting it back from the notice's Undo, which needs no notice of its own. */
+  async moveToProject(path: string, project: string, undoing = false) {
+    const p = project.trim();
+    const meta = this.list.find((m) => m.path === path);
+    if (!meta || meta.project === p) return;
+    const from = meta.project;
+    await this.patchFile(path, (d) => (d.project = p));
+    if (!undoing) this.notify(`Moved "${meta.title}" to ${p || 'No project'}.`, 'ok', { label: 'Undo', run: () => this.moveToProject(path, from, true) });
+  }
+
+  /** A copy of any diagram in the list, opened. */
+  async duplicateFile(path: string) {
+    if (path === this.path) return this.duplicate();
+    await this.flush();
+    const s = await storage();
+    const d = await s.load(path);
+    const copy = { ...d, id: uid(), title: `${d.title} (copia)`, created: nowIso(), updated: nowIso(), updatedBy: this.userName || undefined } as Diagram;
+    const p = await s.save(copy);
+    await this.refresh();
+    await this.open(p);
+  }
+
+  /** Archiving takes a diagram out of the list (and closes it); Undo or "Show archived" bring it back. */
+  async setArchived(path: string, on: boolean) {
+    const meta = this.list.find((m) => m.path === path);
+    if (!meta) return;
+    const wasOpen = path === this.path;
+    await this.patchFile(path, (d) => (d.archived = on || undefined));
+    if (!on) return;
+    if (wasOpen && !this.showArchived) this.close();
+    this.notify(`Archived "${meta.title}".`, 'ok', {
+      label: 'Undo',
+      run: async () => {
+        await this.setArchived(path, false);
+        if (wasOpen) await this.open(path);
+      }
+    });
+  }
+
+  async toggleArchive() {
+    if (this.doc && this.path) await this.setArchived(this.path, !this.doc.archived);
   }
 
   deleted = $state<DeletedMeta[]>([]);
@@ -499,7 +591,7 @@ class AppState {
     await this.refresh();
     await this.refreshDeleted();
     await this.open(path);
-    this.notify(`Restored "${d.title}".`);
+    this.notify(`Restored "${d.title}".`, 'ok');
   }
 
   /* ------------------------------------------------------------- changes */
@@ -549,7 +641,7 @@ class AppState {
     await s.backup($state.snapshot(this.doc) as Diagram);
     const old = await s.loadBackup(b.path);
     this.change((d) => Object.assign(d, { ...old, id: d.id, updated: nowIso() }));
-    this.notify(`Restored the version from ${new Date(b.when).toLocaleString()}.`);
+    this.notify(`Restored the version from ${new Date(b.when).toLocaleString()}.`, 'ok');
   }
 
   private touch() {
@@ -605,12 +697,13 @@ class AppState {
     const s = await storage();
     const who = this.userName || 'tu versión';
     const copy = { ...mine, id: uid(), title: `${mine.title} (${this.userName ? `versión de ${who}` : who})`, created: nowIso() };
-    await s.save(copy);
+    const copyPath = await s.save(copy);
     const theirs = await s.load(path);
+    const openCopy = { label: 'Open your copy', run: () => this.open(copyPath) };
     if (this.path !== path) {
       // Closed or switched meanwhile: nothing to swap on screen.
       await this.refresh();
-      return this.notify(`${by ?? 'Someone'} saved "${theirs.title}" while you were editing it; yours is kept as "${copy.title}".`, 'error');
+      return this.notify(`${by ?? 'Someone'} saved "${theirs.title}" while you were editing it; yours is kept as "${copy.title}".`, 'warn', openCopy);
     }
     this.saving = 'saved';
     this.doc = theirs;
@@ -619,7 +712,7 @@ class AppState {
     this.redoStack = [];
     this.lastKey = null;
     await this.refresh();
-    this.notify(`${by ?? 'Someone'} saved "${theirs.title}" while you were editing it. Their version is open; yours is kept as "${copy.title}".`, 'error');
+    this.notify(`${by ?? 'Someone'} saved "${theirs.title}" while you were editing it. Their version is open; yours is kept as "${copy.title}".`, 'warn', openCopy);
   }
 
   /* ------------------------------------------------------------- settings */
@@ -659,13 +752,29 @@ class AppState {
 
   /* -------------------------------------------------------------- notices */
 
-  notify(text: string, tone: Notice['tone'] = 'info') {
+  notify(text: string, tone: Notice['tone'] = 'info', action?: Notice['action']) {
     const id = ++this.noticeSeq;
-    this.notices.push({ id, text, tone });
-    setTimeout(() => this.dismiss(id), tone === 'error' ? 9000 : 4500);
+    this.notices.push({ id, text, tone, action });
+    this.arm(id, tone === 'error' || tone === 'warn' ? 9000 : action ? 7000 : 4500);
+  }
+
+  private noticeTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  private arm(id: number, ms: number) {
+    clearTimeout(this.noticeTimers.get(id));
+    this.noticeTimers.set(id, setTimeout(() => this.dismiss(id), ms));
+  }
+  /** The pointer is on a notice: it stays until the pointer leaves. */
+  holdNotice(id: number) {
+    clearTimeout(this.noticeTimers.get(id));
+    this.noticeTimers.delete(id);
+  }
+  releaseNotice(id: number) {
+    if (this.notices.some((n) => n.id === id)) this.arm(id, 2500);
   }
 
   dismiss(id: number) {
+    clearTimeout(this.noticeTimers.get(id));
+    this.noticeTimers.delete(id);
     this.notices = this.notices.filter((n) => n.id !== id);
   }
 
@@ -750,7 +859,7 @@ class AppState {
       const bytes = await this.renderImage(format);
       const s = await storage();
       const kind: FileKind = format === 'png' ? { name: 'PNG image', extensions: ['png'], mime: 'image/png' } : { name: 'SVG image', extensions: ['svg'], mime: 'image/svg+xml' };
-      if (await s.exportFile(`${this.fileBase()}.${format}`, bytes, kind)) this.notify(`Exported ${format.toUpperCase()}.`);
+      if (await s.exportFile(`${this.fileBase()}.${format}`, bytes, kind)) this.notify(`Exported ${format.toUpperCase()}.`, 'ok');
     } catch (err) {
       this.notify(`Export failed: ${err instanceof Error ? err.message : err}`, 'error');
     }
@@ -762,7 +871,7 @@ class AppState {
     try {
       const bytes = await this.renderImage('png');
       await (await storage()).copyImage(bytes);
-      this.notify('Copied the diagram as an image — paste it anywhere.');
+      this.notify('Copied the diagram as an image — paste it anywhere.', 'ok');
     } catch (err) {
       this.notify(`Couldn't copy the image: ${err instanceof Error ? err.message : err}`, 'error');
     }
@@ -791,7 +900,7 @@ class AppState {
       const { memoriaDocx } = await import('../export/docx');
       const bytes = await memoriaDocx(md, new Map([[image, png]]), doc.title);
       const kind: FileKind = { name: 'Word document', extensions: ['docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
-      if (await (await storage()).exportFile(`${this.fileBase()}.docx`, bytes, kind)) this.notify('Exported a Word document.');
+      if (await (await storage()).exportFile(`${this.fileBase()}.docx`, bytes, kind)) this.notify('Exported a Word document.', 'ok');
     } catch (err) {
       this.notify(`Export failed: ${err instanceof Error ? err.message : err}`, 'error');
     }
@@ -806,7 +915,7 @@ class AppState {
       const { buildDeck } = await import('../export/pptx');
       const bytes = await buildDeck({ title: doc.title, subtitle: doc.project, agenda: [], slides: [{ title: doc.title, kind: kindInfo(doc.kind).es, notes: doc.notes, png }] });
       const kind: FileKind = { name: 'PowerPoint presentation', extensions: ['pptx'], mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
-      if (await (await storage()).exportFile(`${this.fileBase()}.pptx`, bytes, kind)) this.notify('Exported a PowerPoint slide.');
+      if (await (await storage()).exportFile(`${this.fileBase()}.pptx`, bytes, kind)) this.notify('Exported a PowerPoint slide.', 'ok');
     } catch (err) {
       this.notify(`Export failed: ${err instanceof Error ? err.message : err}`, 'error');
     }
@@ -818,7 +927,7 @@ class AppState {
     try {
       const { figureSnippet } = await import('../export/latex');
       await (await storage()).copyText(figureSnippet(`${this.fileBase()}.png`, this.doc.title));
-      this.notify('Copied a LaTeX figure — export the PNG with the same name next to your .tex.');
+      this.notify('Copied a LaTeX figure — export the PNG with the same name next to your .tex.', 'ok');
     } catch (err) {
       this.notify(`Couldn't copy: ${err instanceof Error ? err.message : err}`, 'error');
     }
@@ -834,7 +943,7 @@ class AppState {
   async exportText(x: TextExport) {
     try {
       const s = await storage();
-      if (await s.exportFile(`${this.fileBase()}.${x.ext}`, x.build(), { name: x.label, extensions: [x.ext], mime: x.mime })) this.notify(`Exported ${x.label}.`);
+      if (await s.exportFile(`${this.fileBase()}.${x.ext}`, x.build(), { name: x.label, extensions: [x.ext], mime: x.mime })) this.notify(`Exported ${x.label}.`, 'ok');
     } catch (err) {
       this.notify(`Export failed: ${err instanceof Error ? err.message : err}`, 'error');
     }
@@ -843,7 +952,7 @@ class AppState {
   async copyText(x: TextExport) {
     try {
       await (await storage()).copyText(x.build());
-      this.notify(`Copied ${x.label} to the clipboard.`);
+      this.notify(`Copied ${x.label} to the clipboard.`, 'ok');
     } catch (err) {
       this.notify(`Couldn't copy: ${err instanceof Error ? err.message : err}`, 'error');
     }

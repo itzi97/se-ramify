@@ -1,14 +1,34 @@
 <script lang="ts">
   import type { BacklogData } from '../../model/types';
   import { backlogStats, epicCode, epicStats, storyCode, storySentence, storyTitle } from './model';
+  import { priorityBadge } from '../../model/badges';
 
-  /** The printable backlog: the epic table, then the story cards of every broken-down epic. */
-  let { data, title, exportRoot = true }: { data: BacklogData; title: string; exportRoot?: boolean } = $props();
+  /**
+   * The printable backlog: the epic table, then the story cards of every
+   * broken-down epic. With `onPick`, an epic row or a story card opens it in
+   * the editor (hover shows on screen only, never in the exported image).
+   */
+  let {
+    data,
+    title,
+    exportRoot = true,
+    onPick
+  }: { data: BacklogData; title: string; exportRoot?: boolean; onPick?: (epicId: string, storyId?: string) => void } = $props();
 
   const stats = $derived(backlogStats(data));
   const broken = $derived(data.epics.filter((e) => e.stories.length));
-  const prio = (p: string) => (p || '').toLowerCase().replace(/[^a-z]/g, '');
+  function key(e: KeyboardEvent, epicId: string, storyId?: string) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onPick?.(epicId, storyId);
+    }
+  }
 </script>
+
+{#snippet chip(p: string)}
+  {@const pb = priorityBadge(p)}
+  <span class="prio" style:--p={pb?.c} style:--pi={pb?.ink}>{p}</span>
+{/snippet}
 
 <article class="doc" data-export-root={exportRoot ? '' : undefined}>
   <header>
@@ -24,11 +44,12 @@
     <tbody>
       {#each data.epics as e (e.id)}
         {@const st = epicStats(e)}
-        <tr>
+        <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+        <tr class:pick={!!onPick} tabindex={onPick ? 0 : undefined} title={onPick ? 'Open this epic' : undefined} onclick={() => onPick?.(e.id)} onkeydown={(ev) => key(ev, e.id)}>
           <td class="code">{epicCode(data, e)}</td>
           <td><strong>{e.title || 'Sin título'}</strong>{#if e.description.trim()}<div class="desc">{e.description}</div>{/if}</td>
           <td>{e.component || '—'}</td>
-          <td>{#if e.priority}<span class="prio {prio(e.priority)}">{e.priority}</span>{:else}—{/if}</td>
+          <td>{#if e.priority}{@render chip(e.priority)}{:else}—{/if}</td>
           <td class="num">{st.stories || '—'}</td>
           <td class="num">{st.points || '—'}</td>
         </tr>
@@ -43,11 +64,12 @@
       <h3><span class="code">{epicCode(data, e)}</span> {e.title || 'Sin título'}</h3>
       <div class="cards">
         {#each e.stories as s (s.id)}
-          <div class="story">
+          <!-- svelte-ignore a11y_no_static_element_interactions, a11y_no_noninteractive_tabindex -->
+          <div class="story" class:pick={!!onPick} role={onPick ? 'button' : undefined} tabindex={onPick ? 0 : undefined} title={onPick ? 'Open this story' : undefined} onclick={() => onPick?.(e.id, s.id)} onkeydown={(ev) => key(ev, e.id, s.id)}>
             <div class="top">
               <span class="code">{storyCode(data, e, s)}</span>
               <span class="spacer"></span>
-              {#if s.priority}<span class="prio {prio(s.priority)}">{s.priority}</span>{/if}
+              {#if s.priority}{@render chip(s.priority)}{/if}
               {#if typeof s.points === 'number'}<span class="pts">{s.points} pt</span>{/if}
             </div>
             <div class="title">{storyTitle(s)}</div>
@@ -194,23 +216,24 @@
     border: 1px solid var(--line);
     white-space: nowrap;
   }
-  .prio.must {
-    background: var(--tier-S);
-    color: var(--on-tier-S);
+  /* MoSCoW: Must red, Should orange, Could amber, Won't grey. */
+  .prio {
     border-color: transparent;
+    background: var(--p);
+    color: var(--pi);
   }
-  .prio.should {
-    background: var(--tier-A);
-    color: var(--on-tier-A);
-    border-color: transparent;
+  .pick {
+    cursor: pointer;
   }
-  .prio.could {
-    background: var(--tier-B);
-    color: var(--on-tier-B);
-    border-color: transparent;
+  tr.pick,
+  .story.pick {
+    transition: background-color var(--t), border-color var(--t);
   }
-  .prio.wont {
-    background: var(--panel-2);
-    color: var(--muted);
+  :global(html:not(.exporting)) tr.pick:hover {
+    background: var(--hover);
+  }
+  :global(html:not(.exporting)) .story.pick:hover {
+    border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+    background: color-mix(in srgb, var(--ink) 2%, var(--d-fill));
   }
 </style>

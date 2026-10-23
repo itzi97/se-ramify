@@ -77,7 +77,7 @@ export interface GNode {
   abstract?: boolean;
   /** Architecture: Lucide icon name. Mind map: optional icon. */
   icon?: string;
-  /** Optional colour (hex) for maps and architecture zones. */
+  /** Optional colour (hex): a light fill and a coloured border on any shape but the UML dots and bars. */
   color?: string;
   /** Free notes, shown in the inspector only. */
   note?: string;
@@ -111,6 +111,8 @@ export interface GEdge {
   toLabel?: string;
   /** Communication diagrams: the numbered messages on this link. */
   messages?: CommMessage[];
+  /** Optional colour (hex) for the line, its marks and its labels. */
+  color?: string;
 }
 
 export interface UseCaseSpec {

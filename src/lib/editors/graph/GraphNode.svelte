@@ -12,7 +12,7 @@
     /** Mind map: branch colour and depth. */
     color?: string;
     depth?: number;
-    /** A shape the inspector points at (e.g. while editing a link). */
+    /** Lit up while a shape is dragged: the container it would land in. */
     lit?: boolean;
   }
 
@@ -47,7 +47,11 @@
   import { getContext, tick } from 'svelte';
   import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/svelte';
   import Icon from '../../components/Icon.svelte';
-  import { stickyBg, inkOn } from '../../model/colors';
+  import { inkOn } from '../../model/colors';
+  import type { Shape } from '../../model/kinds';
+  import { canPaint, OWN_TINT } from './ops';
+
+  const GLYPHS: ReadonlySet<Shape> = new Set<Shape>(['actor', 'device', 'lollipop', 'initial', 'final', 'flowFinal', 'diamond', 'relationship', 'cylinder', 'parallelogram', 'document']);
 
   let { id, data, selected }: NodeProps & { data: GraphNodeData } = $props();
   const ctx = getContext<GraphCtx>('graph');
@@ -113,6 +117,12 @@
   }
 
   const tint = $derived(n.color ?? data.color);
+  /** Most shapes take a colour as a light fill and a coloured outline; a few draw it their own way. */
+  const painted = $derived(!!tint && canPaint(shape) && !OWN_TINT.has(shape));
+  /** Black or white text on a solid colour (the central idea). */
+  const tintInk = $derived(tint ? inkOn(tint) : undefined);
+  /** Shapes drawn as a glyph (stick figure, diamond, cylinder…): hover and selection glow round the glyph, not a box. */
+  const glyph = $derived(GLYPHS.has(shape));
   const [num, rest] = $derived(splitId(n.label ?? ''));
 </script>
 
@@ -153,8 +163,12 @@
   class="gnode s-{shape} t-{n.type}"
   class:selected
   class:lit={data.lit}
+  class:glyph
+  class:tinted={!!tint}
+  class:painted
   class:fill-size={resizable}
   style:--tint={tint}
+  style:--tint-ink={tintInk}
   ondblclick={dbl('label')}
   role="presentation"
 >
@@ -192,7 +206,7 @@
   {:else if shape === 'final'}
     <span class="bull" aria-label="Final"><span></span></span>
   {:else if shape === 'flowFinal'}
-    <svg viewBox="0 0 26 26" width="26" height="26" aria-label="Flow final"><circle cx="13" cy="13" r="11.5" class="o" /><path d="M5 5 L21 21 M21 5 L5 21" class="o" /></svg>
+    <svg class="ff" viewBox="0 0 26 26" width="26" height="26" aria-label="Flow final"><circle cx="13" cy="13" r="11.5" class="o" /><path d="M5 5 L21 21 M21 5 L5 21" class="o" /></svg>
   {:else if shape === 'history'}
     <span class="hist">{n.label || 'H'}</span>
   {:else if shape === 'diamond' || shape === 'relationship'}
@@ -370,17 +384,61 @@
     min-height: 40px;
   }
 
-  /* selection ring, shared */
-  .gnode.selected:not(.s-actor):not(.s-device):not(.s-lollipop):not(.s-initial):not(.s-final):not(.s-flowFinal):not(.s-diamond):not(.s-relationship):not(.s-cylinder):not(.s-parallelogram):not(.s-document) {
+  /* Interaction states. Boxes get an outline that follows their corners;
+     glyphs (stick figure, diamond, cylinder…) a glow round the glyph. Hover is
+     a light accent, selection the full accent. None of it reaches an exported
+     image: app.css drops outlines and filters while capturing. */
+  :global(.svelte-flow__node:hover) .gnode:not(.glyph):not(.selected) {
+    outline: 1.5px solid var(--selected-line);
+    outline-offset: 2px;
+  }
+  /* A container is hovered whenever the pointer is anywhere inside it: keep that quiet. */
+  :global(.svelte-flow__node.is-container:hover) .gnode:not(.selected) {
+    outline-color: color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+  :global(.svelte-flow__node:hover) .glyph:not(.selected) :is(.figure, .dev-icon, .lolly, .dot, .bull, .ff, .dia-bg, .cyl, .para, .doc) {
+    filter: drop-shadow(0 0 1px var(--selected-line)) drop-shadow(0 0 2px var(--selected-line));
+  }
+  .gnode.selected:not(.glyph) {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+  .selected :is(.figure, .dev-icon, .lolly, .dot, .bull, .ff, .dia-bg, .cyl, .para, .doc) {
+    filter: drop-shadow(0 0 0.5px var(--accent)) drop-shadow(0 0 2px var(--accent));
+  }
+  /* While a shape is dragged: the container it will land in. */
   .gnode.lit {
     outline: 2px dashed var(--accent);
     outline-offset: 3px;
+    box-shadow: inset 0 0 0 100vmax var(--selected);
   }
-  .selected :is(.figure, .dev-icon, .lolly, .dot, .bull, .dia-bg, .cyl, .para, .doc) {
-    filter: drop-shadow(0 0 0.5px var(--accent)) drop-shadow(0 0 2px var(--accent));
+  /* While a line is drawn: where it can end (dashed), and where it will end (solid). */
+  :global(.svelte-flow__node.can-target) .gnode {
+    outline: 1.5px dashed var(--selected-line);
+    outline-offset: 4px;
+  }
+  :global(.svelte-flow__node.is-container.can-target) .gnode {
+    outline-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  :global(.svelte-flow__node.can-target:hover) .gnode {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+  }
+
+  /* A colour the person picked: a light fill and a coloured outline; the text stays ink.
+     The mix is with the panel colour, so it reads on light and dark paper (and in exports, which are light). */
+  .gnode.painted {
+    --d-fill: color-mix(in srgb, var(--tint) 18%, var(--panel));
+    --d-soft: color-mix(in srgb, var(--tint) 32%, var(--panel));
+    --d-ink: color-mix(in srgb, var(--tint) 82%, var(--ink));
+    color: var(--ink);
+  }
+  .painted .corner-icon,
+  .painted .dev-icon {
+    color: var(--d-ink);
+  }
+  .painted .dev-icon {
+    border-color: var(--d-ink);
   }
 
   /* actor, device, lollipop: a glyph with the name under it */
@@ -502,14 +560,20 @@
     background: color-mix(in srgb, var(--d-fill) 55%, transparent);
   }
 
-  /* note: folded corner */
+  /* note: folded corner. The paper is drawn behind the text and clipped to its
+     corner on its own, so the clip doesn't also cut off the connection dot and the frames. */
   .s-note {
     align-items: flex-start;
     justify-content: flex-start;
     padding: 8px 18px 8px 10px;
     text-align: left;
     font-size: 12px;
-    background: linear-gradient(225deg, transparent 10px, var(--tint, var(--d-soft)) 0);
+  }
+  .s-note::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
     background: linear-gradient(225deg, transparent 10px, color-mix(in srgb, var(--tint, #e2c044) 22%, var(--d-fill)) 0);
     border-left: 1px solid var(--d-line);
     border-bottom: 1px solid var(--d-line);
@@ -522,7 +586,7 @@
     min-width: 170px;
     max-width: 260px;
     border: 1.5px solid var(--d-ink);
-    border-top: 5px solid var(--tint, var(--accent));
+    border-top: 4px solid var(--d-ink);
     border-radius: 6px;
     background: var(--d-fill);
   }
@@ -847,6 +911,10 @@
     font-size: 16px;
     font-weight: 700;
   }
+  .s-central.tinted {
+    background: var(--tint);
+    color: var(--tint-ink);
+  }
   .s-topic {
     padding: 5px 12px;
     border-radius: 999px;
@@ -990,12 +1058,17 @@
     min-width: 76px;
     min-height: 32px;
     padding: 5px 10px;
-    border-color: var(--tint);
-    background: color-mix(in srgb, var(--tint) 16%, var(--d-fill));
     font-weight: 700;
   }
+  .s-trace.tinted {
+    border-color: color-mix(in srgb, var(--tint) 82%, var(--ink));
+    background: color-mix(in srgb, var(--tint) 16%, var(--d-fill));
+  }
   .trace-icon {
-    color: var(--tint);
+    color: var(--d-line);
+  }
+  .tinted .trace-icon {
+    color: color-mix(in srgb, var(--tint) 82%, var(--ink));
   }
 
   /* connection handles: a dot to drag from, shown on hover */
@@ -1011,7 +1084,12 @@
     opacity: 0;
     pointer-events: all;
     cursor: crosshair;
-    transition: opacity var(--t);
+    transition: opacity var(--t), transform var(--t), box-shadow var(--t);
+  }
+  /* The dot grows under the pointer: "drag from here". */
+  .gnode :global(.connect-dot:hover) {
+    transform: translate(50%, -50%) scale(1.4);
+    box-shadow: 0 0 0 3px var(--selected);
   }
   :global(.svelte-flow__node:hover) .gnode :global(.connect-dot),
   .gnode.selected :global(.connect-dot) {

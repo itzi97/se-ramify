@@ -22,6 +22,10 @@
 
   let fresh = $state<string | null>(null);
   let emoW = $state(0);
+  /** The stage column under the pointer (header, cell or curve): lit from top to bottom. */
+  let hoverStage = $state<string | null>(null);
+  /** Where a click on the curve would put the point, shown while the pointer is over it. */
+  let preview = $state<{ i: number; v: number } | null>(null);
 
   function jd(d: { data: unknown }): JourneyData {
     return d.data as JourneyData;
@@ -119,11 +123,33 @@
     setEmotion(id, clampEmotion(2 - (p.y - PAD) / STEP));
   }
   function onEmoMove(e: PointerEvent) {
-    if (!dragging || e.pointerId !== dragging.pointerId) return;
-    setEmotion(dragging.id, clampEmotion(2 - (local(e).y - PAD) / STEP));
+    if (!svgEl || !n) return;
+    const p = local(e);
+    if (!dragging) {
+      if (p.x < HEAD_W) {
+        preview = null;
+        hoverStage = null;
+        return;
+      }
+      const i = Math.min(n - 1, Math.max(0, Math.floor((p.x - HEAD_W) / colW)));
+      preview = { i, v: clampEmotion(2 - (p.y - PAD) / STEP) };
+      hoverStage = data.stages[i].id;
+      return;
+    }
+    if (e.pointerId !== dragging.pointerId) return;
+    setEmotion(dragging.id, clampEmotion(2 - (p.y - PAD) / STEP));
   }
   function onEmoUp(e: PointerEvent) {
     if (dragging && e.pointerId === dragging.pointerId) dragging = null;
+  }
+  function onEmoLeave() {
+    preview = null;
+    if (!dragging) hoverStage = null;
+  }
+  /** Click anywhere in a cell (not only on its text) to type in it. */
+  function focusCell(e: MouseEvent) {
+    const cell = e.currentTarget as HTMLElement;
+    if ((e.target as HTMLElement).tagName !== 'TEXTAREA') cell.querySelector('textarea')?.focus();
   }
   function onPointKey(e: KeyboardEvent, id: string, v: number) {
     if (e.key === 'ArrowUp') setEmotion(id, clampEmotion(v + 1));
@@ -151,7 +177,7 @@
       <!-- stages -->
       <div class="corner sect">Etapas</div>
       {#each data.stages as s, i (s.id)}
-        <div class="stage" class:moment={data.moments.includes(s.id)}>
+        <div class="stage" class:moment={data.moments.includes(s.id)} class:hot={hoverStage === s.id} role="columnheader" tabindex="-1" onpointerenter={() => (hoverStage = s.id)} onpointerleave={() => hoverStage === s.id && (hoverStage = null)}>
           {#if fresh === s.id}
             <input type="text" class="ghost-input stage-name" value={s.name} use:focusEnd onblur={() => (fresh = null)} oninput={(e) => app.change((d) => (jd(d).stages[i].name = e.currentTarget.value), `stage:${s.id}`)} />
           {:else}
@@ -192,7 +218,16 @@
         </div>
         {#each data.stages as s (s.id)}
           {@const key = `${r.id}:${s.id}`}
-          <div class="cell" class:moment={data.moments.includes(s.id)} style:background={tone ? `color-mix(in srgb, ${tone} 6%, var(--panel))` : undefined}>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div
+            class="cell"
+            class:moment={data.moments.includes(s.id)}
+            class:hot={hoverStage === s.id}
+            style:background={tone ? `color-mix(in srgb, ${tone} 6%, var(--panel))` : undefined}
+            onclick={focusCell}
+            onpointerenter={() => (hoverStage = s.id)}
+            onpointerleave={() => hoverStage === s.id && (hoverStage = null)}
+          >
             <textarea
               rows="2"
               value={data.cells[key] ?? ''}
@@ -226,6 +261,7 @@
           onpointerdown={onEmoDown}
           onpointermove={onEmoMove}
           onpointerup={onEmoUp}
+          onpointerleave={onEmoLeave}
           onpointercancel={() => (dragging = null)}
         >
           <rect x="0" y="0" width={HEAD_W} height={EMO_H} class="emo-head" />
@@ -240,18 +276,37 @@
             {#if data.moments.includes(s.id)}
               <rect x={HEAD_W + i * colW} y="0" width={colW} height={EMO_H} class="moment-col" />
             {/if}
+            {#if hoverStage === s.id}
+              <rect x={HEAD_W + i * colW} y="0" width={colW} height={EMO_H} class="col-hover" />
+            {/if}
             {#if !(s.id in data.emotion)}
               <circle cx={xOf(i)} cy={yOf(0)} r="7" class="unset" />
             {/if}
           {/each}
           <path d={smoothPath(points)} class="curve" />
+          <!-- where a click would set the point, with its level named -->
+          {#if preview && !dragging}
+            {@const em = emotionInfo(preview.v)}
+            {@const cur = data.emotion[data.stages[preview.i]?.id]}
+            {#if cur !== preview.v}
+              <circle cx={xOf(preview.i)} cy={yOf(preview.v)} r="8" class="ghost" fill={em.color} />
+            {/if}
+            <text x={xOf(preview.i) + 14} y={yOf(preview.v) + 4} class="pt-label">{em.label}</text>
+          {/if}
           {#each points as p (p.id)}
+            {@const live = dragging?.id === p.id}
+            {#if live}
+              <circle cx={p.x} cy={p.y} r="15" class="pt-halo" />
+              <text x={p.x + 14} y={p.y + 4} class="pt-label">{emotionInfo(p.v).label}</text>
+            {/if}
             <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
             <circle
               cx={p.x}
               cy={p.y}
               r="8"
               class="pt"
+              class:live
+              class:hot={preview?.i === p.i}
               fill={emotionInfo(p.v).color}
               tabindex="0"
               role="slider"
@@ -338,6 +393,13 @@
   .stage-name {
     font-weight: 700;
   }
+  /* The column under the pointer, from its header down to the curve. */
+  .stage.hot {
+    box-shadow: inset 0 -3px 0 color-mix(in srgb, #4a7fc1 70%, var(--ink));
+  }
+  .stage.moment.hot {
+    box-shadow: inset 0 -3px 0 #b08d1a;
+  }
   .moment-badge {
     display: inline-flex;
     align-items: center;
@@ -397,9 +459,36 @@
   .cell {
     padding: 6px var(--sp-2);
     background: var(--panel);
+    cursor: text;
+    transition: box-shadow var(--t);
+  }
+  .cell.hot {
+    box-shadow: inset 0 0 0 9999px var(--hover);
+  }
+  .cell:focus-within {
+    box-shadow: inset 0 0 0 2px var(--accent);
   }
   .cell.moment {
     box-shadow: inset 0 0 0 9999px color-mix(in srgb, #e2c044 7%, transparent);
+  }
+  .cell.moment.hot {
+    box-shadow: inset 0 0 0 9999px color-mix(in srgb, #e2c044 14%, transparent);
+  }
+  .cell.moment:focus-within {
+    box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 9999px color-mix(in srgb, #e2c044 7%, transparent);
+  }
+  :global(html.exporting) .cell:is(.hot, :focus-within):not(.moment),
+  :global(html.exporting) .stage.hot {
+    box-shadow: none;
+  }
+  :global(html.exporting) .cell.moment:is(.hot, :focus-within) {
+    box-shadow: inset 0 0 0 9999px color-mix(in srgb, #e2c044 7%, transparent);
+  }
+  :global(html.exporting) .col-hover,
+  :global(html.exporting) .ghost,
+  :global(html.exporting) .pt-label,
+  :global(html.exporting) .pt-halo {
+    display: none;
   }
   .cell textarea {
     display: block;
@@ -471,10 +560,39 @@
     stroke-width: 2.5;
     cursor: grab;
     outline: none;
+    transition: stroke var(--t);
+  }
+  :global(html:not(.exporting)) .pt:is(.hot, :hover) {
+    stroke: var(--ink-2);
+  }
+  .pt.live {
+    cursor: grabbing;
   }
   .pt:focus-visible {
     stroke: var(--accent);
     stroke-width: 3;
+  }
+  .col-hover {
+    fill: color-mix(in srgb, var(--accent) 6%, transparent);
+    pointer-events: none;
+  }
+  .ghost {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+  .pt-halo {
+    fill: color-mix(in srgb, var(--accent) 18%, transparent);
+    pointer-events: none;
+  }
+  .pt-label {
+    font-size: 11.5px;
+    font-weight: 700;
+    fill: var(--ink-2);
+    paint-order: stroke;
+    stroke: var(--panel);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+    pointer-events: none;
   }
   .unset {
     fill: none;

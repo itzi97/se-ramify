@@ -1,13 +1,16 @@
 <script lang="ts">
   import { app } from '../stores/app.svelte';
-  import { GROUP_ORDER, KINDS, type KindInfo } from '../model/kinds';
+  import { FAMILIES, GROUP_ORDER, KINDS, familyOf, type KindInfo } from '../model/kinds';
   import { moduleFor } from '../editors/registry';
   import type { DiagramKind } from '../model/types';
   import Icon from './Icon.svelte';
+  import KindBadge from './KindBadge.svelte';
+  import { focusIn } from './focus';
 
-  let { onClose }: { onClose: () => void } = $props();
+  let { onClose, initialKind }: { onClose: () => void; initialKind?: DiagramKind } = $props();
 
-  let kind = $state<DiagramKind>('usecase');
+  // svelte-ignore state_referenced_locally
+  let kind = $state<DiagramKind>(initialKind ?? 'usecase');
   let title = $state('');
   let project = $state(app.doc?.project ?? lastProject());
   let start = $state<'blank' | 'example'>('blank');
@@ -52,6 +55,13 @@
     if (shown.length && !shown.some((k) => k.kind === kind)) kind = shown[0].kind;
   });
   const info = $derived(KINDS.find((k) => k.kind === kind)!);
+  /** "T3 Requisitos · T4 UML · E2" as separate tags. */
+  const where = $derived(info.course.split(' · ').map((t) => t.trim()).filter(Boolean));
+
+  /** The chosen card scrolls into view when it was picked from outside (home screen, search). */
+  function reveal(node: HTMLElement, on: boolean) {
+    if (on) requestAnimationFrame(() => node.scrollIntoView({ block: 'center' }));
+  }
 
   async function create() {
     const mod = moduleFor(kind);
@@ -75,8 +85,7 @@
 <div class="dialog float arrive" role="dialog" aria-modal="true" aria-label="New diagram">
   <header class="row between">
     <strong>New diagram</strong>
-    <!-- svelte-ignore a11y_autofocus -->
-    <input type="search" class="q" placeholder="Search kinds (e.g. secuencia, gantt)" bind:value={query} aria-label="Search diagram kinds" autofocus />
+    <input type="search" class="q" placeholder="Search kinds (e.g. secuencia, gantt)" bind:value={query} aria-label="Search diagram kinds" use:focusIn />
     <button class="icon" aria-label="Close" onclick={onClose}><Icon name="X" /></button>
   </header>
   <div class="body">
@@ -85,13 +94,13 @@
       {#each GROUP_ORDER as g (g)}
         {@const items = KINDS.filter((k) => k.group === g && matches(k))}
         {#if items.length}
-          <div class="sect">{g}</div>
+          <div class="fhead" style:--fam={FAMILIES[g].color}><span class="dot"></span>{FAMILIES[g].label}<span class="n">{items.length}</span></div>
           <div class="grid">
             {#each items as k (k.kind)}
-              <button class="card" class:on={k.kind === kind} onclick={() => (kind = k.kind)} ondblclick={create} aria-pressed={k.kind === kind}>
-                <Icon name={k.icon} size={20} />
+              <button class="card" class:on={k.kind === kind} style:--fam={FAMILIES[g].color} onclick={() => (kind = k.kind)} ondblclick={create} aria-pressed={k.kind === kind} use:reveal={k.kind === initialKind}>
+                <KindBadge kind={k.kind} />
                 <span class="names">
-                  <strong>{k.es}</strong>
+                  <strong lang="es">{k.es}</strong>
                   {#if k.label.toLowerCase() !== k.es.toLowerCase()}<span class="muted small">{k.label}</span>{/if}
                 </span>
               </button>
@@ -100,11 +109,13 @@
         {/if}
       {/each}
     </div>
-    <aside class="side stack">
+    <aside class="side stack" style:--fam={familyOf(kind).color}>
       <div class="stack about">
-        <div class="row"><Icon name={info.icon} size={22} /><strong class="big">{info.es}</strong></div>
+        <div class="row top"><KindBadge kind={kind} size="lg" /><div class="stack tight"><span class="fam-name">{familyOf(kind).label}</span><strong class="big" lang="es">{info.es}</strong></div></div>
         <p class="small">{info.blurb}</p>
-        <p class="tiny muted">In the course: {info.course}</p>
+        <div class="where" aria-label="Where it shows up in the course">
+          {#each where as w (w)}<span class="tag" lang="es">{w}</span>{/each}
+        </div>
       </div>
       <label class="field">Title <input type="text" bind:value={title} placeholder={info.es} /></label>
       <label class="field">
@@ -125,7 +136,7 @@
 
 <style>
   .veil {
-    background: color-mix(in srgb, var(--ink) 18%, transparent) !important;
+    background: var(--veil) !important;
     z-index: 80;
   }
   .dialog {
@@ -157,8 +168,24 @@
     overflow: auto;
     padding: var(--sp-2) var(--sp-4) var(--sp-4);
   }
-  .sect {
+  .fhead {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
     margin: var(--sp-4) 0 var(--sp-2);
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--fam);
+  }
+  .fhead .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--fam);
+  }
+  .fhead .n {
+    font-weight: 400;
+    color: var(--muted);
   }
   .none {
     margin-top: var(--sp-4);
@@ -180,9 +207,14 @@
     white-space: normal;
     text-align: left;
   }
+  .card:hover {
+    border-color: color-mix(in srgb, var(--fam) 60%, var(--line));
+    background: var(--panel);
+  }
   .card.on {
-    border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--accent);
+    border-color: var(--fam);
+    background: color-mix(in srgb, var(--fam) 7%, var(--panel));
+    box-shadow: inset 0 0 0 1px var(--fam);
   }
   .names {
     display: flex;
@@ -199,6 +231,32 @@
   }
   .big {
     font-size: var(--fs-lg);
+    line-height: 1.25;
+  }
+  .top {
+    align-items: flex-start;
+    gap: var(--sp-3);
+  }
+  .tight {
+    gap: 2px;
+  }
+  .fam-name {
+    font-size: var(--fs-sm);
+    font-weight: 700;
+    color: var(--fam);
+  }
+  .where {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .tag {
+    padding: 1px 8px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    font-size: var(--fs-xs);
+    color: var(--ink-2);
   }
   .go {
     justify-content: center;

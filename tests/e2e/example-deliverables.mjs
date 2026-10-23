@@ -20,7 +20,8 @@ await page.evaluate(() => {
 await page.reload();
 await page.waitForFunction(() => window.__app?.ready);
 
-await page.getByRole('button', { name: 'Load the example project' }).click();
+// The empty list and the home screen both offer it; either loads it and opens the checklist.
+await page.getByRole('button', { name: 'Load the example project' }).first().click();
 await page.getByRole('dialog', { name: 'Hand-in checklist' }).waitFor();
 await page.waitForTimeout(800);
 

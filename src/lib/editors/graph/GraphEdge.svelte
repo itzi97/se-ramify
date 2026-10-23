@@ -144,6 +144,8 @@
   const endShape = $derived(route ? markAt(endMark, route.points[route.points.length - 1], route.points[route.points.length - 2]) : null);
   const startShape = $derived(route ? markAt(startMark, route.points[0], route.points[1]) : null);
 
+  /** The person's colour for this line, else the mind-map branch colour. */
+  const ecolor = $derived(data.edge.color ?? data.color);
   const text = $derived([data.info.stereotype ? `«${data.info.stereotype}»` : '', data.edge.label ?? ''].filter(Boolean).join(' '));
   const labelLines = $derived(text ? text.split('\n') : []);
 
@@ -192,8 +194,9 @@
 </script>
 
 {#if route}
-  <g class="gedge" class:selected class:dashed={data.info.dashed} style={data.color ? `--ecolor: ${data.color}` : undefined} role="presentation" ondblclick={(e) => { e.stopPropagation(); if (!id.startsWith('tree:')) edgeCtx?.editEdge(id); }}>
+  <g class="gedge" class:selected class:tinted={!!ecolor} class:branch={data.style === 'branch'} class:dashed={data.info.dashed} style={ecolor ? `--ecolor: ${ecolor}` : undefined} role="presentation" ondblclick={(e) => { e.stopPropagation(); if (!id.startsWith('tree:')) edgeCtx?.editEdge(id); }}>
     <path class="hit" d={d} />
+    {#if selected}<path class="halo" d={d} />{/if}
     {#if data.double}
       <path class="ln double-outer" d={d} />
       <path class="ln double-inner" d={d} />
@@ -266,12 +269,49 @@
   .mark.filled {
     fill: var(--edge-ink);
   }
-  .selected .ln,
-  .selected .mark {
+  /* A colour the person picked: a touch of ink keeps light colours (yellow) readable on paper, and dark ones on dark paper. */
+  .gedge.tinted:not(.branch) {
+    --edge-ink: color-mix(in srgb, var(--ecolor) 85%, var(--d-ink));
+  }
+  /* Labels need more ink than lines to stay readable (yellow text on paper). */
+  .tinted .elabel {
+    fill: color-mix(in srgb, var(--ecolor) 62%, var(--d-ink));
+  }
+  .tinted .msg-arrow {
+    stroke: color-mix(in srgb, var(--ecolor) 62%, var(--d-ink));
+  }
+
+  /* Hover: the line thickens and leans towards the accent — "click me". Never in an exported image. */
+  .ln,
+  .mark {
+    transition: stroke var(--t), stroke-width var(--t), fill var(--t);
+  }
+  :global(:root:not(.exporting)) .gedge:not(.branch):hover .ln:not(.double-outer):not(.double-inner) {
+    stroke-width: 2.5;
+  }
+  :global(:root:not(.exporting)) .gedge:not(.tinted):not(.selected):hover :is(.ln:not(.double-inner), .mark) {
+    stroke: color-mix(in srgb, var(--accent) 65%, var(--edge-ink));
+  }
+  :global(:root:not(.exporting)) .gedge:not(.tinted):not(.selected):hover .mark.filled {
+    fill: color-mix(in srgb, var(--accent) 65%, var(--edge-ink));
+  }
+
+  /* Selected: the accent on a soft accent halo; a coloured line keeps its colour on the halo. */
+  .halo {
+    fill: none;
+    stroke: var(--selected);
+    stroke-width: 10;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .selected:not(.tinted) :is(.ln:not(.double-inner), .mark) {
     stroke: var(--accent);
   }
-  .selected .mark.filled {
+  .selected:not(.tinted) .mark.filled {
     fill: var(--accent);
+  }
+  :global(.exporting) .halo {
+    display: none;
   }
   .elabel {
     font-family: var(--font);

@@ -9,6 +9,7 @@
   import Icon from '../../components/Icon.svelte';
   import StoryFields from '../../components/StoryFields.svelte';
   import { startCardDrag, type DropTarget } from './cardDrag';
+  import { priorityBadge } from '../../model/badges';
   import { cellKey, moveStory, parseCell, removeActivity, removeRelease, removeStep, shift, storiesIn, type MapStory } from './ops';
 
   const doc = $derived(app.docOf('storymap'));
@@ -173,7 +174,7 @@
       />
     </div>
 
-    <div class="grid">
+    <div class="grid" class:dragging={!!dragging}>
       <!-- Backbone: activities -->
       <div class="lane-head corner sect">Actividades</div>
       {#each data.activities as a, ai (a.id)}
@@ -281,8 +282,11 @@
                     {#if s.epic}<span class="epic">{s.epic}</span>{/if}
                     <span class="spacer"></span>
                     {#if s.gherkin.trim()}<span class="has-g" title="Has acceptance criteria"><Icon name="ListChecks" size={12} /></span>{/if}
-                    {#if s.priority}<span class="prio">{s.priority[0]}</span>{/if}
-                    {#if typeof s.points === 'number'}<span class="pts-badge">{s.points}</span>{/if}
+                    {#if s.priority}
+                      {@const pb = priorityBadge(s.priority)}
+                      <span class="prio" style:--p={pb?.c} style:--pi={pb?.ink} title={pb?.label}>{s.priority[0]}</span>
+                    {/if}
+                    {#if typeof s.points === 'number'}<span class="pts-badge" title="Story points">{s.points}</span>{/if}
                   </span>
                 </div>
               {/each}
@@ -492,8 +496,15 @@
     padding: 4px;
     border-radius: var(--r-control);
   }
-  .cell.target {
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  /* While a card is dragged every cell shows it can take it; the one under the pointer lights up. */
+  .grid.dragging .cell:not(.blank) {
+    outline: 1px dashed color-mix(in srgb, var(--ink) 18%, transparent);
+    outline-offset: -1px;
+  }
+  .grid.dragging .cell.target {
+    background: var(--selected);
+    outline: 2px dashed var(--selected-line);
+    outline-offset: -2px;
   }
   .card {
     display: flex;
@@ -508,10 +519,18 @@
     cursor: grab;
     touch-action: none;
     user-select: none;
+    transition: box-shadow var(--t), outline-color var(--t);
+  }
+  /* Hover: the card's own colour rings it and the shadow deepens; nothing moves. */
+  :global(html:not(.exporting)) .card:hover {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 60%, transparent), 0 4px 10px -4px rgba(22, 25, 29, 0.35);
   }
   .card.sel {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
+  }
+  :global(html.exporting) .card.sel {
+    outline: none;
   }
   :global(.card.drag-source) {
     opacity: 0.35;
@@ -548,6 +567,11 @@
     font-weight: 700;
     color: var(--ink-2);
     background: color-mix(in srgb, var(--ink) 9%, transparent);
+  }
+  /* MoSCoW: Must red, Should orange, Could amber, Won't grey. */
+  .prio {
+    color: var(--pi);
+    background: var(--p);
   }
   .has-g {
     display: inline-flex;

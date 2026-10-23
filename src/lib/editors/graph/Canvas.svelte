@@ -28,25 +28,31 @@
     SvelteFlow,
     Background,
     Controls,
+    ControlButton,
+    MiniMap,
     ConnectionMode,
     ViewportPortal,
     useSvelteFlow,
     type Node,
     type Edge,
     type NodeTypes,
-    type EdgeTypes
+    type EdgeTypes,
+    type OnConnectStartParams
   } from '@xyflow/svelte';
   import { app } from '../../stores/app.svelte';
-  import { PALETTES, edgeTypeInfo, kindInfo, nodeTypeInfo, type NodeTypeInfo } from '../../model/kinds';
+  import Icon from '../../components/Icon.svelte';
+  import { PALETTES, edgeTypeInfo, familyOf, kindInfo, nodeTypeInfo, type NodeTypeInfo } from '../../model/kinds';
   import type { GEdge, GNode, GraphData, GraphKind } from '../../model/types';
   import { uid, blankSpec } from '../../model/diagram';
   import GraphNode, { type EditField, type GraphCtx, type GraphNodeData } from './GraphNode.svelte';
   import GraphEdge, { type GraphEdgeData } from './GraphEdge.svelte';
   import Inspector from './Inspector.svelte';
   import Toolbar from './Toolbar.svelte';
+  import ContextMenu, { type MenuEntry } from './ContextMenu.svelte';
   import { mindmapLayout, mindmapRoot, childrenMap, tidy, laneLayout, traceLayout, type Size } from './layout';
   import { descendantsOf, parentsOf, type Rect } from './geometry';
   import { estimateSize, traceColumnX } from './sizing';
+  import { bringToFront, canPaint, commonColor, dropTarget, paint, reverseEdge, sendToBack } from './ops';
 
   const flow = useSvelteFlow();
   /** Fit leaves room for the toolbar (top) and the properties panel (right), and never blows a small diagram up. */
@@ -76,8 +82,29 @@
   let wrapper = $state<HTMLDivElement | null>(null);
   /** Inspector asks for the label field to take focus (double-click on a line). */
   let focusEdgeLabel = $state(0);
+  /** A line being drawn from this shape: where it can end lights up. */
+  let connectFrom = $state<string | null>(null);
+  /** A shape being dragged: the container it would land in lights up. */
+  let litId: string | null = null;
 
   const isContainer = (n: GNode) => !!nodeTypeInfo(kind, n.type, n.icon).container;
+  const shapeOf = (type: string, icon?: string) => nodeTypeInfo(kind, type, icon).shape;
+
+  /** Can a line being drawn from `from` end on `n`? (Mirrors what connect() accepts.) */
+  function canEnd(from: GNode | undefined, n: GNode): boolean {
+    if (!from) return false;
+    const uml = kind === 'state' || kind === 'activity';
+    if (uml && (from.type === 'final' || from.type === 'flowFinal')) return false;
+    if (uml && n.type === 'initial') return false;
+    if (n.id === from.id) return kind === 'state';
+    return true;
+  }
+
+  function nodeClass(info: NodeTypeInfo, n: GNode): string | undefined {
+    const from = connectFrom ? data.nodes.find((x) => x.id === connectFrom) : undefined;
+    const cls = [info.container ? 'is-container' : '', from && canEnd(from, n) ? 'can-target' : ''].filter(Boolean).join(' ');
+    return cls || undefined;
+  }
 
   /* ----------------------------------------------------- model → flow */
 
@@ -108,7 +135,7 @@
         draggable: !p,
         deletable: !(auto && n.type === 'central'),
         zIndex: info.container ? 0 : 2,
-        class: info.container ? 'is-container' : undefined
+        class: nodeClass(info, n)
       } satisfies Node<GraphNodeData>;
     });
     // Containers first so they never cover what's inside them.
@@ -430,14 +457,20 @@
     app.notify(`${cut ? 'Cut' : 'Copied'} ${ns.length} shape${ns.length === 1 ? '' : 's'}.`);
   }
 
-  function paste() {
+  /** Paste what was copied: a step down-right each time, or with its top-left corner at `at` (right-click → Paste). */
+  function paste(at?: { x: number; y: number }) {
     if (auto || !shapeClipboard || shapeClipboard.kind !== kind) return;
     const clip = shapeClipboard;
     clip.pastes++;
-    const off = 30 * clip.pastes;
+    let dx = 30 * clip.pastes;
+    let dy = dx;
+    if (at && clip.nodes.length) {
+      dx = Math.round((at.x - Math.min(...clip.nodes.map((n) => n.x))) / 10) * 10;
+      dy = Math.round((at.y - Math.min(...clip.nodes.map((n) => n.y))) / 10) * 10;
+    }
     const map = new Map<string, string>();
     for (const n of clip.nodes) map.set(n.id, uid());
-    const ns = clip.nodes.map((n) => ({ ...structuredClone(n), id: map.get(n.id)!, x: n.x + off, y: n.y + off }));
+    const ns = clip.nodes.map((n) => ({ ...structuredClone(n), id: map.get(n.id)!, x: n.x + dx, y: n.y + dy }));
     const es = clip.edges.map((e) => ({ ...structuredClone(e), id: uid(), from: map.get(e.from)!, to: map.get(e.to)! }));
     app.change((d) => {
       const g = d.data as GraphData;
@@ -513,7 +546,8 @@
     dragKids = { ids, start, origin: { ...targetNode.position } };
   }
 
-  function onDrag({ targetNode }: { targetNode: Node | null }) {
+  function onDrag({ targetNode, nodes: dragged }: { targetNode: Node | null; nodes: Node[] }) {
+    showDropTarget(targetNode, dragged);
     if (!dragKids || !targetNode) return;
     const dx = targetNode.position.x - dragKids.origin.x;
     const dy = targetNode.position.y - dragKids.origin.y;
@@ -521,7 +555,37 @@
     nodes = nodes.map((n) => (ids.has(n.id) ? { ...n, position: { x: dragKids!.start.get(n.id)!.x + dx, y: dragKids!.start.get(n.id)!.y + dy } } : n));
   }
 
+  /** Light up the container the dragged shape would land in (the same rule that decides it once dropped). */
+  function showDropTarget(targetNode: Node | null, dragged: Node[]) {
+    if (auto || !targetNode) return setLit(null);
+    const size = (n: Node) => ({ w: n.measured?.width ?? n.width ?? 0, h: n.measured?.height ?? n.height ?? 0 });
+    const r = { x: targetNode.position.x, y: targetNode.position.y, ...size(targetNode) };
+    if (!r.w || !r.h) return setLit(null);
+    const skip = new Set([...dragged.map((n) => n.id), ...(dragKids?.ids ?? [])]);
+    const containers = nodes.filter((n) => (n.data as GraphNodeData).info.container).map((n) => ({ id: n.id, rect: { x: n.position.x, y: n.position.y, ...size(n) } }));
+    setLit(dropTarget(r, containers, skip));
+  }
+
+  /** A shape dragged in from the toolbar: light up the container it would land in. */
+  function previewDrop(t: NodeTypeInfo | null, clientX: number, clientY: number) {
+    const r = wrapper?.getBoundingClientRect();
+    if (auto || !t || !r || clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return setLit(null);
+    const at = flow.screenToFlowPosition({ x: clientX, y: clientY });
+    const size = t.size ?? estimateSize(kind, { id: '', type: t.type, x: 0, y: 0, label: t.defaultLabel }, t);
+    const containers = nodes
+      .filter((n) => n.data.info.container)
+      .map((n) => ({ id: n.id, rect: { x: n.position.x, y: n.position.y, w: n.measured?.width ?? n.width ?? 0, h: n.measured?.height ?? n.height ?? 0 } }));
+    setLit(dropTarget({ x: at.x - size.w / 2, y: at.y - size.h / 2, w: size.w, h: size.h }, containers, new Set()));
+  }
+
+  function setLit(id: string | null) {
+    if (id === litId) return;
+    litId = id;
+    nodes = nodes.map((n) => ((n.id === id) !== !!n.data.lit ? { ...n, data: { ...n.data, lit: n.id === id } } : n));
+  }
+
   function onDragStop({ nodes: dragged }: { nodes: Node[] }) {
+    setLit(null);
     const moved = new Map<string, { x: number; y: number }>();
     for (const n of dragged) moved.set(n.id, n.position);
     if (dragKids) for (const id of dragKids.ids) {
@@ -545,7 +609,26 @@
     });
   }
 
+  function onConnectStart(_event: MouseEvent | TouchEvent, params: OnConnectStartParams) {
+    menu = null;
+    editing = null;
+    connectFrom = params.nodeId;
+    restyle();
+  }
+
+  /** Recompute the shapes' classes (what a line being drawn can end on). */
+  function restyle() {
+    nodes = nodes.map((n) => {
+      const cls = nodeClass(n.data.info, n.data.node);
+      return cls === n.class ? n : { ...n, class: cls };
+    });
+  }
+
   function onConnectEnd(event: MouseEvent | TouchEvent, state: { fromNode: { id: string } | null; toNode: { id: string } | null }) {
+    if (connectFrom) {
+      connectFrom = null;
+      restyle();
+    }
     const from = state.fromNode?.id;
     if (!from) return;
     let to = state.toNode?.id;
@@ -606,7 +689,10 @@
       paste();
     } else if (mod && e.key.toLowerCase() === 'a') {
       e.preventDefault();
-      select(nodes.map((n) => n.id), edges.filter((x) => !x.id.startsWith('tree:')).map((x) => x.id));
+      selectAll();
+    } else if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      keyboardMenu();
     } else if (e.key.startsWith('Arrow') && selNodes.length && !mod) {
       e.preventDefault();
       const step = e.shiftKey ? 1 : 10;
@@ -692,6 +778,214 @@
     addNode(t, pos);
   }
 
+  function selectAll() {
+    select(nodes.map((n) => n.id), edges.filter((x) => !x.id.startsWith('tree:')).map((x) => x.id));
+  }
+
+  /* ----------------------------------------------------- right-click menus */
+
+  let menu = $state<{ x: number; y: number; label: string; entries: MenuEntry[] } | null>(null);
+  /** Where the keyboard was before a menu opened, to go back there when it closes. */
+  let menuReturn: HTMLElement | null = null;
+
+  function openMenu(x: number, y: number, label: string, entries: MenuEntry[]) {
+    editing = null;
+    const a = document.activeElement;
+    menuReturn = a instanceof HTMLElement && a !== document.body && !a.closest('.cmenu') ? a : null;
+    // No separator first, last, under the heading or twice in a row.
+    const clean: MenuEntry[] = [];
+    for (const m of entries) {
+      const prev = clean[clean.length - 1]?.kind;
+      if (m.kind === 'sep' && (!prev || prev === 'sep' || prev === 'head')) continue;
+      clean.push(m);
+    }
+    while (clean[clean.length - 1]?.kind === 'sep') clean.pop();
+    menu = { x, y, label, entries: clean };
+  }
+
+  function closeMenu(refocus: boolean) {
+    menu = null;
+    if (refocus && menuReturn?.isConnected) menuReturn.focus({ preventScroll: true });
+    menuReturn = null;
+  }
+
+  /** Right-click inside a text box keeps the browser's own menu (cut, copy, paste, spelling). */
+  const inTextBox = (e: Event) => e.target instanceof HTMLElement && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName));
+
+  function paintIds(nodeIds: string[], edgeIds: string[], hex: string | undefined) {
+    app.change((d) => void paint(d.data as GraphData, nodeIds, edgeIds, hex, shapeOf));
+  }
+
+  function restack(ids: string[], front: boolean) {
+    app.change((d) => (front ? bringToFront : sendToBack)(d.data as GraphData, ids));
+  }
+
+  function setEdgeType(id: string, type: string) {
+    app.change((d) => {
+      const e = (d.data as GraphData).edges.find((x) => x.id === id);
+      if (!e) return;
+      e.type = type;
+      if (edgeTypeInfo(kind, type).messages) e.messages ??= [];
+    });
+  }
+
+  function nodeMenu(id: string, x: number, y: number) {
+    const keep = selNodes.includes(id);
+    const ids = keep ? selNodes.slice() : [id];
+    const eids = keep ? selEdges.slice() : [];
+    if (!keep) select([id]);
+    const n = data.nodes.find((m) => m.id === id);
+    if (!n) return;
+    const info = nodeTypeInfo(kind, n.type, n.icon);
+    const many = ids.length + eids.length > 1;
+    const targets = data.nodes.filter((m) => ids.includes(m.id));
+    const paintable = targets.filter((m) => canPaint(shapeOf(m.type, m.icon)));
+    const lines = data.edges.filter((e) => eids.includes(e.id));
+    const unnamed = ['initial', 'final', 'flowFinal', 'bar'].includes(info.shape);
+    const entries: MenuEntry[] = [
+      many
+        ? { kind: 'head', label: `${ids.length + eids.length} selected`, icon: 'SquareDashedMousePointer' }
+        : { kind: 'head', label: info.es, sub: unnamed ? undefined : n.label.split('\n')[0], icon: info.icon }
+    ];
+    if (!many && !unnamed) entries.push({ label: 'Rename', icon: 'Pencil', hint: 'F2', run: () => (editing = { id, field: 'label' }) });
+    if (paintable.length || lines.length) {
+      entries.push({ kind: 'swatches', value: commonColor([...paintable.map((m) => m.color), ...lines.map((e) => e.color)]), pick: (hex) => paintIds(ids, eids, hex) });
+    }
+    entries.push({ kind: 'sep' });
+    if (auto) {
+      if (!many && n.type !== 'note') {
+        entries.push({ label: 'Add idea under', icon: 'CornerDownRight', hint: 'Tab', run: () => addChild(id) });
+        if (n.parent) entries.push({ label: 'Add idea beside', icon: 'Plus', hint: 'Enter', run: () => addSibling(id) });
+      }
+    } else {
+      entries.push({ label: 'Duplicate', icon: 'Copy', hint: 'Ctrl+D', run: duplicateSelection });
+      entries.push({ label: 'Copy', icon: 'ClipboardCopy', hint: 'Ctrl+C', run: () => copySelection(false) });
+      // Containers always sit behind what they hold, so only other shapes can change places.
+      if (targets.some((m) => !isContainer(m))) {
+        entries.push({ kind: 'sep' });
+        entries.push({ label: 'Bring to front', icon: 'BringToFront', run: () => restack(ids, true) });
+        entries.push({ label: 'Send to back', icon: 'SendToBack', run: () => restack(ids, false) });
+      }
+    }
+    entries.push({ kind: 'sep' });
+    entries.push({ label: 'Delete', icon: 'Trash2', hint: 'Del', danger: true, disabled: auto && !many && n.type === 'central', run: () => removeIds(ids, eids) });
+    openMenu(x, y, many ? 'Selection' : info.es, entries);
+  }
+
+  function edgeMenu(id: string, x: number, y: number) {
+    if (id.startsWith('tree:')) return;
+    const keep = selEdges.includes(id);
+    const ids = keep ? selNodes.slice() : [];
+    const eids = keep ? selEdges.slice() : [id];
+    if (!keep) select([], [id]);
+    const e = data.edges.find((m) => m.id === id);
+    if (!e) return;
+    const info = edgeTypeInfo(kind, e.type);
+    const many = ids.length + eids.length > 1;
+    const entries: MenuEntry[] = [];
+    if (many) {
+      entries.push({ kind: 'head', label: `${ids.length + eids.length} selected`, icon: 'SquareDashedMousePointer' });
+    } else {
+      entries.push({ kind: 'head', label: info.es, sub: e.label?.split('\n')[0], icon: 'Spline' });
+      if (palette.edges.length > 1) {
+        for (const t of palette.edges) entries.push({ label: t.es, line: t, checked: t.type === e.type, run: () => setEdgeType(id, t.type) });
+        entries.push({ kind: 'sep' });
+      }
+      entries.push({ label: e.label ? 'Edit label' : 'Add label', icon: 'Type', hint: 'Dbl-click', run: () => (select([], [id]), focusEdgeLabel++) });
+      entries.push({
+        label: 'Reverse direction',
+        icon: 'ArrowLeftRight',
+        run: () =>
+          app.change((d) => {
+            const x = (d.data as GraphData).edges.find((m) => m.id === id);
+            if (x) reverseEdge(x);
+          })
+      });
+    }
+    const paintable = data.nodes.filter((m) => ids.includes(m.id) && canPaint(shapeOf(m.type, m.icon)));
+    const lines = data.edges.filter((m) => eids.includes(m.id));
+    entries.push({ kind: 'swatches', value: commonColor([...paintable.map((m) => m.color), ...lines.map((m) => m.color)]), pick: (hex) => paintIds(ids, eids, hex) });
+    entries.push({ kind: 'sep' });
+    entries.push({ label: 'Delete', icon: 'Trash2', hint: 'Del', danger: true, run: () => removeIds(ids, eids) });
+    openMenu(x, y, many ? 'Selection' : info.es, entries);
+  }
+
+  function paneMenu(x: number, y: number) {
+    const at = flow.screenToFlowPosition({ x, y });
+    const fam = familyOf(kind);
+    const shapes = palette.nodes.filter((t) => !t.hidden);
+    const clip = !auto && shapeClipboard?.kind === kind ? shapeClipboard : null;
+    const entries: MenuEntry[] = [
+      { kind: 'head', label: auto ? 'Add' : 'Add here', icon: 'Plus' },
+      { kind: 'tiles', tiles: shapes.map((t) => ({ label: t.es, title: `${t.es}${t.es !== t.label ? ` (${t.label})` : ''}`, icon: t.icon, color: fam.color, run: () => addNode(t, at) })) },
+      { kind: 'sep' }
+    ];
+    if (clip) entries.push({ label: `Paste ${clip.nodes.length === 1 ? 'shape' : `${clip.nodes.length} shapes`}`, icon: 'ClipboardPaste', hint: 'Ctrl+V', run: () => paste(at) });
+    entries.push({ label: 'Select all', icon: 'SquareDashedMousePointer', hint: 'Ctrl+A', disabled: !data.nodes.length, run: selectAll });
+    if (!auto) entries.push({ label: 'Tidy', icon: 'WandSparkles', disabled: !data.nodes.length, run: () => void runTidy() });
+    entries.push({ label: 'Fit to window', icon: 'Maximize', run: fitNow });
+    entries.push({ label: 'Mini map', checked: mini, checkbox: true, run: toggleMini });
+    openMenu(x, y, 'Canvas', entries);
+  }
+
+  /** The menu key (or Shift+F10) opens the menu for what is selected, or for the canvas. */
+  function keyboardMenu() {
+    const el = (id: string) => wrapper?.querySelector<Element>(`[data-id="${CSS.escape(id)}"]`)?.getBoundingClientRect();
+    const mid = (r: DOMRect) => [r.left + r.width / 2, r.top + r.height / 2] as const;
+    const n = selNodes[0] && el(selNodes[0]);
+    if (n) return nodeMenu(selNodes[0], ...mid(n));
+    const e = selEdges[0] && el(selEdges[0]);
+    if (e) return edgeMenu(selEdges[0], ...mid(e));
+    const r = wrapper?.getBoundingClientRect();
+    if (r) paneMenu(r.left + r.width * 0.4, r.top + r.height * 0.4);
+  }
+
+  /* ----------------------------------------------------- mini map */
+
+  /** Shown or not, remembered per kind of diagram in this browser. */
+  const MINI_KEY = `se-ramify:ui:minimap:${kind}`;
+  function readMini(): boolean {
+    try {
+      return localStorage.getItem(MINI_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+  let mini = $state(readMini());
+  function toggleMini() {
+    mini = !mini;
+    try {
+      if (mini) localStorage.setItem(MINI_KEY, '1');
+      else localStorage.removeItem(MINI_KEY);
+    } catch {
+      /* storage blocked: it still toggles, just isn't remembered */
+    }
+  }
+  /** Mini-map shapes: the person's colour, the branch colour in a mind map, else a quiet grey; selection in accent. */
+  function miniColor(n: Node): string {
+    const d = n.data as GraphNodeData;
+    if (d.info.container) return 'transparent';
+    const c = d.node.color ?? d.color;
+    return c ? `color-mix(in srgb, ${c} 70%, var(--panel))` : 'color-mix(in srgb, var(--ink) 30%, var(--panel))';
+  }
+  function miniStroke(n: Node): string {
+    const d = n.data as GraphNodeData;
+    if (n.selected) return 'var(--accent)';
+    if (!d.info.container) return 'transparent';
+    const c = d.node.color ?? d.color;
+    return c ? `color-mix(in srgb, ${c} 75%, var(--panel))` : 'color-mix(in srgb, var(--ink) 35%, var(--panel))';
+  }
+  /** A click on the mini map (not a drag) centres the view there. */
+  let miniDown: { x: number; y: number } | null = null;
+  function miniClick(e: MouseEvent) {
+    const svg = (e.currentTarget as HTMLElement).querySelector('svg');
+    if (!svg || !miniDown || Math.hypot(e.clientX - miniDown.x, e.clientY - miniDown.y) > 4) return;
+    const m = svg.getScreenCTM();
+    if (!m) return;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
+    void flow.setCenter(p.x, p.y, { zoom: flow.getViewport().zoom, duration: 250 });
+  }
+
   /* ----------------------------------------------------- export */
 
   onMount(() => {
@@ -732,7 +1026,7 @@
 
 <svelte:window onkeydown={onKey} />
 
-<div class="canvas" bind:this={wrapper} ondblclick={onPaneDbl} role="application" aria-label="{kindInfo(kind).label} canvas">
+<div class="canvas" class:connecting={!!connectFrom} bind:this={wrapper} ondblclick={onPaneDbl} role="application" aria-label="{kindInfo(kind).label} canvas">
   <SvelteFlow
     bind:nodes
     bind:edges
@@ -755,12 +1049,57 @@
     onnodedragstart={onDragStart}
     onnodedrag={onDrag}
     onnodedragstop={onDragStop}
+    onconnectstart={onConnectStart}
     onconnectend={onConnectEnd}
     ondelete={onDelete}
     onpaneclick={() => (editing = null)}
+    onnodecontextmenu={({ event, node }) => {
+      if (inTextBox(event)) return;
+      event.preventDefault();
+      nodeMenu(node.id, event.clientX, event.clientY);
+    }}
+    onedgecontextmenu={({ event, edge }) => {
+      event.preventDefault();
+      edgeMenu(edge.id, event.clientX, event.clientY);
+    }}
+    onselectioncontextmenu={({ event }) => {
+      event.preventDefault();
+      if (selNodes[0]) nodeMenu(selNodes[0], event.clientX, event.clientY);
+    }}
+    onpanecontextmenu={({ event }) => {
+      event.preventDefault();
+      paneMenu(event.clientX, event.clientY);
+    }}
+    onmovestart={() => menu && closeMenu(false)}
   >
     <Background gap={20} size={1.2} />
-    <Controls showLock={false} position="bottom-left" />
+    <Controls showLock={false} position="bottom-left">
+      <ControlButton class={mini ? 'on' : ''} onclick={toggleMini} title={mini ? 'Hide the mini map' : 'Show a mini map of the whole diagram'} aria-label="Mini map" aria-pressed={mini}>
+        <Icon name="Map" size={14} />
+      </ControlButton>
+    </Controls>
+    {#if mini}
+      <MiniMap
+        class="graph-minimap"
+        position="bottom-left"
+        width={176}
+        height={116}
+        pannable
+        zoomable
+        nodeColor={miniColor}
+        nodeStrokeColor={miniStroke}
+        nodeStrokeWidth={3}
+        nodeBorderRadius={4}
+        bgColor="var(--panel)"
+        maskColor="color-mix(in srgb, var(--paper) 72%, transparent)"
+        maskStrokeColor="var(--accent)"
+        maskStrokeWidth={1.5}
+        ariaLabel="Mini map: drag or click to move around, scroll to zoom"
+        data-no-export
+        onpointerdown={(e: PointerEvent) => (miniDown = { x: e.clientX, y: e.clientY })}
+        onclick={miniClick}
+      />
+    {/if}
     {#if headers.length}
       <ViewportPortal target="front">
         {#each headers as h (h.label)}
@@ -770,7 +1109,7 @@
     {/if}
   </SvelteFlow>
 
-  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onTidy={runTidy} onFit={fitNow} routing={data.routing} panelOpen={selNodes.length + selEdges.length > 0} />
+  <Toolbar {kind} {palette} bind:relation onAdd={(t) => addNode(t)} onDrop={dropAt} onDragOver={previewDrop} onTidy={runTidy} onFit={fitNow} routing={data.routing} panelOpen={selNodes.length + selEdges.length > 0} />
 
   {#if empty}
     <div class="empty-hint"><div class="stack">
@@ -781,6 +1120,12 @@
   {/if}
 
   <Inspector {kind} nodeIds={selNodes} edgeIds={selEdges} {focusEdgeLabel} onDelete={() => removeIds(selNodes, selEdges)} onAddChild={addChild} onAddSibling={addSibling} {selectedNode} />
+
+  {#if menu}
+    {#key menu}
+      <ContextMenu x={menu.x} y={menu.y} label={menu.label} entries={menu.entries} onClose={closeMenu} />
+    {/key}
+  {/if}
 </div>
 
 <style>
@@ -797,6 +1142,17 @@
   .canvas :global(.svelte-flow__node:focus-visible) {
     outline: none;
   }
+  /* Keyboard focus (Tab through the shapes and lines): a ring on the shape, a band along the line. */
+  .canvas :global(.svelte-flow__node:focus-visible:not(.selected) > .gnode) {
+    outline: 2px dashed var(--selected-line);
+    outline-offset: 3px;
+  }
+  .canvas :global(.svelte-flow__edge:focus-visible) {
+    outline: none;
+  }
+  .canvas :global(.svelte-flow__edge:focus-visible .gedge .hit) {
+    stroke: var(--selected);
+  }
   .canvas :global(.svelte-flow__node.is-container) {
     /* Containers only catch the pointer on their frame and title, so shapes inside stay clickable. */
     pointer-events: all;
@@ -806,6 +1162,54 @@
   }
   .canvas :global(.svelte-flow__controls) {
     margin: var(--edge);
+  }
+  /* Svelte Flow fills its own control icons; ours are drawn with strokes. */
+  .canvas :global(.svelte-flow__controls-button svg.lucide) {
+    fill: none;
+    max-width: 14px;
+    max-height: 14px;
+  }
+  .canvas :global(.svelte-flow__controls-button.on) {
+    background: var(--selected);
+    color: var(--accent);
+  }
+  .canvas :global(.svelte-flow__controls-button.on:hover) {
+    background: color-mix(in srgb, var(--accent) 20%, var(--panel));
+  }
+
+  /* The line being drawn: the accent, so it reads as "in progress", never caught by the pointer. */
+  .canvas :global(.svelte-flow__connectionline) {
+    pointer-events: none;
+  }
+  .canvas :global(.svelte-flow__connection-path) {
+    stroke: var(--accent);
+    stroke-width: 1.75;
+    stroke-dasharray: 6 4;
+  }
+
+  /* Drag-to-select box (a wash) and the frame left round a multiple selection (just a frame, to drag them all by). */
+  .canvas :global(.svelte-flow__selection) {
+    background: var(--selected);
+    border: 1px dashed var(--selected-line);
+    border-radius: 4px;
+  }
+  .canvas :global(.svelte-flow__selection-wrapper .svelte-flow__selection) {
+    background: transparent;
+    border-radius: 6px;
+  }
+
+  /* Mini map: beside the zoom buttons, a floating card like the rest of the chrome. */
+  .canvas :global(.graph-minimap) {
+    margin: var(--edge);
+    margin-left: calc(var(--edge) + 36px);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    cursor: grab;
+  }
+  .canvas :global(.graph-minimap:active) {
+    cursor: grabbing;
   }
   .col-head {
     position: absolute;

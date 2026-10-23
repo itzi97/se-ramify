@@ -10,6 +10,7 @@ import type { TextExport } from '../types';
 import { parentsOf, type Rect } from './geometry';
 import { childrenMap, mindmapRoot } from './layout';
 import { estimateSize } from './sizing';
+import { lighten } from './ops';
 
 const md = (label: string, build: () => string): TextExport => ({ label: `${label} (Markdown)`, ext: 'md', mime: 'text/markdown', build });
 const puml = (build: () => string): TextExport => ({ label: 'PlantUML (.puml)', ext: 'puml', mime: 'text/plain', build });
@@ -20,6 +21,18 @@ const csv = (label: string, build: () => string): TextExport => ({ label: `${lab
 const one = (s: string) => (s ?? '').replace(/\s*\n\s*/g, ' ').replace(/"/g, "'").trim();
 const cell = (s: string) => (s ?? '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
 const csvCell = (s: string) => `"${(s ?? '').replace(/"/g, '""')}"`;
+
+/** A shape's colour in PlantUML: a light fill and the colour as its border (like on the canvas). */
+const pumlFill = (hex?: string, border = true) => {
+  const h = hex && /^#[0-9a-f]{6}$/i.test(hex) ? hex : '';
+  return h ? ` ${lighten(h, 0.22).toUpperCase()}${border ? ` ##${h.slice(1).toUpperCase()}` : ''}` : '';
+};
+/** A coloured PlantUML link: the colour goes in the line ("-[#C00]->", ".[#C00].|>"). */
+const pumlArrow = (arrow: string, hex?: string) => {
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return arrow;
+  const i = arrow.search(/[-.]/);
+  return i < 0 ? arrow : `${arrow.slice(0, i + 1)}[${hex.toUpperCase()}]${arrow.slice(i + 1)}`;
+};
 
 /** Stable short aliases (A1, UC2…) so the text stays readable. */
 function aliases(nodes: GNode[], prefix: (n: GNode) => string): Map<string, string> {
@@ -155,13 +168,13 @@ function classPuml(g: GraphData): string {
     ...nested(
       'class',
       g,
-      (n, d) => `${pad(d)}package "${one(n.label)}" as ${al.get(n.id)} {`,
+      (n, d) => `${pad(d)}package "${one(n.label)}" as ${al.get(n.id)}${pumlFill(n.color, false)} {`,
       (_n, d) => `${pad(d)}}`,
       (n, d) => {
         if (n.type === 'note') return `${pad(d)}note "${one(n.label)}" as ${al.get(n.id)}`;
         const kw = n.type === 'interface' ? 'interface' : n.type === 'enum' ? 'enum' : n.abstract ? 'abstract class' : 'class';
         const st = n.stereotype && n.stereotype !== 'interface' && n.stereotype !== 'enumeration' ? ` <<${n.stereotype}>>` : '';
-        return [`${pad(d)}${kw} "${one(n.label)}" as ${al.get(n.id)}${st} {`, ...body(n, d), `${pad(d)}}`].join('\n');
+        return [`${pad(d)}${kw} "${one(n.label)}" as ${al.get(n.id)}${st}${pumlFill(n.color)} {`, ...body(n, d), `${pad(d)}}`].join('\n');
       }
     )
   );
@@ -173,7 +186,7 @@ function classPuml(g: GraphData): string {
     const tl = e.toLabel ? `"${one(e.toLabel)}" ` : '';
     const label = e.label ? ` : ${one(e.label)}` : '';
     const arrow: Record<string, string> = { association: '--', directed: '-->', aggregation: 'o--', composition: '*--', generalization: '--|>', realization: '..|>', dependency: '..>', noteLink: '..' };
-    lines.push(`${a}${fl} ${arrow[e.type] ?? '--'} ${tl}${b}${label}`);
+    lines.push(`${a}${fl} ${pumlArrow(arrow[e.type] ?? '--', e.color)} ${tl}${b}${label}`);
   }
   lines.push('@enduml');
   return lines.join('\n');

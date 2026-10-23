@@ -50,7 +50,7 @@
 
 <style>
   .veil {
-    background: color-mix(in srgb, var(--ink) 18%, transparent) !important;
+    background: var(--veil) !important;
     z-index: 90;
   }
   .dialog {
@@ -82,6 +82,16 @@
     border: 1px solid var(--line);
     border-radius: var(--r-card);
     cursor: pointer;
+  }
+  .opt {
+    transition: border-color var(--t), background-color var(--t);
+  }
+  .opt:hover {
+    border-color: var(--muted);
+  }
+  .opt:has(input:checked) {
+    border-color: var(--accent);
+    background: var(--selected);
   }
   .opt input {
     margin-top: 3px;

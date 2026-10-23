@@ -56,6 +56,8 @@
   const data = $derived(doc.data);
 
   let selected = $state<string | null>(null);
+  /** The row or bar under the pointer: lit on both sides of the sheet. */
+  let hoverId = $state<string | null>(null);
   let details = $state(false);
   let collapsed = $state<Set<string>>(new Set());
   let scroller: HTMLDivElement | undefined = $state();
@@ -193,6 +195,19 @@
     scroller.scrollTo({ left: Math.max(0, xOf(today) - 120), behavior: 'smooth' });
   }
 
+  /** A row picked in the table: if its bar is off to one side, bring it into view. */
+  function selectRow(id: string) {
+    selected = id;
+    const t = tasks.find((x) => x.id === id);
+    if (!t || !scroller) return;
+    const sp = span(tasks, t);
+    const x1 = xOf(sp.start);
+    const x2 = xOf(sp.end) + px;
+    const left = scroller.scrollLeft;
+    const room = scroller.clientWidth - TABLE_W;
+    if (x2 < left + 24 || x1 > left + room - 24) scroller.scrollTo({ left: Math.max(0, x1 - 48), behavior: 'smooth' });
+  }
+
   /* -------------------------------------------------------------- drag */
 
   function onBarDown(e: PointerEvent, t: GanttTask) {
@@ -265,7 +280,8 @@
           const mid = y2 + (y2 > y1 ? -ROW / 2 : ROW / 2);
           d = `M${x1},${y1} H${x1 + 8} V${mid} H${x2 - 10} V${y2} H${x2 - 1}`;
         }
-        out.push({ id: `${depId}>${t.id}`, d, hot: selected === t.id || selected === depId, x: x2, y: y2 });
+        const lit = (id: string | null) => id === t.id || id === depId;
+        out.push({ id: `${depId}>${t.id}`, d, hot: lit(selected) || lit(hoverId), x: x2, y: y2 });
       }
     }
     return out;
@@ -343,6 +359,9 @@
               <span class="tick" class:weekend={data.scale === 'day' && data.showWeekends && t.at % 7 >= 5} style:left="{t.at * px}px" style:width="{t.span * px}px">{t.label}</span>
             {/each}
           </div>
+          {#if today >= range.start && today < range.end}
+            <button class="today-tag" style:left="{xOf(today) + px / 2}px" title="Today · {shortDate(today)}" onclick={scrollToToday} data-no-export>Today</button>
+          {/if}
         </div>
       </div>
 
@@ -352,10 +371,24 @@
           {#each rows as r (r.task.id)}
             {@const t = r.task}
             {@const sp = span(tasks, t)}
-            <div class="tr" class:sel={selected === t.id} class:group={t.group} style:height="{ROW}px" onpointerdown={() => (selected = t.id)} role="row" tabindex="-1">
+            {@const rc = colorOf(t)}
+            <div
+              class="tr"
+              class:sel={selected === t.id}
+              class:hot={hoverId === t.id}
+              class:group={t.group}
+              class:tinted={!!rc}
+              style:--c={rc}
+              style:height="{ROW}px"
+              onpointerdown={() => selectRow(t.id)}
+              onpointerenter={() => (hoverId = t.id)}
+              onpointerleave={() => hoverId === t.id && (hoverId = null)}
+              role="row"
+              tabindex="-1"
+            >
               <span class="c-name" style:width="{COLS.name}px" style:padding-left="{6 + r.depth * 16}px">
                 {#if r.hasChildren}
-                  <button class="icon small chev" aria-label={collapsed.has(t.id) ? 'Expand' : 'Collapse'} onclick={() => toggleCollapse(t.id)}>
+                  <button class="icon small chev" aria-label={collapsed.has(t.id) ? 'Expand' : 'Collapse'} title={collapsed.has(t.id) ? 'Show what is inside' : 'Fold away what is inside'} onclick={() => toggleCollapse(t.id)}>
                     <Icon name={collapsed.has(t.id) ? 'ChevronRight' : 'ChevronDown'} size={14} />
                   </button>
                 {:else}
@@ -395,7 +428,20 @@
                 {/if}
                 <span class="num" style:width="{COLS.pct}px">
                   {#if t.milestone}<span class="ro">—</span>{:else}
-                    <input class="ghost-input cell-in num" type="number" min="0" max="100" step="10" value={t.progress} aria-label="Progress" onchange={(e) => editTask(t.id, (x) => (x.progress = Math.max(0, Math.min(100, +e.currentTarget.value || 0))))} />
+                    {@const late = t.progress < 100 && t.end < today}
+                    <input
+                      class="ghost-input cell-in num"
+                      class:done={t.progress >= 100}
+                      class:late
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="10"
+                      value={t.progress}
+                      aria-label="Progress"
+                      title={late ? `Late: it should have finished by ${shortDate(t.end)}` : t.progress >= 100 ? 'Done' : undefined}
+                      onchange={(e) => editTask(t.id, (x) => (x.progress = Math.max(0, Math.min(100, +e.currentTarget.value || 0))))}
+                    />
                   {/if}
                 </span>
               {/if}
@@ -425,10 +471,11 @@
             <span class="vline" style:left="{t.at * px}px"></span>
           {/each}
           {#each rows as r, i (r.task.id)}
-            {#if selected === r.task.id}<span class="row-hi" style:top="{i * ROW}px" style:height="{ROW}px"></span>{/if}
+            {#if selected === r.task.id}<span class="row-hi" style:top="{i * ROW}px" style:height="{ROW}px"></span>
+            {:else if hoverId === r.task.id}<span class="row-hover" style:top="{i * ROW}px" style:height="{ROW}px"></span>{/if}
           {/each}
           {#if today >= range.start && today < range.end}
-            <span class="today" style:left="{xOf(today) + px / 2}px" title="Today"></span>
+            <span class="today" style:left="{xOf(today) + px / 2}px" title="Today · {shortDate(today)}"></span>
           {/if}
 
           <svg class="deps" width={timelineW} height={rows.length * ROW} aria-hidden="true">
@@ -447,30 +494,38 @@
               <div
                 class="ms"
                 class:sel={selected === t.id}
+                class:hot={hoverId === t.id}
+                class:dragging={drag?.id === t.id}
                 style:left="{xOf(sp.start) + px / 2 - 7}px"
                 style:top="{top + ROW / 2 - 7}px"
                 style:--c={c ?? 'var(--d-ink)'}
-                title="{t.name} · {shortDate(sp.start)}"
+                title="{t.name} · {shortDate(sp.start)} · drag to move, double-click for details"
                 role="button"
                 tabindex="-1"
                 onpointerdown={(e) => onBarDown(e, t)}
                 onpointermove={(e) => cursorFor(e, t)}
+                onpointerenter={() => (hoverId = t.id)}
+                onpointerleave={() => hoverId === t.id && (hoverId = null)}
                 ondblclick={() => (details = true)}
               ></div>
-              <span class="lbl" style:left="{xOf(sp.start) + px / 2 + 12}px" style:top="{top}px" style:line-height="{ROW}px">{t.name}</span>
+              <span class="lbl" class:on={selected === t.id} style:left="{xOf(sp.start) + px / 2 + 12}px" style:top="{top}px" style:line-height="{ROW}px">{t.name}</span>
             {:else if t.group}
               <div
                 class="grp"
                 class:sel={selected === t.id}
+                class:hot={hoverId === t.id}
+                class:dragging={drag?.id === t.id}
                 style:left="{xOf(sp.start)}px"
                 style:width="{Math.max(px, (diffDays(sp.start, sp.end) + 1) * px)}px"
                 style:top="{top + 10}px"
                 style:--c={c ?? 'var(--d-ink)'}
-                title="{t.name} · {shortDate(sp.start)} – {shortDate(sp.end)}"
+                title="{t.name} · {shortDate(sp.start)} – {shortDate(sp.end)} · drag to move the whole group"
                 role="button"
                 tabindex="-1"
                 onpointerdown={(e) => onBarDown(e, t)}
                 onpointermove={(e) => cursorFor(e, t)}
+                onpointerenter={() => (hoverId = t.id)}
+                onpointerleave={() => hoverId === t.id && (hoverId = null)}
                 ondblclick={() => (details = true)}
               ></div>
             {:else}
@@ -478,20 +533,28 @@
               <div
                 class="task"
                 class:sel={selected === t.id}
+                class:hot={hoverId === t.id}
                 class:dragging={drag?.id === t.id}
+                class:resizing={drag?.id === t.id && drag.mode !== 'move'}
                 style:left="{xOf(sp.start)}px"
                 style:width="{w}px"
                 style:top="{top + 7}px"
                 style:height="{ROW - 14}px"
                 style:--c={c ?? '#6c737a'}
-                title="{t.name} · {shortDate(sp.start)} – {shortDate(sp.end)} · {t.progress}%"
+                title="{t.name} · {shortDate(sp.start)} – {shortDate(sp.end)} · {t.progress}% · drag to move, drag an end to resize"
                 role="button"
                 tabindex="-1"
                 onpointerdown={(e) => onBarDown(e, t)}
                 onpointermove={(e) => cursorFor(e, t)}
+                onpointerenter={() => (hoverId = t.id)}
+                onpointerleave={() => hoverId === t.id && (hoverId = null)}
                 ondblclick={() => (details = true)}
               >
                 <span class="fill" style:width="{t.progress}%"></span>
+                {#if w >= 24}
+                  <span class="grip start" data-no-export></span>
+                  <span class="grip end" data-no-export></span>
+                {/if}
               </div>
               {#if t.owner}
                 <span class="lbl owner" style:left="{xOf(sp.start) + w + 6}px" style:top="{top}px" style:line-height="{ROW}px">{initials(t.owner)}</span>
@@ -679,6 +742,17 @@
     align-items: center;
     border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
     font-size: var(--fs-sm);
+    transition: background-color var(--t);
+  }
+  :global(html:not(.exporting)) .tr:is(:hover, .hot) {
+    background: var(--hover);
+  }
+  /* The row's colour (its own or its group's) runs down its left edge, as on the bar. */
+  .tr.tinted {
+    box-shadow: inset 3px 0 0 var(--c);
+  }
+  .tr.tinted .mark {
+    color: var(--c);
   }
   .tr > span {
     display: flex;
@@ -733,8 +807,16 @@
   :global(html.no-motion) .tr.sel {
     background: transparent;
   }
+  :global(html.exporting) .tr.hot,
+  :global(html.no-motion) .tr.hot {
+    background: transparent;
+  }
   :global(html.exporting) .row-hi,
   :global(html.no-motion) .row-hi,
+  :global(html.exporting) .row-hover,
+  :global(html.no-motion) .row-hover,
+  :global(html.exporting) .grip,
+  :global(html.exporting) .today-tag,
   :global(html.exporting) .today,
   :global(html.no-motion) .today {
     display: none;
@@ -762,6 +844,15 @@
     text-align: right;
     appearance: textfield;
     -moz-appearance: textfield;
+  }
+  /* Progress says how the task stands today: done in green, late (past its end, unfinished) in red. Not in exports. */
+  :global(html:not(.exporting)) .cell-in.num.done {
+    color: var(--ok);
+    font-weight: 700;
+  }
+  :global(html:not(.exporting)) .cell-in.num.late {
+    color: var(--danger);
+    font-weight: 700;
   }
   .cell-in.num::-webkit-inner-spin-button,
   .cell-in.num::-webkit-outer-spin-button {
@@ -798,12 +889,33 @@
     background: color-mix(in srgb, var(--line) 70%, transparent);
     pointer-events: none;
   }
-  .row-hi {
+  .row-hi,
+  .row-hover {
     position: absolute;
     left: 0;
     right: 0;
     background: color-mix(in srgb, var(--accent) 7%, transparent);
     pointer-events: none;
+  }
+  .row-hover {
+    background: var(--hover);
+  }
+  .today-tag {
+    position: absolute;
+    bottom: 3px;
+    z-index: 2;
+    transform: translateX(-50%);
+    height: 17px;
+    padding: 0 6px;
+    border-radius: var(--r-pill);
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .today-tag:hover {
+    background: color-mix(in srgb, var(--danger) 82%, #000);
+    color: #fff;
   }
   .today {
     position: absolute;
@@ -854,15 +966,53 @@
     background: var(--c);
     pointer-events: none;
   }
+  .task,
+  .grp,
+  .ms {
+    transition: box-shadow var(--t), opacity var(--t);
+  }
+  /* Hover (here or on the row): a halo in the bar's own colour. Never in an export. */
+  :global(html:not(.exporting)) .task:is(:hover, .hot) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 40%, transparent), 0 2px 6px -2px rgba(0, 0, 0, 0.3);
+  }
+  :global(html:not(.exporting)) :is(.grp, .ms):is(:hover, .hot) {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 35%, transparent);
+  }
   .task.sel,
   .grp.sel,
   .ms.sel {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .task.dragging {
+  .task.dragging,
+  .grp.dragging,
+  .ms.dragging {
     opacity: 0.85;
     cursor: grabbing;
+  }
+  /* Resize grips at both ends, shown when the bar can be grabbed. */
+  .grip {
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    width: 4px;
+    border-radius: 2px;
+    background: var(--panel);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 70%, var(--ink));
+    opacity: 0;
+    transition: opacity var(--t);
+    pointer-events: none;
+  }
+  .grip.start {
+    left: 2px;
+  }
+  .grip.end {
+    right: 2px;
+  }
+  .task:hover .grip,
+  .task.sel .grip,
+  .task.resizing .grip {
+    opacity: 1;
   }
   .grp {
     position: absolute;
@@ -906,6 +1056,10 @@
     color: var(--ink-2);
     white-space: nowrap;
     pointer-events: none;
+  }
+  :global(html:not(.exporting)) .lbl.on {
+    color: var(--ink);
+    font-weight: 700;
   }
   .lbl.owner {
     color: var(--muted);
